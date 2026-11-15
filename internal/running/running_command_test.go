@@ -6,8 +6,6 @@ import (
 	"slices"
 	"testing"
 
-	ergo "github.com/CheckPickerUpper/ErGo"
-
 	"github.com/CheckPickerUpper/nocontract/internal/running"
 )
 
@@ -38,14 +36,13 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 	}
 	codes := []string{}
 	for _, refusal := range refused.Refusals {
-		if coded, isCoded := refusal.Problem.(ergo.Failure); isCoded {
-			codes = append(codes, coded.ErrorCode().String())
-		}
+		codes = append(codes, refusal.Problem.ErrorCode().String())
 	}
 	slices.Sort(codes)
 	want := []string{
 		"NC-1004", "NC-1005", "NC-1007", "NC-1012", "NC-1013", "NC-1014", "NC-1015", "NC-1016", "NC-1017",
 		"NC-1022", "NC-1024", "NC-1025", "NC-1029", "NC-1032", "NC-1033", "NC-1045", "NC-1046", "NC-1048", "NC-1049", "NC-1050", "NC-1051",
+		"NC-1056",
 	}
 	if !slices.Equal(codes, want) {
 		t.Fatalf("the refused project was refused with %v; want %v", codes, want)

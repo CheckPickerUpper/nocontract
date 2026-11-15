@@ -5,7 +5,6 @@ package running
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +13,7 @@ import (
 	"go/token"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -58,13 +58,10 @@ type Project struct {
 	API        string
 }
 
-// Backend is the language a project's backend is written in, with its name in a project file.
+// Backend is the language a project's backend is written in.
 //
 //sumtype:decl
-type Backend interface {
-	isBackend()
-	Name() string
-}
+type Backend interface{ isBackend() }
 
 // GoBackend is a backend written in Go.
 //
@@ -73,11 +70,13 @@ type GoBackend struct{}
 
 func (GoBackend) isBackend() {}
 
-// Name is go.
-func (GoBackend) Name() string { return "go" }
-
-// Backends is every language NoContract reads a backend in.
-func Backends() []Backend { return []Backend{GoBackend{}} }
+// parseBackend is the language a project file's "language" names.
+func parseBackend(language string) mo.Option[Backend] {
+	if language == "go" {
+		return mo.Some[Backend](GoBackend{})
+	}
+	return mo.None[Backend]()
+}
 
 // Outcome is what one run ended as.
 //
@@ -360,18 +359,16 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 	directory := filepath.Dir(projectFile)
 	existing := existingGenerated(directory)
 	return mo.Fold(loadPackages(ctx, directory, project.Packages, existing), func(loaded []*packages.Package) Outcome {
-		switch read := reading.ReadRoutes(reading.Request{Packages: loaded, APIName: project.API}).(type) {
+		read := reading.ReadRoutes(reading.Request{Packages: loaded, APIName: project.API})
+		if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
+			return PackagesNotLoaded{Errors: problems}
+		}
+		switch routes := read.Routes.(type) {
 		case reading.RoutesRead:
-			if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
-				return PackagesNotLoaded{Errors: problems}
-			}
-			return mo.Fold(renderedFiles(read, filepath.Join(directory, project.TypeScript), existing), finish,
+			return mo.Fold(renderedFiles(routes, filepath.Join(directory, project.TypeScript), existing), finish,
 				func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
 		case reading.RoutesRefused:
-			if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
-				return PackagesNotLoaded{Errors: problems}
-			}
-			return DeclarationsRefused{Refusals: read.Refusals}
+			return DeclarationsRefused{Refusals: routes.Refusals}
 		case nil:
 		}
 		return DeclarationsRefused{Refusals: []reading.Refusal{}}
@@ -382,28 +379,33 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 // package that no longer declares a route, which must go.
 func renderedFiles(read reading.RoutesRead, typeScript string, existing map[string][]byte) mo.Result[[]generatedFile] {
 	return mo.Fold(goFiles(read.Plan.Packages), func(served []generatedFile) mo.Result[[]generatedFile] {
-		files := append([]generatedFile{{path: typeScript, content: mo.Some(effect.Render(read.API))}}, served...)
+		// Every existing generated file goes unless this run writes it again.
+		contents := map[string]mo.Option[[]byte]{typeScript: mo.Some(effect.Render(read.API))}
 		for path := range existing {
-			if !slices.ContainsFunc(served, func(file generatedFile) bool { return file.path == path }) {
-				files = append(files, generatedFile{path: path, content: mo.None[[]byte]()})
-			}
+			contents[path] = mo.None[[]byte]()
 		}
-		slices.SortFunc(files, func(left, right generatedFile) int { return cmp.Compare(left.path, right.path) })
+		for _, file := range served {
+			contents[file.path] = file.content
+		}
+		files := []generatedFile{}
+		for _, path := range slices.Sorted(maps.Keys(contents)) {
+			files = append(files, generatedFile{path: path, content: contents[path]})
+		}
 		return mo.Ok(files)
 	}, mo.Err[[]generatedFile])
 }
 
 // goFiles is the generated Go file of each package, or why one could not be formatted.
 func goFiles(served []serverplan.Package) mo.Result[[]generatedFile] {
-	if len(served) == 0 {
-		return mo.Ok([]generatedFile{})
-	}
-	return mo.Fold(writing.Render(served[0]), func(goFile []byte) mo.Result[[]generatedFile] {
-		file := generatedFile{path: filepath.Join(served[0].Directory, serverplan.FileName), content: mo.Some(goFile)}
-		return mo.Fold(goFiles(served[1:]), func(rest []generatedFile) mo.Result[[]generatedFile] {
-			return mo.Ok(append([]generatedFile{file}, rest...))
+	files := mo.Ok([]generatedFile{})
+	for _, each := range served {
+		files = mo.Fold(files, func(done []generatedFile) mo.Result[[]generatedFile] {
+			return mo.Fold(writing.Render(each), func(goFile []byte) mo.Result[[]generatedFile] {
+				return mo.Ok(append(slices.Clone(done), generatedFile{path: filepath.Join(each.Directory, serverplan.FileName), content: mo.Some(goFile)}))
+			}, mo.Err[[]generatedFile])
 		}, mo.Err[[]generatedFile])
-	}, mo.Err[[]generatedFile])
+	}
+	return files
 }
 
 // PackagesMissing is a project file naming no package patterns.
@@ -450,12 +452,9 @@ func readProject(projectFile string) mo.Result[Project] {
 			case written.API == "":
 				return mo.Err[Project](APINameMissing{})
 			}
-			for _, backend := range Backends() {
-				if backend.Name() == written.Language {
-					return mo.Ok(Project{Backend: backend, Packages: written.Packages, TypeScript: written.TypeScript, API: written.API})
-				}
-			}
-			return mo.Err[Project](LanguageUnknown{Language: written.Language})
+			return mo.Fold(parseBackend(written.Language), func(backend Backend) mo.Result[Project] {
+				return mo.Ok(Project{Backend: backend, Packages: written.Packages, TypeScript: written.TypeScript, API: written.API})
+			}, func(error) mo.Result[Project] { return mo.Err[Project](LanguageUnknown{Language: written.Language}) })
 		})
 	}, mo.Err[Project])
 }
@@ -468,13 +467,18 @@ func existingGenerated(directory string) map[string][]byte {
 		if entry.IsDir() && path != directory && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "testdata" || name == "vendor" || name == "node_modules") {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || name != serverplan.FileName {
+		if entry.IsDir() {
 			return nil
 		}
-		return mo.Fold(mo.TupleToResult(os.ReadFile(path)), func(content []byte) error {
-			found[path] = content
-			return nil
-		}, func(cause error) error { return cause })
+		switch serverplan.SourceFileAt(path).(type) {
+		case serverplan.GeneratedFile:
+			return mo.Fold(mo.TupleToResult(os.ReadFile(path)), func(content []byte) error {
+				found[path] = content
+				return nil
+			}, func(cause error) error { return cause })
+		case serverplan.WrittenFile, nil:
+		}
+		return nil
 	}
 	// A folder that cannot be walked holds no generated file this run can read, so it is skipped.
 	return mo.Fold(mo.EmptyableToOption(filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -495,7 +499,7 @@ func loadPackages(ctx context.Context, directory string, patterns []string, exis
 		Context: ctx, Logf: func(string, ...any) {}, Dir: directory, Env: os.Environ(), BuildFlags: []string{}, Fset: token.NewFileSet(),
 		ParseFile: nil, Tests: false, Overlay: overlay,
 	}
-	return mo.TupleToResult(packages.Load(config, append(patterns, reading.NoContractPath)...))
+	return mo.TupleToResult(packages.Load(config, append(patterns, serverplan.NoContractPath)...))
 }
 
 // loadProblems is every problem Go reported in a package whose declarations were read, except a
@@ -503,7 +507,7 @@ func loadPackages(ctx context.Context, directory string, patterns []string, exis
 func loadProblems(loaded []*packages.Package, read []string) []error {
 	problems := []error{}
 	for _, each := range loaded {
-		if !slices.Contains(read, each.PkgPath) && each.PkgPath != reading.NoContractPath {
+		if !slices.Contains(read, each.PkgPath) {
 			continue
 		}
 		for _, problem := range each.Errors {
@@ -512,8 +516,10 @@ func loadProblems(loaded []*packages.Package, read []string) []error {
 			}
 		}
 		for _, problem := range each.TypeErrors {
-			if filepath.Base(problem.Fset.Position(problem.Pos).Filename) != serverplan.FileName {
+			switch serverplan.SourceFileAt(problem.Fset.Position(problem.Pos).Filename).(type) {
+			case serverplan.WrittenFile:
 				problems = append(problems, problem)
+			case serverplan.GeneratedFile, nil:
 			}
 		}
 	}

@@ -6,7 +6,6 @@ package effect
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"regexp"
 	"strings"
 
@@ -60,8 +59,14 @@ func Render(api description.API) []byte {
 func httpAPIImports(api description.API) []string {
 	imports := []string{"HttpApi", "HttpApiEndpoint", "HttpApiGroup"}
 	for _, member := range api.Members {
-		if succeeds, isSuccess := member.Answer.(description.Succeeds); isSuccess && succeeds.Status.Code() != http.StatusOK {
-			return append(imports, "HttpApiSchema")
+		switch answer := member.Answer.(type) {
+		case description.Succeeds:
+			switch answer.Status.Declared().(type) {
+			case description.OtherSuccess:
+				return append(imports, "HttpApiSchema")
+			case description.DefaultSuccess, nil:
+			}
+		case description.Fails, nil:
 		}
 	}
 	return imports
@@ -73,12 +78,14 @@ func memberText(member description.Member) string {
 	switch answer := member.Answer.(type) {
 	case description.Succeeds:
 		declared := fmt.Sprintf("Schema.TaggedStruct(%s, %s)", quoted(member.Name), fieldsText(member.Fields, ""))
-		if answer.Status.Code() != http.StatusOK {
-			declared += fmt.Sprintf(".pipe(HttpApiSchema.status(%d))", answer.Status.Code())
+		switch status := answer.Status.Declared().(type) {
+		case description.OtherSuccess:
+			declared += fmt.Sprintf(".pipe(HttpApiSchema.status(%d))", status.Code)
+		case description.DefaultSuccess, nil:
 		}
 		return fmt.Sprintf("export const %s = %s\nexport type %s = typeof %s.Type\n", member.Name, declared, member.Name, member.Name)
 	case description.Fails:
-		fields := append([]description.Field{{Name: "code", Schema: description.Literals{Values: []string{answer.Code.String()}}}}, member.Fields...)
+		fields := append([]description.Field{{Name: description.CodeField, Schema: description.Literals{Values: []string{answer.Code.String()}}}}, member.Fields...)
 		return fmt.Sprintf("export class %s extends Schema.TaggedError<%s>()(%s, %s, { httpApiStatus: %d }) {}\n",
 			member.Name, member.Name, quoted(member.Name), fieldsText(fields, ""), answer.Status.Code())
 	case nil:

@@ -4,10 +4,44 @@
 // declares, which the reader keeps free and the command expects before the file is first written.
 package serverplan
 
-import "github.com/CheckPickerUpper/nocontract/description"
+import (
+	"path/filepath"
+
+	"github.com/CheckPickerUpper/nocontract/description"
+)
 
 // FileName is the Go file written into each package that declares a route or a guard's refusal.
 const FileName = "nocontract_routes.go"
+
+// NoContractPath is the import path of the Go package the generated code is built from, whose own
+// failures every route can answer.
+const NoContractPath = "github.com/CheckPickerUpper/nocontract/go"
+
+// SourceFile is who wrote a Go file: NoContract, or the project.
+//
+//sumtype:decl
+type SourceFile interface{ isSourceFile() }
+
+// GeneratedFile is a file NoContract writes and rewrites, which no declaration is read from.
+//
+//ergo:not-an-error
+type GeneratedFile struct{}
+
+// WrittenFile is a file the project wrote.
+//
+//ergo:not-an-error
+type WrittenFile struct{}
+
+func (GeneratedFile) isSourceFile() {}
+func (WrittenFile) isSourceFile()   {}
+
+// SourceFileAt is who wrote the Go file at path.
+func SourceFileAt(path string) SourceFile {
+	if filepath.Base(path) == FileName {
+		return GeneratedFile{}
+	}
+	return WrittenFile{}
+}
 
 // The names a generated file declares that code outside it calls.
 const (
@@ -28,14 +62,42 @@ type Plan struct {
 }
 
 // Package is one Go package's generated code: its name, its import path, the folder its generated
-// file is written to, its routes, what they are served with, and the guard refusals it declares.
+// file is written to, the routes it serves, and the guard refusals it declares.
 type Package struct {
 	Name      string
 	Path      string
 	Directory string
-	Routes    []Route
-	Serving   Serving
+	Serves    Routing
 	Refusals  []GuardRefusal
+}
+
+// Routing is whether a package serves routes.
+//
+//sumtype:decl
+type Routing interface{ isRouting() }
+
+// ServesNoRoutes is a package that declares only guard refusals.
+//
+//ergo:not-an-error
+type ServesNoRoutes struct{}
+
+// ServesRoutes is a package's routes, what they are served with, and each outcome they answer,
+// once.
+//
+//ergo:not-an-error
+type ServesRoutes struct {
+	Routes   []Route
+	Serving  Serving
+	Outcomes []OutcomeAnswer
+}
+
+func (ServesNoRoutes) isRouting() {}
+func (ServesRoutes) isRouting()   {}
+
+// OutcomeAnswer is one outcome a package's routes answer and each of its members.
+type OutcomeAnswer struct {
+	Outcome GoName
+	Members []Member
 }
 
 // Serving is what a package's routes are served with: the receiver of each method handler, by its
@@ -103,7 +165,7 @@ func (Unguarded) isRouteGuard() {}
 func (Guarded) isRouteGuard()   {}
 
 // Route is one route as the generated code serves it: its endpoint name, method, path, handler,
-// guard, input and outcome, how its input is read and each member of its outcome.
+// guard, input and outcome, and how its input is read.
 type Route struct {
 	Name    string
 	Method  description.Method
@@ -115,7 +177,6 @@ type Route struct {
 	Params  []Param
 	Query   []Param
 	Body    BodyRead
-	Members []Member
 }
 
 // Param is one input field read from a path segment or a query parameter: its name in the

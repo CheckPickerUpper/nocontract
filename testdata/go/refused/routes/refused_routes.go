@@ -218,5 +218,10 @@ func (Shelf) Count(context.Context, nocontract.NoInput) ReadOutcome { return Rea
 //nocontract:route GET /rack
 func (Rack) Count(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
 
+// Misspelled is a handler whose route line names a directive NoContract does not read.
+//
+//nocontract:rout GET /misspelled
+func Misspelled(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
+
 // Serving takes a name the generated file declares.
 type Serving struct{}

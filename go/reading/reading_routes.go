@@ -1,6 +1,11 @@
 // Package reading reads a Go project's //nocontract:route handlers, their inputs and the members
 // of their outcomes out of Go's type checker, as the language-neutral description and the Go
 // server plan, and refuses every declaration the generated server and its client cannot hold.
+//
+// Every reading step is a function returning its value and everything it found: refusals, the
+// members and named structs it read, and the packages whose declarations it read. The checks
+// that span routes, such as two routes serving one pattern or two declarations taking one
+// TypeScript name, run once over everything found, in assembling.go.
 package reading
 
 import (
@@ -8,7 +13,6 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"path/filepath"
 	"slices"
 
 	"github.com/CheckPickerUpper/ErGo/declarations"
@@ -19,10 +23,6 @@ import (
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 )
 
-// NoContractPath is the import path of the Go package the generated code is built from, whose own
-// failures every route can answer.
-const NoContractPath = "github.com/CheckPickerUpper/nocontract/go"
-
 // Request is what the generator reads: the loaded packages, the project's own and nocontract's,
 // each with its syntax, and the name of the Effect API.
 type Request struct {
@@ -30,32 +30,34 @@ type Request struct {
 	APIName  string
 }
 
-// Reading is what reading a project's routes ended as.
+// Reading is the import path of every package read, sorted, and what reading the routes ended as.
+type Reading struct {
+	Read   []string
+	Routes RoutesOutcome
+}
+
+// RoutesOutcome is what reading a project's routes ended as.
 //
 //sumtype:decl
-type Reading interface{ isReading() }
+type RoutesOutcome interface{ isRoutesOutcome() }
 
-// RoutesRead is every route, read without a refusal, as the description and the Go server plan,
-// and the import path of every package read.
+// RoutesRead is every route, read without a refusal, as the description and the Go server plan.
 //
 //ergo:not-an-error
 type RoutesRead struct {
 	API  description.API
 	Plan serverplan.Plan
-	Read []string
 }
 
-// RoutesRefused is every declaration that could not be read, in source order, and the import
-// path of every package read.
+// RoutesRefused is every declaration that could not be read, in source order.
 //
 //ergo:code NC-1031
 type RoutesRefused struct {
 	Refusals []Refusal
-	Read     []string
 }
 
-func (RoutesRead) isReading()    {}
-func (RoutesRefused) isReading() {}
+func (RoutesRead) isRoutesOutcome()    {}
+func (RoutesRefused) isRoutesOutcome() {}
 
 // reservedNames are the names the TypeScript file imports, which no declaration may take.
 func reservedNames() []string {
@@ -64,31 +66,10 @@ func reservedNames() []string {
 
 // ReadRoutes reads every route the project's packages declare.
 func ReadRoutes(request Request) Reading {
-	reader := newProjectReader(request)
-	reader.readSharedFailure(reader.shared.requestRefused)
-	reader.readSharedFailure(reader.shared.answerNotWritten)
-	reader.readGuards()
-	for _, loaded := range reader.projectPackages() {
-		for _, file := range loaded.Syntax {
-			if filepath.Base(loaded.Fset.File(file.Pos()).Name()) == serverplan.FileName {
-				continue
-			}
-			for _, declaration := range file.Decls {
-				if function, isFunction := declaration.(*ast.FuncDecl); isFunction {
-					reader.readHandler(loaded, function)
-				}
-			}
-		}
-	}
-	read := reader.readPackages()
-	if len(reader.refusals) > 0 {
-		refusals := slices.Clone(reader.refusals)
-		slices.SortStableFunc(refusals, func(left, right Refusal) int {
-			return cmp.Or(cmp.Compare(left.Position.Filename, right.Position.Filename), cmp.Compare(left.Position.Line, right.Position.Line))
-		})
-		return RoutesRefused{Refusals: refusals, Read: read}
-	}
-	return reader.routesRead(read)
+	index := indexOf(request)
+	shared := readShared(index)
+	guards := readGuards(index)
+	return assemble(index, shared.with(guards.found), guards, readRoutes(index, guards))
 }
 
 // typeKey names a declared type by its package's import path and its name, so types read through
@@ -116,25 +97,6 @@ type declaredType struct {
 	comment *ast.CommentGroup
 }
 
-// projectReader holds what reading has found so far and every refusal.
-type projectReader struct {
-	request   Request
-	files     *token.FileSet
-	declared  map[typeKey]declaredType
-	names     map[string]token.Position
-	structs   map[typeKey]structState
-	structOut []description.NamedStruct
-	members   map[typeKey]memberReading
-	memberOut []description.Member
-	outcomes  map[typeKey]outcomeReading
-	patterns  map[string]token.Position
-	guards    map[string]guardReading
-	groups    map[string]*groupBuild
-	read      map[string]struct{}
-	shared    sharedFailures
-	refusals  []Refusal
-}
-
 // sharedFailures names nocontract's own failures: RequestRefused, which a route that reads its
 // request can answer before its handler runs, and AnswerNotWritten, which every route can answer.
 type sharedFailures struct {
@@ -142,137 +104,105 @@ type sharedFailures struct {
 	answerNotWritten string
 }
 
-// groupBuild is the endpoints of one package and its generated code, as they are read, with the
-// place each endpoint name and each field of what its routes are served with was first taken.
-type groupBuild struct {
-	group     description.Group
-	plan      serverplan.Package
-	endpoints map[string]token.Position
-	fields    map[string]servingField
+// ownFile is a Go file the project wrote, and its package.
+type ownFile struct {
+	loaded *packages.Package
+	file   *ast.File
 }
 
-// buildFor is the package's build, begun when the package first declares a route or a guard's
-// refusal.
-func (reader *projectReader) buildFor(loaded *packages.Package, position token.Pos) *groupBuild {
-	if build, known := reader.groups[loaded.PkgPath]; known {
-		return build
-	}
-	build := &groupBuild{
-		group: description.Group{Name: loaded.Name, Endpoints: []description.Endpoint{}},
-		plan: serverplan.Package{
-			Name: loaded.Name, Path: loaded.PkgPath, Directory: filepath.Dir(reader.files.Position(position).Filename), Routes: []serverplan.Route{},
-			Serving: serverplan.Serving{Receivers: []serverplan.GoName{}, Guards: []string{}}, Refusals: []serverplan.GuardRefusal{},
-		},
-		endpoints: map[string]token.Position{}, fields: map[string]servingField{},
-	}
-	reader.groups[loaded.PkgPath] = build
-	return build
+// projectIndex is what every reading step reads from: the request, the file set positions are
+// read through, every type declaration of the loaded syntax, the project's own packages in import
+// path order, the files of them the project wrote and the types those declare, and nocontract's
+// own failures.
+type projectIndex struct {
+	request  Request
+	files    *token.FileSet
+	declared map[typeKey]declaredType
+	project  []*packages.Package
+	own      []ownFile
+	ownTypes []declaredType
+	shared   sharedFailures
 }
 
-func newProjectReader(request Request) *projectReader {
-	reader := &projectReader{
-		request: request, files: token.NewFileSet(), declared: map[typeKey]declaredType{}, names: map[string]token.Position{},
-		structs: map[typeKey]structState{}, structOut: []description.NamedStruct{}, members: map[typeKey]memberReading{},
-		memberOut: []description.Member{}, outcomes: map[typeKey]outcomeReading{}, patterns: map[string]token.Position{},
-		guards: map[string]guardReading{}, groups: map[string]*groupBuild{}, read: map[string]struct{}{},
-		shared: sharedFailures{requestRefused: "RequestRefused", answerNotWritten: "AnswerNotWritten"}, refusals: []Refusal{},
-	}
+// indexOf indexes the loaded packages once.
+func indexOf(request Request) projectIndex {
+	files := token.NewFileSet()
+	declared := map[typeKey]declaredType{}
+	project := []*packages.Package{}
 	for _, loaded := range request.Packages {
-		reader.files = loaded.Fset
-		reader.indexDeclarations(loaded)
-	}
-	for _, name := range append(reservedNames(), request.APIName) {
-		reader.names[name] = token.Position{Filename: "", Offset: 0, Line: 0, Column: 0}
-	}
-	return reader
-}
-
-func (reader *projectReader) indexDeclarations(loaded *packages.Package) {
-	for _, file := range loaded.Syntax {
-		for _, declaration := range file.Decls {
-			group, isGeneral := declaration.(*ast.GenDecl)
-			if !isGeneral || group.Tok != token.TYPE {
-				continue
-			}
-			for _, spec := range group.Specs {
-				typeSpec, isTypeSpec := spec.(*ast.TypeSpec)
-				if !isTypeSpec {
-					continue
-				}
-				if object, isTypeName := loaded.TypesInfo.Defs[typeSpec.Name].(*types.TypeName); isTypeName {
-					comment := mo.Fold(mo.EmptyableToOption(declarations.TypeComment(typeSpec, group)), func(found *ast.CommentGroup) *ast.CommentGroup { return found },
-						func(error) *ast.CommentGroup { return &ast.CommentGroup{List: []*ast.Comment{}} })
-					reader.declared[keyOf(object)] = declaredType{spec: typeSpec, loaded: loaded, object: object, comment: comment}
-				}
+		files = loaded.Fset
+		for _, file := range loaded.Syntax {
+			for _, entry := range typeDeclarations(loaded, file) {
+				declared[keyOf(entry.object)] = entry
 			}
 		}
-	}
-}
-
-// projectPackages is every loaded package other than nocontract, in import path order.
-func (reader *projectReader) projectPackages() []*packages.Package {
-	project := []*packages.Package{}
-	for _, loaded := range reader.request.Packages {
-		if loaded.PkgPath != NoContractPath {
+		if loaded.PkgPath != serverplan.NoContractPath {
 			project = append(project, loaded)
 		}
 	}
 	slices.SortFunc(project, func(left, right *packages.Package) int { return cmp.Compare(left.PkgPath, right.PkgPath) })
-	return project
-}
-
-// readPackages is the import path of every package whose declarations were read, sorted.
-func (reader *projectReader) readPackages() []string {
-	read := []string{}
-	for path := range reader.read {
-		read = append(read, path)
-	}
-	slices.Sort(read)
-	return read
-}
-
-func (reader *projectReader) refuse(position token.Pos, problem Problem) {
-	reader.refusals = append(reader.refusals, Refusal{Position: reader.files.Position(position), Problem: problem})
-}
-
-// reserve takes name for the declaration at position, or refuses it when another holds it.
-func (reader *projectReader) reserve(name string, position token.Pos) {
-	if first, taken := reader.names[name]; taken {
-		reader.refuse(position, NameRepeated{Name: name, First: first})
-		return
-	}
-	reader.names[name] = reader.files.Position(position)
-}
-
-// readSharedFailure reads one of nocontract's own failures as a member routes can answer.
-func (reader *projectReader) readSharedFailure(name string) {
-	declared, isDeclared := reader.declared[typeKey{path: NoContractPath, name: name}]
-	if !isDeclared {
-		reader.refuse(token.NoPos, DeclarationOutsideProject{Type: NoContractPath + "." + name})
-		return
-	}
-	reader.readMember(declared)
-}
-
-func (reader *projectReader) routesRead(read []string) RoutesRead {
-	groups, packages := []description.Group{}, []serverplan.Package{}
-	for _, build := range reader.groups {
-		if len(build.group.Endpoints) > 0 {
-			group := build.group
-			group.Endpoints = slices.Clone(group.Endpoints)
-			slices.SortFunc(group.Endpoints, func(left, right description.Endpoint) int { return cmp.Compare(left.Name, right.Name) })
-			groups = append(groups, group)
+	own, ownTypes := []ownFile{}, []declaredType{}
+	for _, loaded := range project {
+		for _, file := range loaded.Syntax {
+			switch serverplan.SourceFileAt(files.Position(file.Pos()).Filename).(type) {
+			case serverplan.WrittenFile:
+				own = append(own, ownFile{loaded: loaded, file: file})
+				ownTypes = append(ownTypes, typeDeclarations(loaded, file)...)
+			case serverplan.GeneratedFile, nil:
+			}
 		}
-		served := build.plan
-		served.Routes = slices.Clone(served.Routes)
-		slices.SortFunc(served.Routes, func(left, right serverplan.Route) int { return cmp.Compare(left.Name, right.Name) })
-		packages = append(packages, served)
 	}
-	slices.SortFunc(groups, func(left, right description.Group) int { return cmp.Compare(left.Name, right.Name) })
-	slices.SortFunc(packages, func(left, right serverplan.Package) int { return cmp.Compare(left.Path, right.Path) })
-	return RoutesRead{
-		API:  description.API{Name: reader.request.APIName, Groups: groups, Members: reader.memberOut, Structs: reader.structOut},
-		Plan: serverplan.Plan{Packages: packages},
-		Read: read,
+	return projectIndex{
+		request: request, files: files, declared: declared, project: project, own: own, ownTypes: ownTypes,
+		shared: sharedFailures{requestRefused: "RequestRefused", answerNotWritten: "AnswerNotWritten"},
 	}
+}
+
+// typeDeclarations is every type declaration of one file, with its comment.
+func typeDeclarations(loaded *packages.Package, file *ast.File) []declaredType {
+	found := []declaredType{}
+	for _, declaration := range file.Decls {
+		group, isGeneral := declaration.(*ast.GenDecl)
+		if !isGeneral || group.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range group.Specs {
+			typeSpec, isTypeSpec := spec.(*ast.TypeSpec)
+			if !isTypeSpec {
+				continue
+			}
+			if object, isTypeName := loaded.TypesInfo.Defs[typeSpec.Name].(*types.TypeName); isTypeName {
+				comment := mo.Fold(mo.EmptyableToOption(declarations.TypeComment(typeSpec, group)), func(written *ast.CommentGroup) *ast.CommentGroup { return written },
+					func(error) *ast.CommentGroup { return emptyComment() })
+				found = append(found, declaredType{spec: typeSpec, loaded: loaded, object: object, comment: comment})
+			}
+		}
+	}
+	return found
+}
+
+func emptyComment() *ast.CommentGroup { return &ast.CommentGroup{List: []*ast.Comment{}} }
+
+// position is where pos is written.
+func (index projectIndex) position(pos token.Pos) token.Position {
+	return index.files.Position(pos)
+}
+
+// refused is a step refusing the declaration at pos.
+func (index projectIndex) refused(pos token.Pos, problem Problem) found {
+	return refusedAt(index.position(pos), problem)
+}
+
+// readShared reads nocontract's own failures as members routes can answer.
+func readShared(index projectIndex) found {
+	finding := packageRead(serverplan.NoContractPath)
+	for _, name := range []string{index.shared.requestRefused, index.shared.answerNotWritten} {
+		declared, isDeclared := index.declared[typeKey{path: serverplan.NoContractPath, name: name}]
+		if !isDeclared {
+			finding = finding.with(refusedAt(index.position(token.NoPos), DeclarationOutsideProject{Type: serverplan.NoContractPath + "." + name}))
+			continue
+		}
+		finding = finding.with(readMember(index, declared).found)
+	}
+	return finding
 }

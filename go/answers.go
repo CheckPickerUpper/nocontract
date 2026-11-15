@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/samber/mo"
+
+	"github.com/CheckPickerUpper/nocontract/description"
 )
 
 // Answer is what a route writes: its member's status, its member's Go type name as the tag the
@@ -49,8 +51,9 @@ func NoOutcome() Answer {
 	return AnswerNotWritten{Answer: "", Reason: "the route answered no outcome"}.answer()
 }
 
-// answerFallback is written only when even AnswerNotWritten cannot be encoded.
-const answerFallback = `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"","reason":"the failure could not be encoded"}`
+// fallbackFields are AnswerNotWritten's fields, written by hand for when even they cannot be
+// encoded.
+const fallbackFields = `{"answer":"","reason":"the failure could not be encoded"}`
 
 // FieldsNotObject is an answer whose JSON fields are not an object, so it has nowhere to hold its
 // tag.
@@ -70,7 +73,12 @@ func Write(writer http.ResponseWriter, answer Answer) {
 		return struct{}{}
 	}, func(cause error) struct{} {
 		failed := AnswerNotWritten{Answer: answer.tag, Reason: cause.Error()}.answer()
-		writeBody(writer, failed.status, mo.Fold(failed.body(), func(body []byte) []byte { return body }, func(error) []byte { return []byte(answerFallback) }))
+		fallback := Answer{status: failed.status, tag: failed.tag, code: failed.code, fields: mo.Ok([]byte(fallbackFields))}
+		// The fallback's fields are an object, so its body is always written; an empty body is never sent.
+		asIs := func(body []byte) []byte { return body }
+		writeBody(writer, failed.status, mo.Fold(failed.body(), asIs, func(error) []byte {
+			return mo.Fold(fallback.body(), asIs, func(error) []byte { return []byte{} })
+		}))
 		return struct{}{}
 	})
 }
@@ -88,10 +96,14 @@ func (answer Answer) body() mo.Result[[]byte] {
 		if !bytes.HasPrefix(fields, []byte("{")) || !bytes.HasSuffix(fields, []byte("}")) {
 			return mo.Err[[]byte](FieldsNotObject{Tag: answer.tag})
 		}
-		object := bytes.NewBufferString(`{"_tag":`)
+		object := bytes.NewBufferString("{")
+		object.Write(quoted(description.TagField))
+		object.WriteString(":")
 		object.Write(quoted(answer.tag))
 		answer.code.ForEach(func(code string) {
-			object.WriteString(`,"code":`)
+			object.WriteString(",")
+			object.Write(quoted(description.CodeField))
+			object.WriteString(":")
 			object.Write(quoted(code))
 		})
 		if inner := bytes.TrimSpace(fields[1 : len(fields)-1]); len(inner) > 0 {

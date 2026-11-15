@@ -77,3 +77,5 @@ func (ReceiverUnsupported) ErrorCode() ergo.Code { return "NC-1049" }
 func (EndpointNameRepeated) ErrorCode() ergo.Code { return "NC-1050" }
 
 func (GeneratedNameTaken) ErrorCode() ergo.Code { return "NC-1051" }
+
+func (DirectiveUnknown) ErrorCode() ergo.Code { return "NC-1056" }

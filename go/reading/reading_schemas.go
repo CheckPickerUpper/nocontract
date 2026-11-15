@@ -13,53 +13,20 @@ import (
 	"github.com/CheckPickerUpper/nocontract/description"
 )
 
-// structState is how far reading one named struct has got.
-//
-//sumtype:decl
-type structState interface{ isStructState() }
+// indexedField is one field of a struct with its tag.
+type indexedField struct {
+	variable *types.Var
+	tag      string
+}
 
-// structOpen is a struct whose fields are being read, so meeting it again is recursion.
-//
-//ergo:not-an-error
-type structOpen struct{}
-
-// structDone is a struct read whole.
-//
-//ergo:not-an-error
-type structDone struct{}
-
-// structFailed is a struct with a refused field.
-//
-//ergo:not-an-error
-type structFailed struct{}
-
-func (structOpen) isStructState()   {}
-func (structDone) isStructState()   {}
-func (structFailed) isStructState() {}
-
-// fieldReading is what reading one exported field ended as.
-//
-//sumtype:decl
-type fieldReading interface{ isFieldReading() }
-
-// fieldWritten is a field encoding/json writes, with its JSON name and schema.
-//
-//ergo:not-an-error
-type fieldWritten struct{ field description.Field }
-
-// fieldSkipped is a field tagged json:"-", which encoding/json never writes.
-//
-//ergo:not-an-error
-type fieldSkipped struct{}
-
-// fieldRefused is a field the API cannot hold; the refusal is recorded.
-//
-//ergo:not-an-error
-type fieldRefused struct{}
-
-func (fieldWritten) isFieldReading() {}
-func (fieldSkipped) isFieldReading() {}
-func (fieldRefused) isFieldReading() {}
+// fieldsOf is every field of a struct, in order, with its tag.
+func fieldsOf(fields *types.Struct) []indexedField {
+	indexed := []indexedField{}
+	for position := range fields.NumFields() {
+		indexed = append(indexed, indexedField{variable: fields.Field(position), tag: fields.Tag(position)})
+	}
+	return indexed
+}
 
 // jsonTag is a field's json tag read as encoding/json reads it.
 //
@@ -85,134 +52,120 @@ func (jsonNamed) isJSONTag()    {}
 func (jsonOmitted) isJSONTag()  {}
 func (jsonOptioned) isJSONTag() {}
 
-func readJSONTag(field *types.Var, tag string) jsonTag {
-	return mo.Fold(mo.TupleToResult(structtag.Parse(tag)), func(tags *structtag.Tags) jsonTag {
+func readJSONTag(field indexedField) jsonTag {
+	goName := field.variable.Name()
+	return mo.Fold(mo.TupleToResult(structtag.Parse(field.tag)), func(tags *structtag.Tags) jsonTag {
 		return mo.Fold(mo.TupleToResult(tags.Get("json")), func(found *structtag.Tag) jsonTag {
-			if len(found.Options) > 0 {
+			switch {
+			case len(found.Options) > 0:
 				return jsonOptioned{options: strings.Join(found.Options, ",")}
-			}
-			if found.Name == "-" {
+			case found.Name == "-":
 				return jsonOmitted{}
-			}
-			if found.Name == "" {
-				return jsonNamed{name: field.Name()}
+			case found.Name == "":
+				return jsonNamed{name: goName}
 			}
 			return jsonNamed{name: found.Name}
-		}, func(error) jsonTag { return jsonNamed{name: field.Name()} })
-	}, func(error) jsonTag { return jsonNamed{name: field.Name()} })
+		}, func(error) jsonTag { return jsonNamed{name: goName} })
+	}, func(error) jsonTag { return jsonNamed{name: goName} })
 }
 
-// fieldOf reads an exported field under encoding/json's naming. A tag option such as omitempty
-// is refused.
-func (reader *projectReader) fieldOf(field *types.Var, tag string) fieldReading {
-	switch read := readJSONTag(field, tag).(type) {
+// fieldOf reads one struct field under encoding/json's naming: nothing for an unexported field or
+// one tagged json:"-", which encoding/json never writes. An embedded field and a tag option such as
+// omitempty are refused. open is every named struct whose fields are being read.
+func fieldOf(index projectIndex, field indexedField, open []typeKey) reading[mo.Option[description.Field]] {
+	position := field.variable.Pos()
+	if field.variable.Embedded() {
+		return notRead[mo.Option[description.Field]](index.refused(position, EmbeddedFieldUnsupported{Field: field.variable.Name()}))
+	}
+	if !field.variable.Exported() {
+		return readAs(mo.None[description.Field](), nothingFound())
+	}
+	switch tag := readJSONTag(field).(type) {
 	case jsonNamed:
-		return mo.Fold(reader.schemaOf(field.Type(), field.Pos()), func(schema description.Schema) fieldReading {
-			return fieldWritten{field: description.Field{Name: read.name, Schema: schema}}
-		}, func(error) fieldReading { return fieldRefused{} })
+		return mapped(schemaOf(index, field.variable.Type(), position, open), func(schema description.Schema) mo.Option[description.Field] {
+			return mo.Some(description.Field{Name: tag.name, Schema: schema})
+		})
 	case jsonOmitted:
-		return fieldSkipped{}
+		return readAs(mo.None[description.Field](), nothingFound())
 	case jsonOptioned:
-		reader.refuse(field.Pos(), FieldOptionUnsupported{Field: field.Name(), Option: read.options})
-		return fieldRefused{}
+		return notRead[mo.Option[description.Field]](index.refused(position, FieldOptionUnsupported{Field: field.variable.Name(), Option: tag.options}))
 	case nil:
 	}
-	return fieldRefused{}
+	return readAs(mo.None[description.Field](), nothingFound())
 }
 
-// structFields reads the exported fields of a struct that is not an outcome member.
-func (reader *projectReader) structFields(fields *types.Struct) mo.Option[[]description.Field] {
-	read, complete := []description.Field{}, true
-	for index := range fields.NumFields() {
-		field := fields.Field(index)
-		if field.Embedded() {
-			reader.refuse(field.Pos(), EmbeddedFieldUnsupported{Field: field.Name()})
-			complete = false
-			continue
-		}
-		if !field.Exported() {
-			continue
-		}
-		switch reading := reader.fieldOf(field, fields.Tag(index)).(type) {
-		case fieldWritten:
-			read = append(read, reading.field)
-		case fieldRefused:
-			complete = false
-		case fieldSkipped, nil:
-		}
-	}
-	if !complete {
-		return mo.None[[]description.Field]()
-	}
-	return mo.Some(read)
+// structFields reads every written field of a struct that is not an outcome member.
+func structFields(index projectIndex, fields *types.Struct, open []typeKey) reading[[]description.Field] {
+	read := collected(fieldsOf(fields), func(field indexedField) reading[mo.Option[description.Field]] { return fieldOf(index, field, open) })
+	return mapped(read, present)
 }
 
-func (reader *projectReader) unsupported(position token.Pos, written types.Type, flaw TypeFlaw) mo.Option[description.Schema] {
-	reader.refuse(position, TypeUnsupported{Type: types.TypeString(written, nil), Flaw: flaw})
-	return mo.None[description.Schema]()
+func unsupported(index projectIndex, position token.Pos, written types.Type, flaw TypeFlaw) reading[description.Schema] {
+	return notRead[description.Schema](index.refused(position, TypeUnsupported{Type: types.TypeString(written, nil), Flaw: flaw}))
 }
 
-// schemaOf is the JSON shape encoding/json writes a value of written as.
-func (reader *projectReader) schemaOf(written types.Type, position token.Pos) mo.Option[description.Schema] {
+// schemaOf is the JSON shape encoding/json writes a value of written as. open is every named
+// struct whose fields are being read, which written may not be again.
+func schemaOf(index projectIndex, written types.Type, position token.Pos, open []typeKey) reading[description.Schema] {
 	switch typed := types.Unalias(written).(type) {
 	case *types.Basic:
-		return reader.basicSchema(typed, position)
+		return basicSchema(index, typed, position)
 	case *types.Named:
-		return reader.namedSchema(typed, position)
+		return namedSchema(index, typed, position, open)
 	case *types.Slice:
 		if basic, isBasic := typed.Elem().Underlying().(*types.Basic); isBasic && basic.Kind() == types.Byte {
-			return reader.unsupported(position, written, ByteSliceField{})
+			return unsupported(index, position, written, ByteSliceField{})
 		}
-		return mapOption(reader.schemaOf(typed.Elem(), position), func(item description.Schema) description.Schema { return description.List{Item: item} })
+		return mapped(schemaOf(index, typed.Elem(), position, open), func(item description.Schema) description.Schema { return description.List{Item: item} })
 	case *types.Array:
-		return mapOption(reader.schemaOf(typed.Elem(), position), func(item description.Schema) description.Schema { return description.List{Item: item} })
+		return mapped(schemaOf(index, typed.Elem(), position, open), func(item description.Schema) description.Schema { return description.List{Item: item} })
 	case *types.Map:
 		if key, isBasic := typed.Key().Underlying().(*types.Basic); !isBasic || key.Kind() != types.String {
-			return reader.unsupported(position, written, MapKeyNotText{})
+			return unsupported(index, position, written, MapKeyNotText{})
 		}
-		return mapOption(reader.schemaOf(typed.Elem(), position), func(value description.Schema) description.Schema { return description.Dictionary{Value: value} })
+		return mapped(schemaOf(index, typed.Elem(), position, open), func(value description.Schema) description.Schema { return description.Dictionary{Value: value} })
 	case *types.Struct:
-		return mapOption(reader.structFields(typed), func(fields []description.Field) description.Schema { return description.InlineStruct{Fields: fields} })
+		return mapped(structFields(index, typed, open), func(fields []description.Field) description.Schema { return description.InlineStruct{Fields: fields} })
 	case *types.Pointer:
-		return reader.unsupported(position, written, PointerField{})
+		return unsupported(index, position, written, PointerField{})
 	case *types.Interface:
-		return reader.unsupported(position, written, InterfaceField{})
+		return unsupported(index, position, written, InterfaceField{})
 	case *types.Tuple, *types.Signature, *types.Chan, *types.Alias, *types.TypeParam, *types.Union, nil:
 	}
-	return reader.unsupported(position, written, ShapelessField{})
+	return unsupported(index, position, written, ShapelessField{})
 }
 
-func (reader *projectReader) basicSchema(basic *types.Basic, position token.Pos) mo.Option[description.Schema] {
+func basicSchema(index projectIndex, basic *types.Basic, position token.Pos) reading[description.Schema] {
 	switch {
 	case basic.Info()&types.IsString != 0:
-		return mo.Some[description.Schema](description.Text{})
+		return readAs[description.Schema](description.Text{}, nothingFound())
 	case basic.Info()&types.IsBoolean != 0:
-		return mo.Some[description.Schema](description.Truth{})
+		return readAs[description.Schema](description.Truth{}, nothingFound())
 	case basic.Info()&types.IsInteger != 0:
-		return mo.Some[description.Schema](description.Integer{})
+		return readAs[description.Schema](description.Integer{}, nothingFound())
 	case basic.Info()&types.IsFloat != 0:
-		return mo.Some[description.Schema](description.Finite{})
+		return readAs[description.Schema](description.Finite{}, nothingFound())
 	}
-	return reader.unsupported(position, basic, ShapelessField{})
+	return unsupported(index, position, basic, ShapelessField{})
 }
 
-func (reader *projectReader) namedSchema(named *types.Named, position token.Pos) mo.Option[description.Schema] {
+func namedSchema(index projectIndex, named *types.Named, position token.Pos, open []typeKey) reading[description.Schema] {
 	object := named.Obj()
 	switch {
 	case packagePath(object) == "time" && object.Name() == "Time":
-		return mo.Some[description.Schema](description.Instant{})
+		return readAs[description.Schema](description.Instant{}, nothingFound())
 	case packagePath(object) == "github.com/samber/mo" && object.Name() == "Option":
-		return mapOption(reader.schemaOf(named.TypeArgs().At(0), position), func(inner description.Schema) description.Schema { return description.Nullable{Inner: inner} })
+		return mapped(schemaOf(index, named.TypeArgs().At(0), position, open), func(inner description.Schema) description.Schema { return description.Nullable{Inner: inner} })
 	}
 	if fields, isStruct := named.Underlying().(*types.Struct); isStruct {
-		return reader.namedStruct(named, fields, position)
+		return namedStruct(index, named, fields, position, open)
 	}
 	if basic, isBasic := named.Underlying().(*types.Basic); isBasic && basic.Info()&types.IsString != 0 {
 		if values := stringConstants(named); len(values) > 0 {
-			return mo.Some[description.Schema](description.Literals{Values: values})
+			return readAs[description.Schema](description.Literals{Values: values}, nothingFound())
 		}
 	}
-	return reader.schemaOf(named.Underlying(), position)
+	return schemaOf(index, named.Underlying(), position, open)
 }
 
 // stringConstants is every string constant of the named type declared in its package, sorted.
@@ -229,33 +182,19 @@ func stringConstants(named *types.Named) []string {
 	return slices.Compact(values)
 }
 
-// namedStruct reads a named struct once and refers to it by name.
-func (reader *projectReader) namedStruct(named *types.Named, fields *types.Struct, position token.Pos) mo.Option[description.Schema] {
+// namedStruct reads a named struct and refers to it by name, finding it whole when every field is
+// read. A struct met again while its own fields are read holds itself.
+func namedStruct(index projectIndex, named *types.Named, fields *types.Struct, position token.Pos, open []typeKey) reading[description.Schema] {
 	object := named.Obj()
-	if named.TypeParams().Len() > 0 || named.TypeArgs().Len() > 0 {
-		reader.refuse(position, GenericMember{Member: object.Name()})
-		return mo.None[description.Schema]()
-	}
 	key := keyOf(object)
-	reference := mo.Some[description.Schema](description.StructRef{Name: object.Name()})
-	if state, known := reader.structs[key]; known {
-		switch state.(type) {
-		case structOpen:
-			reader.refuse(position, RecursiveStruct{Struct: object.Name()})
-		case structDone:
-			return reference
-		case structFailed, nil:
-		}
-		return mo.None[description.Schema]()
+	switch {
+	case named.TypeParams().Len() > 0 || named.TypeArgs().Len() > 0:
+		return notRead[description.Schema](index.refused(position, GenericMember{Member: object.Name()}))
+	case slices.Contains(open, key):
+		return notRead[description.Schema](index.refused(position, RecursiveStruct{Struct: object.Name()}))
 	}
-	reader.structs[key] = structOpen{}
-	reader.reserve(object.Name(), object.Pos())
-	return mo.Fold(reader.structFields(fields), func(read []description.Field) mo.Option[description.Schema] {
-		reader.structs[key] = structDone{}
-		reader.structOut = append(reader.structOut, description.NamedStruct{Name: object.Name(), Fields: read})
-		return reference
-	}, func(error) mo.Option[description.Schema] {
-		reader.structs[key] = structFailed{}
-		return mo.None[description.Schema]()
+	return andThen(structFields(index, fields, append(slices.Clone(open), key)), func(read []description.Field) reading[description.Schema] {
+		whole := structRead(foundStruct{key: key, position: index.position(object.Pos()), named: description.NamedStruct{Name: object.Name(), Fields: read}})
+		return readAs[description.Schema](description.StructRef{Name: object.Name()}, whole)
 	})
 }

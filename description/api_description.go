@@ -34,13 +34,33 @@ func GroupClassName(name string) string {
 	return string(unicode.ToUpper(first)) + name[size:] + "Group"
 }
 
-// Method is the HTTP method a route answers, with its name as a request spells it.
+// Method is the HTTP method a route answers: its name as a request spells it, and whether its
+// request carries a body.
 //
 //sumtype:decl
 type Method interface {
 	isMethod()
 	Name() string
+	Body() MethodBody
 }
+
+// MethodBody is whether a method's request carries a body a route can read.
+//
+//sumtype:decl
+type MethodBody interface{ isMethodBody() }
+
+// BodyCarried is a method whose request carries a body.
+//
+//ergo:not-an-error
+type BodyCarried struct{}
+
+// BodyAbsent is a method whose request carries no body.
+//
+//ergo:not-an-error
+type BodyAbsent struct{}
+
+func (BodyCarried) isMethodBody() {}
+func (BodyAbsent) isMethodBody()  {}
 
 // Get is the GET method.
 //
@@ -88,10 +108,47 @@ func (Patch) Name() string { return http.MethodPatch }
 // Name is DELETE.
 func (Delete) Name() string { return http.MethodDelete }
 
-// Methods is every method a route may answer.
-func Methods() []Method {
-	return []Method{Get{}, Post{}, Put{}, Patch{}, Delete{}}
+// Body is absent: a GET request carries no body.
+func (Get) Body() MethodBody { return BodyAbsent{} }
+
+// Body is carried.
+func (Post) Body() MethodBody { return BodyCarried{} }
+
+// Body is carried.
+func (Put) Body() MethodBody { return BodyCarried{} }
+
+// Body is carried.
+func (Patch) Body() MethodBody { return BodyCarried{} }
+
+// Body is carried.
+func (Delete) Body() MethodBody { return BodyCarried{} }
+
+// ParseMethod is the method a route may answer that text names.
+func ParseMethod(text string) mo.Option[Method] {
+	switch text {
+	case http.MethodGet:
+		return mo.Some[Method](Get{})
+	case http.MethodPost:
+		return mo.Some[Method](Post{})
+	case http.MethodPut:
+		return mo.Some[Method](Put{})
+	case http.MethodPatch:
+		return mo.Some[Method](Patch{})
+	case http.MethodDelete:
+		return mo.Some[Method](Delete{})
+	}
+	return mo.None[Method]()
 }
+
+// TagField is the field every answer names its member in.
+const TagField = "_tag"
+
+// CodeField is the field a failure carries its permanent code in.
+const CodeField = "code"
+
+// ReservedFields is every field name an answer writes before its member's own fields, which a
+// member therefore cannot declare.
+func ReservedFields() []string { return []string{TagField, CodeField} }
 
 // Endpoint is one route: its name, its method and path, with {name} path segments, what it reads
 // from the request, the members it succeeds with, and every member it can fail with: its outcome's
@@ -147,6 +204,32 @@ type FailureStatus struct{ code int }
 
 // Code is the status's number.
 func (status SuccessStatus) Code() int { return status.code }
+
+// Declared is whether the status is the one a success answers with unless it says otherwise.
+func (status SuccessStatus) Declared() SuccessDeclared {
+	if status.code == http.StatusOK {
+		return DefaultSuccess{}
+	}
+	return OtherSuccess{Code: status.code}
+}
+
+// SuccessDeclared is how a success status is written: left unsaid as 200, or named.
+//
+//sumtype:decl
+type SuccessDeclared interface{ isSuccessDeclared() }
+
+// DefaultSuccess is 200, which a success answers with unless it names another.
+//
+//ergo:not-an-error
+type DefaultSuccess struct{}
+
+// OtherSuccess is a success status other than 200, which the success names.
+//
+//ergo:not-an-error
+type OtherSuccess struct{ Code int }
+
+func (DefaultSuccess) isSuccessDeclared() {}
+func (OtherSuccess) isSuccessDeclared()   {}
 
 // Code is the status's number.
 func (status FailureStatus) Code() int { return status.code }

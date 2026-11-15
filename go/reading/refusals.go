@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"go/token"
 
+	ergo "github.com/CheckPickerUpper/ErGo"
+
 	"github.com/CheckPickerUpper/nocontract/description"
 )
 
@@ -14,12 +16,13 @@ type Refusal struct {
 	Problem  Problem
 }
 
-// Problem is why a declaration is refused.
+// Problem is why a declaration is refused, with the permanent code ErGo generates for it.
 //
 //sumtype:decl
 type Problem interface {
 	isProblem()
 	Explain() string
+	ErrorCode() ergo.Code
 }
 
 // RouteDirectiveMalformed is a //nocontract:route line that is not a method and a path.
@@ -196,6 +199,19 @@ type StatusDirectiveMalformed struct {
 //
 //ergo:code NC-1033
 type FieldNameReserved struct{ Field string }
+
+// DirectiveUnknown is a //nocontract: line naming no directive NoContract reads, such as a
+// misspelled one, which would otherwise be ignored.
+//
+//ergo:code NC-1056
+type DirectiveUnknown struct{ Text string }
+
+// Explain says why the line is refused.
+func (refused DirectiveUnknown) Explain() string {
+	return fmt.Sprintf("%q names no directive NoContract reads: route, status or guard", refused.Text)
+}
+
+func (DirectiveUnknown) isProblem() {}
 
 // GuardDirectiveMalformed is a //nocontract:guard line on a handler that is not a guard name and
 // one argument, or a handler with more than one.

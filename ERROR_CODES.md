@@ -316,15 +316,13 @@ Declared in `go/reading/refusals.go`.
 
 ## NC-1031 RoutesRefused
 
-RoutesRefused is every declaration that could not be read, in source order, and the import
-path of every package read.
+RoutesRefused is every declaration that could not be read, in source order.
 
 Declared in `go/reading/reading_routes.go`.
 
 | Field | Type |
 | --- | --- |
 | `Refusals` | `[]reading.Refusal` |
-| `Read` | `[]string` |
 
 ## NC-1032 StatusDirectiveMalformed
 
@@ -541,3 +539,14 @@ Declared in `internal/running/running_command.go`.
 | Field | Type |
 | --- | --- |
 | `Language` | `string` |
+
+## NC-1056 DirectiveUnknown
+
+DirectiveUnknown is a //nocontract: line naming no directive NoContract reads, such as a
+misspelled one, which would otherwise be ignored.
+
+Declared in `go/reading/refusals.go`.
+
+| Field | Type |
+| --- | --- |
+| `Text` | `string` |

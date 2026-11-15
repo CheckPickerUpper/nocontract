@@ -15,7 +15,8 @@ import (
 )
 
 // TestSharedFailuresAnswerWhatTheirDirectivesDeclare holds nocontract's own failures to the status
-// and code their declarations carry, which are what the generator writes into the TypeScript.
+// their declarations carry, which is what the generator writes into the TypeScript. Their codes
+// have one owner, ErGo's generated ErrorCode.
 func TestSharedFailuresAnswerWhatTheirDirectivesDeclare(t *testing.T) {
 	t.Parallel()
 	declarations := mo.Fold(mo.TupleToResult(parser.ParseFile(token.NewFileSet(), "shared_failures.go", nil, parser.ParseComments)),
@@ -23,7 +24,7 @@ func TestSharedFailuresAnswerWhatTheirDirectivesDeclare(t *testing.T) {
 			t.Fatal(cause)
 			return []ast.Decl{}
 		})
-	declared := map[string][2]string{}
+	declared := map[string]string{}
 	for _, declaration := range declarations {
 		group, isGeneral := declaration.(*ast.GenDecl)
 		if !isGeneral || group.Tok != token.TYPE {
@@ -36,25 +37,18 @@ func TestSharedFailuresAnswerWhatTheirDirectivesDeclare(t *testing.T) {
 			}
 			name := typeSpec.Name.Name
 			for _, line := range group.Doc.List {
-				status, isStatus := strings.CutPrefix(line.Text, "//nocontract:status ")
-				code, isCode := strings.CutPrefix(line.Text, "//ergo:code ")
-				entry := declared[name]
-				if isStatus {
-					entry[0] = status
+				if status, isStatus := strings.CutPrefix(line.Text, "//nocontract:status "); isStatus {
+					declared[name] = status
 				}
-				if isCode {
-					entry[1] = code
-				}
-				declared[name] = entry
 			}
 		}
 	}
-	for name, answers := range map[string][2]string{
-		"RequestRefused":   {strconv.Itoa(requestRefusedStatus), requestRefusedCode},
-		"AnswerNotWritten": {strconv.Itoa(answerNotWrittenStatus), answerNotWrittenCode},
+	for name, status := range map[string]string{
+		"RequestRefused":   strconv.Itoa(requestRefusedStatus),
+		"AnswerNotWritten": strconv.Itoa(answerNotWrittenStatus),
 	} {
-		if declared[name] != answers {
-			t.Errorf("%s declares status and code %v but answers %v", name, declared[name], answers)
+		if declared[name] != status {
+			t.Errorf("%s declares status %s but answers %s", name, declared[name], status)
 		}
 	}
 }
