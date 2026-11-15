@@ -135,7 +135,7 @@ func readNamedRouteGuard(index projectIndex, guards guardTable, line directive) 
 		return mo.Fold(guard.members, func(members []sealedMember) reading[routeGuard] {
 			names := []string{}
 			for _, member := range members {
-				names = append(names, member.object.Name())
+				names = append(names, member.declared.object.Name())
 			}
 			return readAs(routeGuard{plan: serverplan.Guarded{Name: name, Argument: strings.TrimSpace(argument)}, members: names}, nothingFound())
 		}, func(error) reading[routeGuard] { return notRead[routeGuard](nothingFound()) })

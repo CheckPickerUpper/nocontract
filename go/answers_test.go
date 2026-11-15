@@ -2,56 +2,12 @@ package nocontract
 
 import (
 	"encoding/json"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/samber/mo"
 )
-
-// TestSharedFailuresAnswerWhatTheirDirectivesDeclare holds nocontract's own failures to the status
-// their declarations carry, which is what the generator writes into the TypeScript. Their codes
-// have one owner, ErGo's generated ErrorCode.
-func TestSharedFailuresAnswerWhatTheirDirectivesDeclare(t *testing.T) {
-	t.Parallel()
-	declarations := mo.Fold(mo.TupleToResult(parser.ParseFile(token.NewFileSet(), "shared_failures.go", nil, parser.ParseComments)),
-		func(parsed *ast.File) []ast.Decl { return parsed.Decls }, func(cause error) []ast.Decl {
-			t.Fatal(cause)
-			return []ast.Decl{}
-		})
-	declared := map[string]string{}
-	for _, declaration := range declarations {
-		group, isGeneral := declaration.(*ast.GenDecl)
-		if !isGeneral || group.Tok != token.TYPE {
-			continue
-		}
-		for _, spec := range group.Specs {
-			typeSpec, isTypeSpec := spec.(*ast.TypeSpec)
-			if !isTypeSpec {
-				continue
-			}
-			name := typeSpec.Name.Name
-			for _, line := range group.Doc.List {
-				if status, isStatus := strings.CutPrefix(line.Text, "//nocontract:status "); isStatus {
-					declared[name] = status
-				}
-			}
-		}
-	}
-	for name, status := range map[string]string{
-		"RequestRefused":   strconv.Itoa(requestRefusedStatus),
-		"AnswerNotWritten": strconv.Itoa(answerNotWrittenStatus),
-	} {
-		if declared[name] != status {
-			t.Errorf("%s declares status %s but answers %s", name, declared[name], status)
-		}
-	}
-}
 
 func written(t *testing.T, answer Answer) (int, string) {
 	t.Helper()

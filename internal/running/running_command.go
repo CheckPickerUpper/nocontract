@@ -273,54 +273,88 @@ func Print(outcome Outcome, stream io.Writer) mo.Result[int] {
 	return mo.TupleToResult(fmt.Fprintln(stream, outcome.Report()))
 }
 
+// Finish reports a command's outcome, to standard output when it succeeded and standard error when
+// it did not, and is the exit code the command ends with: 2 when the report could not be written.
+func Finish(outcome Outcome) int {
+	stream := os.Stdout
+	if outcome.ExitCode() != 0 {
+		stream = os.Stderr
+	}
+	return mo.Fold(Print(outcome, stream), func(int) int { return outcome.ExitCode() }, func(error) int { return 2 })
+}
+
 // command is what the arguments ask for.
 //
 //sumtype:decl
 type command interface{ isCommand() }
 
-// generating writes the files.
+// projectRun is a run over one project file, doing what its verb asks with the rendered files.
 //
 //ergo:not-an-error
-type generating struct{ projectFile string }
+type projectRun struct {
+	projectFile string
+	finish      finisher
+}
 
-// checking compares the files.
-//
-//ergo:not-an-error
-type checking struct{ projectFile string }
-
-func (generating) isCommand()   {}
-func (checking) isCommand()     {}
+func (projectRun) isCommand()   {}
 func (UsageRefused) isCommand() {}
 
-func parseCommand(arguments []string) command {
+// finisher is what a run does with the files it rendered: generate writes them, check compares
+// them.
+type finisher func([]generatedFile) Outcome
+
+// verbParse is a command line read as its verb, or refused.
+//
+//sumtype:decl
+type verbParse interface{ isVerbParse() }
+
+// verbRead is a command line whose verb and flags were read: what the verb does with the files.
+//
+//ergo:not-an-error
+type verbRead struct{ finish finisher }
+
+func (verbRead) isVerbParse()     {}
+func (UsageRefused) isVerbParse() {}
+
+// parseVerb reads the first argument as generate or check and the rest as the flags declared on
+// flags, which the caller reads once the line is read.
+func parseVerb(arguments []string, flags *flag.FlagSet) verbParse {
 	if len(arguments) == 0 {
 		return UsageRefused{Problem: NoCommand{}}
 	}
-	flags := flag.NewFlagSet(arguments[0], flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	projectFile := flags.String("project", DefaultProjectFile, "the project file")
-	return mo.Fold(mo.TupleToResult(struct{}{}, flags.Parse(arguments[1:])), func(struct{}) command {
+	return mo.Fold(mo.TupleToResult(struct{}{}, flags.Parse(arguments[1:])), func(struct{}) verbParse {
 		if flags.NArg() > 0 {
 			return UsageRefused{Problem: ExtraArguments{Arguments: flags.Args()}}
 		}
 		switch arguments[0] {
 		case "generate":
-			return generating{projectFile: *projectFile}
+			return verbRead{finish: writeFiles}
 		case "check":
-			return checking{projectFile: *projectFile}
-		default:
-			return UsageRefused{Problem: UnknownCommand{Name: arguments[0]}}
+			return verbRead{finish: compareFiles}
 		}
-	}, func(cause error) command { return UsageRefused{Problem: FlagsUnread{Cause: cause}} })
+		return UsageRefused{Problem: UnknownCommand{Name: arguments[0]}}
+	}, func(cause error) verbParse { return UsageRefused{Problem: FlagsUnread{Cause: cause}} })
+}
+
+func parseCommand(arguments []string) command {
+	flags := flag.NewFlagSet("nocontract", flag.ContinueOnError)
+	projectFile := flags.String("project", DefaultProjectFile, "the project file")
+	switch parsed := parseVerb(arguments, flags).(type) {
+	case verbRead:
+		return projectRun{projectFile: *projectFile, finish: parsed.finish}
+	case UsageRefused:
+		return parsed
+	case nil:
+	}
+	return UsageRefused{Problem: NoCommand{}}
 }
 
 // Run runs the command the arguments name.
 func Run(request Request) Outcome {
 	switch parsed := parseCommand(request.Arguments).(type) {
-	case generating:
-		return absolute(parsed.projectFile, func(projectFile string) Outcome { return generated(request.Context, projectFile, writeFiles) })
-	case checking:
-		return absolute(parsed.projectFile, func(projectFile string) Outcome { return generated(request.Context, projectFile, compareFiles) })
+	case projectRun:
+		return absolute(parsed.projectFile, func(projectFile string) Outcome { return generated(request.Context, projectFile, parsed.finish) })
 	case UsageRefused:
 		return parsed
 	case nil:

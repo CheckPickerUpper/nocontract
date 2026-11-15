@@ -550,3 +550,20 @@ Declared in `go/reading/refusals.go`.
 | Field | Type |
 | --- | --- |
 | `Text` | `string` |
+
+## NC-1057 RuntimeRefused
+
+RuntimeRefused is every declaration of the runtime's shared failures that could not be read, in
+source order.
+
+Declared in `go/reading/reading_runtime.go`.
+
+| Field | Type |
+| --- | --- |
+| `Refusals` | `[]reading.Refusal` |
+
+## NC-1058 RuntimeNotFound
+
+RuntimeNotFound is a module whose packages do not include nocontract's runtime package.
+
+Declared in `internal/running/running_runtime.go`.

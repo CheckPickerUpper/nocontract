@@ -79,3 +79,5 @@ func (EndpointNameRepeated) ErrorCode() ergo.Code { return "NC-1050" }
 func (GeneratedNameTaken) ErrorCode() ergo.Code { return "NC-1051" }
 
 func (DirectiveUnknown) ErrorCode() ergo.Code { return "NC-1056" }
+
+func (RuntimeRefused) ErrorCode() ergo.Code { return "NC-1057" }

@@ -27,6 +27,16 @@ func TestTheShopsCommittedFilesAreWhatGenerateWrites(t *testing.T) {
 	}
 }
 
+// TestTheRuntimesCommittedFileIsWhatGenerateWrites holds the runtime's answers to its shared
+// failures to the statuses their directives declare.
+func TestTheRuntimesCommittedFileIsWhatGenerateWrites(t *testing.T) {
+	t.Parallel()
+	outcome := running.RunRuntime(running.Request{Arguments: []string{"check"}, Context: t.Context()})
+	if _, isCurrent := outcome.(running.FilesCurrent); !isCurrent {
+		t.Fatalf("check answered %s; want the runtime's file current", outcome.Report())
+	}
+}
+
 func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 	t.Parallel()
 	outcome := check(t.Context(), "refused")

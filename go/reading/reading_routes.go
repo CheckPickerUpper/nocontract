@@ -69,7 +69,7 @@ func ReadRoutes(request Request) Reading {
 	index := indexOf(request)
 	shared := readShared(index)
 	guards := readGuards(index)
-	return assemble(index, shared.with(guards.found), guards, readRoutes(index, guards))
+	return assemble(index, shared.found.with(guards.found), guards, readRoutes(index, guards))
 }
 
 // typeKey names a declared type by its package's import path and its name, so types read through
@@ -193,16 +193,9 @@ func (index projectIndex) refused(pos token.Pos, problem Problem) found {
 	return refusedAt(index.position(pos), problem)
 }
 
-// readShared reads nocontract's own failures as members routes can answer.
-func readShared(index projectIndex) found {
-	finding := packageRead(serverplan.NoContractPath)
-	for _, name := range []string{index.shared.requestRefused, index.shared.answerNotWritten} {
-		declared, isDeclared := index.declared[typeKey{path: serverplan.NoContractPath, name: name}]
-		if !isDeclared {
-			finding = finding.with(refusedAt(index.position(token.NoPos), DeclarationOutsideProject{Type: serverplan.NoContractPath + "." + name}))
-			continue
-		}
-		finding = finding.with(readMember(index, declared).found)
-	}
-	return finding
+// readShared reads the runtime's sealed SharedFailure: every failure nocontract answers on a
+// route's behalf, each a member routes can answer.
+func readShared(index projectIndex) reading[sealedRead] {
+	return alongside(readSealed(index, typeKey{path: serverplan.NoContractPath, name: serverplan.SharedFailureType}, token.NoPos),
+		packageRead(serverplan.NoContractPath))
 }

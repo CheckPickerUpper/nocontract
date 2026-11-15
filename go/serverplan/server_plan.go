@@ -45,9 +45,9 @@ func SourceFileAt(path string) SourceFile {
 
 // The names a generated file declares that code outside it calls.
 const (
-	RoutesFunction      = "Routes"
-	ServingType         = "Serving"
-	RefusalAnswerPrefix = "NocontractAnswer"
+	RoutesFunction = "Routes"
+	ServingType    = "Serving"
+	AnswerPrefix   = "NocontractAnswer"
 )
 
 // CalledNames are the names a package's generated file declares beside its routes, which the
@@ -62,13 +62,14 @@ type Plan struct {
 }
 
 // Package is one Go package's generated code: its name, its import path, the folder its generated
-// file is written to, the routes it serves, and the guard refusals it declares.
+// file is written to, the routes it serves, and the sealed types it declares whose members code
+// outside the generated file answers.
 type Package struct {
 	Name      string
 	Path      string
 	Directory string
 	Serves    Routing
-	Refusals  []GuardRefusal
+	Answers   []SealedAnswer
 }
 
 // Routing is whether a package serves routes.
@@ -76,7 +77,7 @@ type Package struct {
 //sumtype:decl
 type Routing interface{ isRouting() }
 
-// ServesNoRoutes is a package that declares only guard refusals.
+// ServesNoRoutes is a package that declares only sealed answers.
 //
 //ergo:not-an-error
 type ServesNoRoutes struct{}
@@ -107,19 +108,59 @@ type Serving struct {
 	Guards    []string
 }
 
-// GuardRefusal is a guard's sealed refusal declared in the package: the guard's name, the refusal
-// type and each of its members.
-type GuardRefusal struct {
-	Guard   string
+// SealedAnswer is a sealed type the package declares whose members code outside the generated
+// file answers through the function generated for it: who answers it, the type and each member.
+type SealedAnswer struct {
+	Use     AnswerUse
 	Outcome GoName
 	Members []Member
 }
 
-// GoName is a Go type: its package's import path, empty for a predeclared type, and its name.
+// AnswerUse is who answers a sealed type's members through its generated function.
+//
+//sumtype:decl
+type AnswerUse interface{ isAnswerUse() }
+
+// GuardAnswers is a guard's refusal, which the guard of that name answers.
+//
+//ergo:not-an-error
+type GuardAnswers struct{ Guard string }
+
+// RuntimeAnswers is nocontract's own failures, which its runtime answers on a route's behalf.
+//
+//ergo:not-an-error
+type RuntimeAnswers struct{}
+
+func (GuardAnswers) isAnswerUse()   {}
+func (RuntimeAnswers) isAnswerUse() {}
+
+// SharedFailureType is the sealed type the runtime declares holding every failure it answers on a
+// route's behalf.
+const SharedFailureType = "SharedFailure"
+
+// GoName is a type a package declares: the package's import path and the type's name.
 type GoName struct {
 	Package string
 	Name    string
 }
+
+// ParamType is the Go type a path or query field's read value converts to.
+//
+//sumtype:decl
+type ParamType interface{ isParamType() }
+
+// DeclaredParamType is a type a package declares, such as a named string.
+//
+//ergo:not-an-error
+type DeclaredParamType struct{ Name GoName }
+
+// PredeclaredParamType is a type Go declares, such as string or int64, written by its name.
+//
+//ergo:not-an-error
+type PredeclaredParamType struct{ Name string }
+
+func (DeclaredParamType) isParamType()    {}
+func (PredeclaredParamType) isParamType() {}
 
 // Handler is what answers a route: a function, or a method of a receiver the routes are served
 // with.
@@ -185,7 +226,7 @@ type Param struct {
 	Name    string
 	GoField string
 	Text    TextKind
-	GoType  GoName
+	GoType  ParamType
 }
 
 // TextKind is how a parameter's text is read.

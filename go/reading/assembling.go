@@ -31,14 +31,21 @@ func assemble(index projectIndex, earlier found, guards guardTable, routes []rea
 	finding = finding.with(repeatedNames(index, finding, byPackage))
 	read := distinctBy(finding.packages, func(path string) string { return path })
 	slices.Sort(read)
-	refusals := distinctBy(finding.refusals, func(refusal Refusal) Refusal { return refusal })
-	slices.SortStableFunc(refusals, func(left, right Refusal) int {
-		return cmp.Or(cmp.Compare(left.Position.Filename, right.Position.Filename), cmp.Compare(left.Position.Line, right.Position.Line))
-	})
+	refusals := sortedRefusals(finding)
 	if len(refusals) > 0 {
 		return Reading{Read: read, Routes: RoutesRefused{Refusals: refusals}}
 	}
 	return Reading{Read: read, Routes: RoutesRead{API: describe(index, finding, byPackage), Plan: planOf(index, guards, byPackage)}}
+}
+
+// sortedRefusals is every refusal found once, in source order: a member or struct several routes
+// read is refused once.
+func sortedRefusals(finding found) []Refusal {
+	refusals := distinctBy(finding.refusals, func(refusal Refusal) Refusal { return refusal })
+	slices.SortStableFunc(refusals, func(left, right Refusal) int {
+		return cmp.Or(cmp.Compare(left.Position.Filename, right.Position.Filename), cmp.Compare(left.Position.Line, right.Position.Line))
+	})
+	return refusals
 }
 
 // distinctBy is every item once: the first of each key, in order.
@@ -245,7 +252,7 @@ type plannedPackage struct {
 	loaded    *packages.Package
 	directory string
 	serves    serverplan.Routing
-	refusals  []serverplan.GuardRefusal
+	answers   []serverplan.SealedAnswer
 }
 
 // planOf is the generated code of every package that declares a route or a guard's refusal, in
@@ -255,24 +262,24 @@ func planOf(index projectIndex, guards guardTable, groups []packageRoutes) serve
 	for _, group := range groups {
 		planned[group.loaded.PkgPath] = plannedPackage{
 			loaded: group.loaded, directory: filepath.Dir(index.position(group.entries[0].position).Filename),
-			serves: servedRoutes(group), refusals: []serverplan.GuardRefusal{},
+			serves: servedRoutes(group), answers: []serverplan.SealedAnswer{},
 		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(guards.guards)) {
 		guard := guards.guards[name]
 		guard.members.ForEach(func(members []sealedMember) {
-			refusal := serverplan.GuardRefusal{Guard: name, Outcome: goName(guard.declared.object), Members: plansOfMembers(members)}
+			refusal := serverplan.SealedAnswer{Use: serverplan.GuardAnswers{Guard: name}, Outcome: goName(guard.declared), Members: plansOfMembers(members)}
 			path := guard.declared.loaded.PkgPath
 			declaring, known := planned[path]
 			if !known {
 				declaring = plannedPackage{
 					loaded: guard.declared.loaded, directory: filepath.Dir(index.position(guard.declared.spec.Pos()).Filename),
-					serves: serverplan.ServesNoRoutes{}, refusals: []serverplan.GuardRefusal{},
+					serves: serverplan.ServesNoRoutes{}, answers: []serverplan.SealedAnswer{},
 				}
 			}
 			planned[path] = plannedPackage{
 				loaded: declaring.loaded, directory: declaring.directory, serves: declaring.serves,
-				refusals: append(slices.Clone(declaring.refusals), refusal),
+				answers: append(slices.Clone(declaring.answers), refusal),
 			}
 		})
 	}
@@ -280,7 +287,7 @@ func planOf(index projectIndex, guards guardTable, groups []packageRoutes) serve
 	for _, path := range slices.Sorted(maps.Keys(planned)) {
 		each := planned[path]
 		packagesPlanned = append(packagesPlanned, serverplan.Package{
-			Name: each.loaded.Name, Path: path, Directory: each.directory, Serves: each.serves, Refusals: each.refusals,
+			Name: each.loaded.Name, Path: path, Directory: each.directory, Serves: each.serves, Answers: each.answers,
 		})
 	}
 	return serverplan.Plan{Packages: packagesPlanned}

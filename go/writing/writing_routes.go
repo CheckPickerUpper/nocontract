@@ -100,9 +100,16 @@ func Render(served serverplan.Package) mo.Result[[]byte] {
 		body.WriteString(routesText(serves, names))
 	case serverplan.ServesNoRoutes, nil:
 	}
-	for _, refusal := range served.Refusals {
-		fmt.Fprintf(body, "\n// %s answers a refusal of the %s guard with its status, tag and code; the guard writes it\n// with nocontract.Write.", refusalFunction(refusal), refusal.Guard)
-		body.WriteString(answerText(answerFunction{name: refusalFunction(refusal), sealed: refusal.Outcome.Name, members: refusal.Members}, names))
+	for _, sealed := range served.Answers {
+		name := serverplan.AnswerPrefix + sealed.Outcome.Name
+		switch use := sealed.Use.(type) {
+		case serverplan.GuardAnswers:
+			fmt.Fprintf(body, "\n// %s answers a refusal of the %s guard with its status, tag and code; the guard writes it\n// with nocontract.Write.", name, use.Guard)
+		case serverplan.RuntimeAnswers:
+			fmt.Fprintf(body, "\n// %s answers each failure nocontract answers on a route's behalf\n// with its status, tag and code.", name)
+		case nil:
+		}
+		body.WriteString(answerText(answerFunction{name: name, sealed: sealed.Outcome.Name, members: sealed.Members}, names))
 	}
 	file := Header + "\npackage " + served.Name + "\n\n" + names.declaration() + "\n" + body.String()
 	return mo.TupleToResult(format.Source([]byte(file)))
@@ -141,18 +148,19 @@ func servingText(served serverplan.ServesRoutes, names *imports) string {
 		fmt.Fprintf(text, "\t%s %s\n", receiver.Name, names.qualified(receiver))
 	}
 	for _, guard := range served.Serving.Guards {
-		fmt.Fprintf(text, "\t%s nocontract.Guard\n", guard)
+		fmt.Fprintf(text, "\t%s %s\n", guard, names.runtime("Guard"))
 	}
-	fmt.Fprintf(text, "}\n\n// %s is every route this package declares, each behind the guard it names, or why a guard\n// cannot check one.\nfunc %s(serving %s) mo.Result[[]nocontract.Route] {\n\treturn nocontract.Collect(\n",
-		serverplan.RoutesFunction, serverplan.RoutesFunction, serverplan.ServingType)
+	fmt.Fprintf(text, "}\n\n// %s is every route this package declares, each behind the guard it names, or why a guard\n// cannot check one.\nfunc %s(serving %s) mo.Result[[]%s] {\n\treturn %s(\n",
+		serverplan.RoutesFunction, serverplan.RoutesFunction, serverplan.ServingType, names.runtime("Route"), names.runtime("Collect"))
 	for _, route := range served.Routes {
 		serve := fmt.Sprintf("nocontractServe%s(serving)", exported(route.Name))
 		switch guard := route.Guard.(type) {
 		case serverplan.Guarded:
-			fmt.Fprintf(text, "\t\tnocontract.GuardedBy(serving.%s, nocontract.GuardedRoute{Method: %s, Path: %s, Argument: %s}, %s),\n",
-				guard.Name, strconv.Quote(route.Method.Name()), strconv.Quote(route.Path), strconv.Quote(guard.Argument), serve)
+			fmt.Fprintf(text, "\t\t%s(serving.%s, %s{Method: %s, Path: %s, Argument: %s}, %s),\n", names.runtime("GuardedBy"), guard.Name,
+				names.runtime("GuardedRoute"), strconv.Quote(route.Method.Name()), strconv.Quote(route.Path), strconv.Quote(guard.Argument), serve)
 		case serverplan.Unguarded, nil:
-			fmt.Fprintf(text, "\t\tnocontract.Served(nocontract.RouteAt{Method: %s, Path: %s}, %s),\n", strconv.Quote(route.Method.Name()), strconv.Quote(route.Path), serve)
+			fmt.Fprintf(text, "\t\t%s(%s{Method: %s, Path: %s}, %s),\n", names.runtime("Served"), names.runtime("RouteAt"),
+				strconv.Quote(route.Method.Name()), strconv.Quote(route.Path), serve)
 		}
 	}
 	text.WriteString("\t)\n}\n")
@@ -174,19 +182,20 @@ func handlerCall(handler serverplan.Handler) string {
 func routeText(route serverplan.Route, names *imports) string {
 	name := exported(route.Name)
 	text := &strings.Builder{}
-	fmt.Fprintf(text, "\nfunc nocontractServe%s(serving %s) http.Handler {\n\treturn http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {\n\t\tnocontract.Write(writer, nocontractAnswer%s(serving, request))\n\t})\n}\n",
-		name, serverplan.ServingType, name)
-	fmt.Fprintf(text, "\nfunc nocontractAnswer%s(serving %s, request *http.Request) nocontract.Answer {\n\tvar input %s\n", name, serverplan.ServingType, names.qualified(route.Input))
+	fmt.Fprintf(text, "\nfunc nocontractServe%s(serving %s) http.Handler {\n\treturn http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {\n\t\t%s(writer, nocontractAnswer%s(serving, request))\n\t})\n}\n",
+		name, serverplan.ServingType, names.runtime("Write"), name)
+	fmt.Fprintf(text, "\nfunc nocontractAnswer%s(serving %s, request *http.Request) %s {\n\tvar input %s\n", name, serverplan.ServingType, names.runtime("Answer"), names.qualified(route.Input))
 	steps := []string{}
 	for _, param := range route.Params {
-		steps = append(steps, paramStep(param, "nocontract.Path(request, "+strconv.Quote(param.Name)+")", names))
+		steps = append(steps, paramStep(param, names.runtime("Path")+"(request, "+strconv.Quote(param.Name)+")", names))
 	}
 	for _, param := range route.Query {
-		steps = append(steps, paramStep(param, "nocontract.Query(request, "+strconv.Quote(param.Name)+")", names))
+		steps = append(steps, paramStep(param, names.runtime("Query")+"(request, "+strconv.Quote(param.Name)+")", names))
 	}
 	switch route.Body.(type) {
 	case serverplan.BodyFieldRead:
-		steps = append(steps, "return nocontract.Then(nocontract.Body(request, func(decoder *json.Decoder) error { return decoder.Decode(&input.Body) }), func(struct{}) nocontract.Answer {\n")
+		steps = append(steps, fmt.Sprintf("return %s(%s(request, func(decoder *json.Decoder) error { return decoder.Decode(&input.Body) }), func(struct{}) %s {\n",
+			names.runtime("Then"), names.runtime("Body"), names.runtime("Answer")))
 	case serverplan.NoBodyRead, nil:
 	}
 	for _, step := range steps {
@@ -200,8 +209,9 @@ func routeText(route serverplan.Route, names *imports) string {
 
 // paramStep opens the step that reads one parameter's text and sets its field.
 func paramStep(param serverplan.Param, text string, names *imports) string {
-	read := readCall(param.Text, text)
-	return fmt.Sprintf("return nocontract.Then(%s, func(read %s) nocontract.Answer {\ninput.%s = %s(read)\n", read.call, read.value, param.GoField, names.qualified(param.GoType))
+	read := readCall(param.Text, text, names)
+	return fmt.Sprintf("return %s(%s, func(read %s) %s {\ninput.%s = %s(read)\n", names.runtime("Then"), read.call, read.value, names.runtime("Answer"),
+		param.GoField, names.paramType(param.GoType))
 }
 
 // textRead is the nocontract call reading a parameter's text, and the Go type of the value it reads.
@@ -210,25 +220,25 @@ type textRead struct {
 	value string
 }
 
-func readCall(kind serverplan.TextKind, text string) textRead {
+func readCall(kind serverplan.TextKind, text string, names *imports) textRead {
 	switch read := kind.(type) {
 	case serverplan.TextAsIs:
-		return textRead{call: "nocontract.Textual(" + text + ")", value: "string"}
+		return textRead{call: names.runtime("Textual") + "(" + text + ")", value: "string"}
 	case serverplan.TextSigned:
-		return textRead{call: fmt.Sprintf("nocontract.Signed(%s, %d)", text, read.Bits), value: "int64"}
+		return textRead{call: fmt.Sprintf("%s(%s, %d)", names.runtime("Signed"), text, read.Bits), value: "int64"}
 	case serverplan.TextUnsigned:
-		return textRead{call: fmt.Sprintf("nocontract.Unsigned(%s, %d)", text, read.Bits), value: "uint64"}
+		return textRead{call: fmt.Sprintf("%s(%s, %d)", names.runtime("Unsigned"), text, read.Bits), value: "uint64"}
 	case serverplan.TextTruth:
-		return textRead{call: "nocontract.Truth(" + text + ")", value: "bool"}
+		return textRead{call: names.runtime("Truth") + "(" + text + ")", value: "bool"}
 	case serverplan.TextLiteral:
 		values := []string{text}
 		for _, value := range read.Values {
 			values = append(values, strconv.Quote(value))
 		}
-		return textRead{call: "nocontract.Literal(" + strings.Join(values, ", ") + ")", value: "string"}
+		return textRead{call: names.runtime("Literal") + "(" + strings.Join(values, ", ") + ")", value: "string"}
 	case nil:
 	}
-	return textRead{call: "nocontract.Textual(" + text + ")", value: "string"}
+	return textRead{call: names.runtime("Textual") + "(" + text + ")", value: "string"}
 }
 
 // outcomeFunction is the generated function that answers a route outcome's members.
@@ -239,11 +249,6 @@ func outcomeFunction(outcome serverplan.GoName, names *imports) string {
 	case unqualified, nil:
 	}
 	return "nocontractAnswer" + outcome.Name
-}
-
-// refusalFunction is the exported function a guard's refusal is answered through.
-func refusalFunction(refusal serverplan.GuardRefusal) string {
-	return serverplan.RefusalAnswerPrefix + refusal.Outcome.Name
 }
 
 // answerFunction is one generated function that answers each member of a sealed type: its name,
@@ -258,20 +263,20 @@ type answerFunction struct {
 // code.
 func answerText(function answerFunction, names *imports) string {
 	text := &strings.Builder{}
-	fmt.Fprintf(text, "\nfunc %s(outcome %s) nocontract.Answer {\n\tswitch member := outcome.(type) {\n", function.name, function.sealed)
+	fmt.Fprintf(text, "\nfunc %s(outcome %s) %s {\n\tswitch member := outcome.(type) {\n", function.name, function.sealed, names.runtime("Answer"))
 	for _, member := range function.members {
 		fields := "mo.TupleToResult(json.Marshal(member))"
 		switch answer := member.Answer.(type) {
 		case description.Fails:
-			fmt.Fprintf(text, "\tcase %s:\n\t\treturn nocontract.Failed(nocontract.Failure{Status: %d, Tag: %s, Code: %s, Fields: %s})\n",
-				names.qualified(member.Go), answer.Status.Code(), strconv.Quote(member.Go.Name), strconv.Quote(answer.Code.String()), fields)
+			fmt.Fprintf(text, "\tcase %s:\n\t\treturn %s(%s{Status: %d, Tag: %s, Code: %s, Fields: %s})\n", names.qualified(member.Go), names.runtime("Failed"),
+				names.runtime("Failure"), answer.Status.Code(), strconv.Quote(member.Go.Name), strconv.Quote(answer.Code.String()), fields)
 		case description.Succeeds:
-			fmt.Fprintf(text, "\tcase %s:\n\t\treturn nocontract.Succeeded(nocontract.Success{Status: %d, Tag: %s, Fields: %s})\n",
-				names.qualified(member.Go), answer.Status.Code(), strconv.Quote(member.Go.Name), fields)
+			fmt.Fprintf(text, "\tcase %s:\n\t\treturn %s(%s{Status: %d, Tag: %s, Fields: %s})\n", names.qualified(member.Go), names.runtime("Succeeded"),
+				names.runtime("Success"), answer.Status.Code(), strconv.Quote(member.Go.Name), fields)
 		case nil:
 		}
 	}
-	text.WriteString("\tcase nil:\n\t}\n\treturn nocontract.NoOutcome()\n}\n")
+	fmt.Fprintf(text, "\tcase nil:\n\t}\n\treturn %s()\n}\n", names.runtime("NoOutcome"))
 	return text.String()
 }
 
@@ -295,20 +300,24 @@ func fixedImports(serves serverplan.Routing) [][2]string {
 	return fixed
 }
 
+// newImports names the fixed packages a file of the package at home imports, every one but home
+// itself: the runtime's own file refers to its declarations by their bare names.
 func newImports(home string, serves serverplan.Routing) *imports {
 	names := &imports{home: home, aliases: map[string]string{}, order: []string{}}
 	for _, fixed := range fixedImports(serves) {
+		if fixed[0] == home {
+			continue
+		}
 		names.aliases[fixed[0]] = fixed[1]
 		names.order = append(names.order, fixed[0])
 	}
 	return names
 }
 
-// reference is how the generated file refers to a type of the package at path: by its bare name for
-// its own package or a predeclared type, and through a unique alias for any other, which the file
-// then imports.
+// reference is how the generated file refers to a declaration of the package at path: by its bare
+// name in its own package, and through a unique alias for any other, which the file then imports.
 func (names *imports) reference(path string) reference {
-	if path == "" || path == names.home {
+	if path == names.home {
 		return unqualified{}
 	}
 	if alias, known := names.aliases[path]; known {
@@ -354,6 +363,23 @@ func (qualifiedBy) isReference() {}
 // package alias may take.
 func localNames() []string {
 	return []string{"input", "read", "request", "writer", "outcome", "member", "serving", "http", "json", "mo", "nocontract"}
+}
+
+// runtime is a declaration of nocontract's runtime as the generated file writes it.
+func (names *imports) runtime(name string) string {
+	return names.qualified(serverplan.GoName{Package: serverplan.NoContractPath, Name: name})
+}
+
+// paramType is the type a parameter's read value converts to, as the generated file writes it.
+func (names *imports) paramType(goType serverplan.ParamType) string {
+	switch typed := goType.(type) {
+	case serverplan.DeclaredParamType:
+		return names.qualified(typed.Name)
+	case serverplan.PredeclaredParamType:
+		return typed.Name
+	case nil:
+	}
+	return ""
 }
 
 // qualified is a Go name as the generated file writes it.

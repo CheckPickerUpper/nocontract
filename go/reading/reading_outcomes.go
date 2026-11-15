@@ -23,15 +23,15 @@ type outcomeShape struct {
 	plans []serverplan.Member
 }
 
-// sealedMember is one member of a sealed type with its answer.
+// sealedMember is one member of a sealed type, as declared, with its answer.
 type sealedMember struct {
-	object *types.TypeName
-	answer description.Answer
+	declared declaredType
+	answer   description.Answer
 }
 
 // memberPlan is how the generated code answers a member.
 func memberPlan(member sealedMember) serverplan.Member {
-	return serverplan.Member{Go: goName(member.object), Answer: member.answer}
+	return serverplan.Member{Go: goName(member.declared), Answer: member.answer}
 }
 
 // readOutcome reads a route's sealed outcome, which must answer at least one success, refusing a
@@ -50,7 +50,7 @@ func readOutcome(index projectIndex, loaded *packages.Package, outcome types.Typ
 	return andThen(members, func(read []sealedMember) reading[outcomeShape] {
 		return andThen(reachableName(index, named.Obj(), loaded.PkgPath, position), func(name serverplan.GoName) reading[outcomeShape] {
 			plans := collected(read, func(member sealedMember) reading[serverplan.Member] {
-				return mapped(reachableName(index, member.object, loaded.PkgPath, position), func(serverplan.GoName) serverplan.Member { return memberPlan(member) })
+				return mapped(reachableName(index, member.declared.object, loaded.PkgPath, position), func(serverplan.GoName) serverplan.Member { return memberPlan(member) })
 			})
 			return mapped(plans, func(plans []serverplan.Member) outcomeShape { return outcomeShape{name: name, plans: plans} })
 		})
@@ -78,7 +78,7 @@ func sealedOf(declared declaredType, members []sealedMember) sealedRead {
 	for _, member := range members {
 		switch answer := member.answer.(type) {
 		case description.Succeeds:
-			sealed.successes = append(sealed.successes, succeededMember{object: member.object, status: answer.Status})
+			sealed.successes = append(sealed.successes, succeededMember{object: member.declared.object, status: answer.Status})
 		case description.Fails:
 			sealed.failures = append(sealed.failures, member)
 		case nil:
@@ -105,7 +105,7 @@ func readSealed(index projectIndex, key typeKey, position token.Pos) reading[sea
 	candidates := membersOf(index, declared, contract)
 	members := collected(candidates.members, func(member declaredType) reading[sealedMember] {
 		return mapped(readMember(index, member), func(answer description.Answer) sealedMember {
-			return sealedMember{object: member.object, answer: answer}
+			return sealedMember{declared: member, answer: answer}
 		})
 	})
 	return alongside(mapped(members, func(read []sealedMember) sealedRead { return sealedOf(declared, read) }),

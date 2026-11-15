@@ -48,7 +48,7 @@ func Failed(failure Failure) Answer {
 
 // NoOutcome is the answer of a route whose handler returned no outcome.
 func NoOutcome() Answer {
-	return AnswerNotWritten{Answer: "", Reason: "the route answered no outcome"}.answer()
+	return NocontractAnswerSharedFailure(AnswerNotWritten{Answer: "", Reason: "the route answered no outcome"})
 }
 
 // fallbackFields are AnswerNotWritten's fields, written by hand for when even they cannot be
@@ -72,7 +72,7 @@ func Write(writer http.ResponseWriter, answer Answer) {
 		writeBody(writer, answer.status, body)
 		return struct{}{}
 	}, func(cause error) struct{} {
-		failed := AnswerNotWritten{Answer: answer.tag, Reason: cause.Error()}.answer()
+		failed := NocontractAnswerSharedFailure(AnswerNotWritten{Answer: answer.tag, Reason: cause.Error()})
 		fallback := Answer{status: failed.status, tag: failed.tag, code: failed.code, fields: mo.Ok([]byte(fallbackFields))}
 		// The fallback's fields are an object, so its body is always written; an empty body is never sent.
 		asIs := func(body []byte) []byte { return body }

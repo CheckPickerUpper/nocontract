@@ -23,3 +23,5 @@ func (TypeScriptMissing) ErrorCode() ergo.Code { return "NC-1053" }
 func (APINameMissing) ErrorCode() ergo.Code { return "NC-1054" }
 
 func (LanguageUnknown) ErrorCode() ergo.Code { return "NC-1055" }
+
+func (RuntimeNotFound) ErrorCode() ergo.Code { return "NC-1058" }

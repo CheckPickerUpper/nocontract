@@ -42,7 +42,7 @@ func Then[V Value](reading Reading[V], next func(V) Answer) Answer {
 	case Read[V]:
 		return next(read.Value)
 	case RequestRefused:
-		return read.answer()
+		return NocontractAnswerSharedFailure(read)
 	case nil:
 	}
 	return NoOutcome()

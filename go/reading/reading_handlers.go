@@ -283,15 +283,21 @@ func refusalsOf(index projectIndex, read inputShape, guard routeGuard) []string 
 // reachableName is the Go name the route's generated code in package from refers to a type by,
 // refusing an unexported type of another package, which that code cannot name.
 func reachableName(index projectIndex, object *types.TypeName, from string, position token.Pos) reading[serverplan.GoName] {
-	if object.Exported() || packagePath(object) == from || packagePath(object) == "" {
-		return readAs(goName(object), nothingFound())
-	}
-	return notRead[serverplan.GoName](index.refused(position, TypeNotReachable{Type: packagePath(object) + "." + object.Name()}))
+	return mo.Fold(mo.EmptyableToOption(object.Pkg()), func(owner *types.Package) reading[serverplan.GoName] {
+		if !object.Exported() && owner.Path() != from {
+			return notRead[serverplan.GoName](index.refused(position, TypeNotReachable{Type: owner.Path() + "." + object.Name()}))
+		}
+		return readAs(serverplan.GoName{Package: owner.Path(), Name: object.Name()}, nothingFound())
+	}, func(error) reading[serverplan.GoName] {
+		// A named type no package declares is one Go declares, such as error, which no input,
+		// outcome, member or parameter can be.
+		return notRead[serverplan.GoName](index.refused(position, TypeNotReachable{Type: object.Name()}))
+	})
 }
 
-// goName is the Go name of a named or predeclared type.
-func goName(object *types.TypeName) serverplan.GoName {
-	return serverplan.GoName{Package: packagePath(object), Name: object.Name()}
+// goName is the Go name of a type the project's syntax declares.
+func goName(declared declaredType) serverplan.GoName {
+	return serverplan.GoName{Package: declared.loaded.PkgPath, Name: declared.object.Name()}
 }
 
 // pathParameters is every {name} segment of a path, refusing the segments Effect has no form for.
@@ -536,11 +542,13 @@ func readParameter(index projectIndex, loaded *packages.Package, field *types.Va
 	if !isBasic {
 		return unsupported
 	}
-	goType := readAs(serverplan.GoName{Package: "", Name: basic.Name()}, nothingFound())
+	goType := readAs[serverplan.ParamType](serverplan.PredeclaredParamType{Name: basic.Name()}, nothingFound())
 	if named, isNamed := types.Unalias(field.Type()).(*types.Named); isNamed {
-		goType = reachableName(index, named.Obj(), loaded.PkgPath, field.Pos())
+		goType = mapped(reachableName(index, named.Obj(), loaded.PkgPath, field.Pos()), func(name serverplan.GoName) serverplan.ParamType {
+			return serverplan.DeclaredParamType{Name: name}
+		})
 	}
-	return andThen(goType, func(goType serverplan.GoName) reading[parameter] {
+	return andThen(goType, func(goType serverplan.ParamType) reading[parameter] {
 		return andThen(schemaOf(index, field.Type(), field.Pos(), []typeKey{}), func(schema description.Schema) reading[parameter] {
 			return mo.Fold(textKind(basic, schema), func(kind serverplan.TextKind) reading[parameter] {
 				return readAs(parameter{
