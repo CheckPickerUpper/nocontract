@@ -29,17 +29,11 @@ func Render(api description.API) []byte {
 	file := &strings.Builder{}
 	file.WriteString(Header)
 	file.WriteString("\nimport { Schema } from \"effect\"\n")
-	imports := []string{"HttpApi", "HttpApiEndpoint", "HttpApiGroup"}
-	if needsStatusAnnotation(api) {
-		imports = append(imports, "HttpApiSchema")
-	}
-	fmt.Fprintf(file, "import { %s } from \"effect/http-api\"\n", strings.Join(imports, ", "))
+	fmt.Fprintf(file, "import { %s } from \"effect/http-api\"\n", strings.Join(httpAPIImports(api), ", "))
 	for _, named := range api.Structs {
 		fmt.Fprintf(file, "\nexport const %s = Schema.Struct(%s)\nexport type %s = typeof %s.Type\n", named.Name, fieldsText(named.Fields, ""), named.Name, named.Name)
 	}
-	answers := map[string]description.Answer{}
 	for _, member := range api.Members {
-		answers[member.Name] = member.Answer
 		file.WriteString("\n")
 		file.WriteString(memberText(member))
 	}
@@ -49,7 +43,7 @@ func Render(api description.API) []byte {
 		groupClasses = append(groupClasses, className)
 		endpoints := []string{}
 		for _, endpoint := range group.Endpoints {
-			endpoints = append(endpoints, endpointText(endpoint, api.Shared, answers))
+			endpoints = append(endpoints, endpointText(endpoint))
 		}
 		fmt.Fprintf(file, "\nexport class %s extends HttpApiGroup.make(%s).add(\n%s\n) {}\n", className, quoted(group.Name), strings.Join(endpoints, ",\n"))
 	}
@@ -61,13 +55,16 @@ func Render(api description.API) []byte {
 	return []byte(file.String())
 }
 
-func needsStatusAnnotation(api description.API) bool {
+// httpAPIImports is what the file imports from effect/http-api: HttpApiSchema only when a success
+// answers with a status other than 200, which it annotates.
+func httpAPIImports(api description.API) []string {
+	imports := []string{"HttpApi", "HttpApiEndpoint", "HttpApiGroup"}
 	for _, member := range api.Members {
-		if succeeds, isSuccess := member.Answer.(description.Succeeds); isSuccess && succeeds.Status != http.StatusOK {
-			return true
+		if succeeds, isSuccess := member.Answer.(description.Succeeds); isSuccess && succeeds.Status.Code() != http.StatusOK {
+			return append(imports, "HttpApiSchema")
 		}
 	}
-	return false
+	return imports
 }
 
 // memberText is a success as a tagged struct with its status, or a failure as a tagged error
@@ -76,20 +73,20 @@ func memberText(member description.Member) string {
 	switch answer := member.Answer.(type) {
 	case description.Succeeds:
 		declared := fmt.Sprintf("Schema.TaggedStruct(%s, %s)", quoted(member.Name), fieldsText(member.Fields, ""))
-		if answer.Status != http.StatusOK {
-			declared += fmt.Sprintf(".pipe(HttpApiSchema.status(%d))", answer.Status)
+		if answer.Status.Code() != http.StatusOK {
+			declared += fmt.Sprintf(".pipe(HttpApiSchema.status(%d))", answer.Status.Code())
 		}
 		return fmt.Sprintf("export const %s = %s\nexport type %s = typeof %s.Type\n", member.Name, declared, member.Name, member.Name)
 	case description.Fails:
-		fields := append([]description.Field{{Name: "code", Schema: description.Literals{Values: []string{answer.Code}}}}, member.Fields...)
+		fields := append([]description.Field{{Name: "code", Schema: description.Literals{Values: []string{answer.Code.String()}}}}, member.Fields...)
 		return fmt.Sprintf("export class %s extends Schema.TaggedError<%s>()(%s, %s, { httpApiStatus: %d }) {}\n",
-			member.Name, member.Name, quoted(member.Name), fieldsText(fields, ""), answer.Status)
+			member.Name, member.Name, quoted(member.Name), fieldsText(fields, ""), answer.Status.Code())
 	case nil:
 	}
 	return ""
 }
 
-func endpointText(endpoint description.Endpoint, shared description.SharedFailures, answers map[string]description.Answer) string {
+func endpointText(endpoint description.Endpoint) string {
 	options := []string{}
 	if len(endpoint.Params) > 0 {
 		options = append(options, "params: "+fieldsText(endpoint.Params, "    "))
@@ -103,23 +100,9 @@ func endpointText(endpoint description.Endpoint, shared description.SharedFailur
 		options = append(options, "payload: "+schemaText(body.Schema, "    "))
 	case description.NoBody, nil:
 	}
-	successes, failures := []string{}, []string{}
-	for _, name := range endpoint.Members {
-		switch answers[name].(type) {
-		case description.Succeeds:
-			successes = append(successes, name)
-		case description.Fails:
-			failures = append(failures, name)
-		case nil:
-		}
-	}
-	if endpoint.ReadsRequest() {
-		failures = append(failures, shared.RequestRefused)
-	}
-	failures = append(failures, shared.AnswerNotWritten)
-	options = append(options, "success: ["+strings.Join(successes, ", ")+"]", "error: ["+strings.Join(failures, ", ")+"]")
+	options = append(options, "success: ["+strings.Join(endpoint.Successes, ", ")+"]", "error: ["+strings.Join(endpoint.Failures, ", ")+"]")
 	path := pathParameter().ReplaceAllString(endpoint.Path, ":$1")
-	return fmt.Sprintf("  HttpApiEndpoint.%s(%s, %s, {\n    %s,\n  })", strings.ToLower(endpoint.Method), quoted(endpoint.Name), quoted(path), strings.Join(options, ",\n    "))
+	return fmt.Sprintf("  HttpApiEndpoint.%s(%s, %s, {\n    %s,\n  })", strings.ToLower(endpoint.Method.Name()), quoted(endpoint.Name), quoted(path), strings.Join(options, ",\n    "))
 }
 
 func fieldsText(fields []description.Field, indent string) string {

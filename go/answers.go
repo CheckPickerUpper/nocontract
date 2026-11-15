@@ -18,14 +18,30 @@ type Answer struct {
 	fields mo.Result[[]byte]
 }
 
-// Succeeded is a success member's answer: its status, its tag and its JSON fields.
-func Succeeded(status int, tag string, fields mo.Result[[]byte]) Answer {
-	return Answer{status: status, tag: tag, code: mo.None[string](), fields: fields}
+// Success is a success member as it is answered: its status, its tag and its JSON fields.
+type Success struct {
+	Status int
+	Tag    string
+	Fields mo.Result[[]byte]
 }
 
-// Failed is a failure member's answer: its status, its tag, its permanent code and its fields.
-func Failed(status int, tag, code string, fields mo.Result[[]byte]) Answer {
-	return Answer{status: status, tag: tag, code: mo.Some(code), fields: fields}
+// Failure is a failure member as it is answered: its status, its tag, its permanent code and its
+// JSON fields.
+type Failure struct {
+	Status int
+	Tag    string
+	Code   string
+	Fields mo.Result[[]byte]
+}
+
+// Succeeded is a success member's answer.
+func Succeeded(success Success) Answer {
+	return Answer{status: success.Status, tag: success.Tag, code: mo.None[string](), fields: success.Fields}
+}
+
+// Failed is a failure member's answer.
+func Failed(failure Failure) Answer {
+	return Answer{status: failure.Status, tag: failure.Tag, code: mo.Some(failure.Code), fields: failure.Fields}
 }
 
 // NoOutcome is the answer of a route whose handler returned no outcome.

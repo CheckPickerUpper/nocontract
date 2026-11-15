@@ -8,10 +8,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
-	"go/ast"
-	"go/parser"
 	"go/token"
 	"io"
 	"io/fs"
@@ -40,15 +39,45 @@ type Request struct {
 	Context   context.Context
 }
 
-// Project is a project file: the language its backend is written in, the package patterns
-// holding its routes, the TypeScript file to write, relative to the project file, and the name of
-// the Effect API.
-type Project struct {
+// writtenProject is a project file as it is written: the language its backend is written in, the
+// package patterns holding its routes, the TypeScript file to write, relative to the project file,
+// and the name of the Effect API.
+type writtenProject struct {
 	Language   string   `json:"language"`
 	Packages   []string `json:"packages"`
 	TypeScript string   `json:"typescript"`
 	API        string   `json:"api"`
 }
+
+// Project is a project file read: its backend, the package patterns holding its routes, the
+// TypeScript file to write and the name of the Effect API.
+type Project struct {
+	Backend    Backend
+	Packages   []string
+	TypeScript string
+	API        string
+}
+
+// Backend is the language a project's backend is written in, with its name in a project file.
+//
+//sumtype:decl
+type Backend interface {
+	isBackend()
+	Name() string
+}
+
+// GoBackend is a backend written in Go.
+//
+//ergo:not-an-error
+type GoBackend struct{}
+
+func (GoBackend) isBackend() {}
+
+// Name is go.
+func (GoBackend) Name() string { return "go" }
+
+// Backends is every language NoContract reads a backend in.
+func Backends() []Backend { return []Backend{GoBackend{}} }
 
 // Outcome is what one run ended as.
 //
@@ -79,30 +108,79 @@ type FilesStale struct{ Paths []string }
 //ergo:code NC-1035
 type DeclarationsRefused struct{ Refusals []reading.Refusal }
 
-// UsageRefused is a run whose arguments name no command it runs.
+// UsageRefused is a run whose arguments name no command it runs, and the problem with them.
 //
 //ergo:code NC-1036
-type UsageRefused struct{ Reason string }
+type UsageRefused struct{ Problem UsageProblem }
 
-// ProjectUnreadable is a project file that could not be read or holds no usable project.
+// UsageProblem is what is wrong with a run's arguments.
+//
+//sumtype:decl
+type UsageProblem interface {
+	isUsageProblem()
+	explain() string
+}
+
+// NoCommand is a run given no arguments.
+//
+//ergo:not-an-error
+type NoCommand struct{}
+
+// UnknownCommand is a run naming a command NoContract does not run.
+//
+//ergo:not-an-error
+type UnknownCommand struct{ Name string }
+
+// ExtraArguments is a run given arguments after its flags.
+//
+//ergo:not-an-error
+type ExtraArguments struct{ Arguments []string }
+
+// FlagsUnread is a run whose flags the flag package refused, with its error.
+//
+//ergo:not-an-error
+type FlagsUnread struct{ Cause error }
+
+func (NoCommand) isUsageProblem()      {}
+func (UnknownCommand) isUsageProblem() {}
+func (ExtraArguments) isUsageProblem() {}
+func (FlagsUnread) isUsageProblem()    {}
+
+func (NoCommand) explain() string {
+	return "no command was given"
+}
+
+func (unknown UnknownCommand) explain() string {
+	return "unknown command " + unknown.Name
+}
+
+func (extra ExtraArguments) explain() string {
+	return "unexpected arguments: " + strings.Join(extra.Arguments, " ")
+}
+
+func (unread FlagsUnread) explain() string {
+	return unread.Cause.Error()
+}
+
+// ProjectUnreadable is a project file that could not be read or holds no usable project, with why.
 //
 //ergo:code NC-1037
 type ProjectUnreadable struct {
-	Path   string
-	Reason string
+	Path  string
+	Cause error
 }
 
 // PackagesNotLoaded is a project whose packages holding routes Go could not load and type-check.
 //
 //ergo:code NC-1038
-type PackagesNotLoaded struct{ Problems []string }
+type PackagesNotLoaded struct{ Errors []error }
 
 // FileNotWritten is a generate that could not write or delete one file.
 //
 //ergo:code NC-1039
 type FileNotWritten struct {
-	Path   string
-	Reason string
+	Path  string
+	Cause error
 }
 
 func (FilesWritten) isOutcome()        {}
@@ -164,22 +242,22 @@ func (refused DeclarationsRefused) Report() string {
 
 // Report says how to run the command.
 func (refused UsageRefused) Report() string {
-	return codeOf(refused) + " " + refused.Reason + "\nusage: nocontract generate|check [-project " + DefaultProjectFile + "]"
+	return codeOf(refused) + " " + refused.Problem.explain() + "\nusage: nocontract generate|check [-project " + DefaultProjectFile + "]"
 }
 
 // Report names the project file and why it is unusable.
 func (unreadable ProjectUnreadable) Report() string {
-	return codeOf(unreadable) + " " + unreadable.Path + ": " + unreadable.Reason
+	return codeOf(unreadable) + " " + unreadable.Path + ": " + unreadable.Cause.Error()
 }
 
 // Report lists what Go could not load.
 func (failed PackagesNotLoaded) Report() string {
-	return codeOf(failed) + " the packages holding routes did not load:\n" + strings.Join(failed.Problems, "\n")
+	return codeOf(failed) + " the packages holding routes did not load:\n" + errors.Join(failed.Errors...).Error()
 }
 
 // Report names the file and why it was not written.
 func (failed FileNotWritten) Report() string {
-	return codeOf(failed) + " " + failed.Path + " was not written: " + failed.Reason
+	return codeOf(failed) + " " + failed.Path + " was not written: " + failed.Cause.Error()
 }
 
 func codeOf(failure ergo.Failure) string { return failure.ErrorCode().String() }
@@ -217,14 +295,14 @@ func (UsageRefused) isCommand() {}
 
 func parseCommand(arguments []string) command {
 	if len(arguments) == 0 {
-		return UsageRefused{Reason: "no command was given"}
+		return UsageRefused{Problem: NoCommand{}}
 	}
 	flags := flag.NewFlagSet(arguments[0], flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	projectFile := flags.String("project", DefaultProjectFile, "the project file")
 	return mo.Fold(mo.TupleToResult(struct{}{}, flags.Parse(arguments[1:])), func(struct{}) command {
 		if flags.NArg() > 0 {
-			return UsageRefused{Reason: "unexpected arguments: " + strings.Join(flags.Args(), " ")}
+			return UsageRefused{Problem: ExtraArguments{Arguments: flags.Args()}}
 		}
 		switch arguments[0] {
 		case "generate":
@@ -232,9 +310,9 @@ func parseCommand(arguments []string) command {
 		case "check":
 			return checking{projectFile: *projectFile}
 		default:
-			return UsageRefused{Reason: "unknown command " + arguments[0]}
+			return UsageRefused{Problem: UnknownCommand{Name: arguments[0]}}
 		}
-	}, func(cause error) command { return UsageRefused{Reason: cause.Error()} })
+	}, func(cause error) command { return UsageRefused{Problem: FlagsUnread{Cause: cause}} })
 }
 
 // Run runs the command the arguments name.
@@ -248,14 +326,14 @@ func Run(request Request) Outcome {
 		return parsed
 	case nil:
 	}
-	return UsageRefused{Reason: "no command was given"}
+	return UsageRefused{Problem: NoCommand{}}
 }
 
 // absolute runs next on the project file's absolute path, so every file the run names, found by
 // walking the folder or by Go's loader, has one spelling.
 func absolute(projectFile string, next func(string) Outcome) Outcome {
 	return mo.Fold(mo.TupleToResult(filepath.Abs(projectFile)), next, func(cause error) Outcome {
-		return ProjectUnreadable{Path: projectFile, Reason: cause.Error()}
+		return ProjectUnreadable{Path: projectFile, Cause: cause}
 	})
 }
 
@@ -268,31 +346,41 @@ type generatedFile struct {
 // generated reads the project, renders its files and hands them to finish.
 func generated(ctx context.Context, projectFile string, finish func([]generatedFile) Outcome) Outcome {
 	return mo.Fold(readProject(projectFile), func(project Project) Outcome {
-		directory := filepath.Dir(projectFile)
-		existing := existingGenerated(directory)
-		return mo.Fold(loadPackages(ctx, directory, project.Packages, existing), func(loaded []*packages.Package) Outcome {
-			switch read := reading.ReadRoutes(reading.Request{Packages: loaded, APIName: project.API}).(type) {
-			case reading.RoutesRead:
-				if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
-					return PackagesNotLoaded{Problems: problems}
-				}
-				return mo.Fold(renderedFiles(read, filepath.Join(directory, project.TypeScript), existing), finish,
-					func(cause error) Outcome { return FileNotWritten{Path: directory, Reason: cause.Error()} })
-			case reading.RoutesRefused:
-				if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
-					return PackagesNotLoaded{Problems: problems}
-				}
-				return DeclarationsRefused{Refusals: read.Refusals}
-			case nil:
+		switch project.Backend.(type) {
+		case GoBackend:
+			return generatedGo(ctx, projectFile, project, finish)
+		case nil:
+		}
+		return ProjectUnreadable{Path: projectFile, Cause: LanguageUnknown{Language: ""}}
+	}, func(cause error) Outcome { return ProjectUnreadable{Path: projectFile, Cause: cause} })
+}
+
+// generatedGo reads a Go backend's routes, renders its files and hands them to finish.
+func generatedGo(ctx context.Context, projectFile string, project Project, finish func([]generatedFile) Outcome) Outcome {
+	directory := filepath.Dir(projectFile)
+	existing := existingGenerated(directory)
+	return mo.Fold(loadPackages(ctx, directory, project.Packages, existing), func(loaded []*packages.Package) Outcome {
+		switch read := reading.ReadRoutes(reading.Request{Packages: loaded, APIName: project.API}).(type) {
+		case reading.RoutesRead:
+			if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
+				return PackagesNotLoaded{Errors: problems}
 			}
-			return DeclarationsRefused{Refusals: []reading.Refusal{}}
-		}, func(cause error) Outcome { return PackagesNotLoaded{Problems: []string{cause.Error()}} })
-	}, func(cause error) Outcome { return ProjectUnreadable{Path: projectFile, Reason: cause.Error()} })
+			return mo.Fold(renderedFiles(read, filepath.Join(directory, project.TypeScript), existing), finish,
+				func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
+		case reading.RoutesRefused:
+			if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
+				return PackagesNotLoaded{Errors: problems}
+			}
+			return DeclarationsRefused{Refusals: read.Refusals}
+		case nil:
+		}
+		return DeclarationsRefused{Refusals: []reading.Refusal{}}
+	}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
 }
 
 // renderedFiles is the TypeScript file, each package's Go file, and every generated Go file of a
 // package that no longer declares a route, which must go.
-func renderedFiles(read reading.RoutesRead, typeScript string, existing map[string]string) mo.Result[[]generatedFile] {
+func renderedFiles(read reading.RoutesRead, typeScript string, existing map[string][]byte) mo.Result[[]generatedFile] {
 	return mo.Fold(goFiles(read.Plan.Packages), func(served []generatedFile) mo.Result[[]generatedFile] {
 		files := append([]generatedFile{{path: typeScript, content: mo.Some(effect.Render(read.API))}}, served...)
 		for path := range existing {
@@ -311,81 +399,96 @@ func goFiles(served []serverplan.Package) mo.Result[[]generatedFile] {
 		return mo.Ok([]generatedFile{})
 	}
 	return mo.Fold(writing.Render(served[0]), func(goFile []byte) mo.Result[[]generatedFile] {
-		file := generatedFile{path: filepath.Join(served[0].Directory, reading.GeneratedFileName), content: mo.Some(goFile)}
+		file := generatedFile{path: filepath.Join(served[0].Directory, serverplan.FileName), content: mo.Some(goFile)}
 		return mo.Fold(goFiles(served[1:]), func(rest []generatedFile) mo.Result[[]generatedFile] {
 			return mo.Ok(append([]generatedFile{file}, rest...))
 		}, mo.Err[[]generatedFile])
 	}, mo.Err[[]generatedFile])
 }
 
-// ProjectIncomplete is a project file missing a value it needs, or naming a language NoContract
-// has no reader for.
+// PackagesMissing is a project file naming no package patterns.
 //
 //ergo:code NC-1040
-type ProjectIncomplete struct{ Missing string }
+type PackagesMissing struct{}
 
-func (incomplete ProjectIncomplete) Error() string {
-	return "the project file names no " + incomplete.Missing
+func (PackagesMissing) Error() string { return "the project file names no packages" }
+
+// TypeScriptMissing is a project file naming no TypeScript file to write.
+//
+//ergo:code NC-1053
+type TypeScriptMissing struct{}
+
+func (TypeScriptMissing) Error() string { return "the project file names no typescript file" }
+
+// APINameMissing is a project file naming no API class.
+//
+//ergo:code NC-1054
+type APINameMissing struct{}
+
+func (APINameMissing) Error() string { return "the project file names no api" }
+
+// LanguageUnknown is a project file naming a language NoContract reads no backend in.
+//
+//ergo:code NC-1055
+type LanguageUnknown struct{ Language string }
+
+func (unknown LanguageUnknown) Error() string {
+	return fmt.Sprintf("the project file names the language %q; NoContract reads go", unknown.Language)
 }
 
 func readProject(projectFile string) mo.Result[Project] {
 	return mo.Fold(mo.TupleToResult(os.ReadFile(projectFile)), func(content []byte) mo.Result[Project] {
-		project := Project{Language: "", Packages: []string{}, TypeScript: "", API: ""}
+		written := writtenProject{Language: "", Packages: []string{}, TypeScript: "", API: ""}
 		decoder := json.NewDecoder(bytes.NewReader(content))
 		decoder.DisallowUnknownFields()
-		return mo.Fold(mo.EmptyableToOption(decoder.Decode(&project)), mo.Err[Project], func(error) mo.Result[Project] {
+		return mo.Fold(mo.EmptyableToOption(decoder.Decode(&written)), mo.Err[Project], func(error) mo.Result[Project] {
 			switch {
-			case project.Language != "go":
-				return mo.Err[Project](ProjectIncomplete{Missing: "language NoContract reads: go"})
-			case len(project.Packages) == 0:
-				return mo.Err[Project](ProjectIncomplete{Missing: "packages"})
-			case project.TypeScript == "":
-				return mo.Err[Project](ProjectIncomplete{Missing: "typescript file"})
-			case project.API == "":
-				return mo.Err[Project](ProjectIncomplete{Missing: "api name"})
+			case len(written.Packages) == 0:
+				return mo.Err[Project](PackagesMissing{})
+			case written.TypeScript == "":
+				return mo.Err[Project](TypeScriptMissing{})
+			case written.API == "":
+				return mo.Err[Project](APINameMissing{})
 			}
-			return mo.Ok(project)
+			for _, backend := range Backends() {
+				if backend.Name() == written.Language {
+					return mo.Ok(Project{Backend: backend, Packages: written.Packages, TypeScript: written.TypeScript, API: written.API})
+				}
+			}
+			return mo.Err[Project](LanguageUnknown{Language: written.Language})
 		})
 	}, mo.Err[Project])
 }
 
-// existingGenerated is every generated Go file under directory, by path, with its package's name.
-func existingGenerated(directory string) map[string]string {
-	found := map[string]string{}
-	files := token.NewFileSet()
+// existingGenerated is every generated Go file under directory, by path, with its content.
+func existingGenerated(directory string) map[string][]byte {
+	found := map[string][]byte{}
 	visit := func(path string, entry fs.DirEntry) error {
 		name := entry.Name()
 		if entry.IsDir() && path != directory && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "testdata" || name == "vendor" || name == "node_modules") {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || name != reading.GeneratedFileName {
+		if entry.IsDir() || name != serverplan.FileName {
 			return nil
 		}
-		mo.Fold(mo.TupleToResult(parser.ParseFile(files, path, nil, parser.PackageClauseOnly)), func(clause *ast.File) struct{} {
-			found[path] = clause.Name.Name
-			return struct{}{}
-		}, func(error) struct{} { return struct{}{} })
-		return nil
+		return mo.Fold(mo.TupleToResult(os.ReadFile(path)), func(content []byte) error {
+			found[path] = content
+			return nil
+		}, func(cause error) error { return cause })
 	}
 	// A folder that cannot be walked holds no generated file this run can read, so it is skipped.
 	return mo.Fold(mo.EmptyableToOption(filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
 		return mo.Fold(mo.EmptyableToOption(walkErr), func(error) error { return filepath.SkipDir }, func(error) error { return visit(path, entry) })
-	})), func(error) map[string]string { return found }, func(error) map[string]string { return found })
+	})), func(error) map[string][]byte { return found }, func(error) map[string][]byte { return found })
 }
-
-// LoadFailed is a load Go's package driver refused outright.
-//
-//ergo:code NC-1041
-type LoadFailed struct{ Reason string }
-
-func (failed LoadFailed) Error() string { return failed.Reason }
 
 // loadPackages loads the project's packages and nocontract's, each with its syntax and types, with
 // each existing generated file read as its stub.
-func loadPackages(ctx context.Context, directory string, patterns []string, existing map[string]string) mo.Result[[]*packages.Package] {
+func loadPackages(ctx context.Context, directory string, patterns []string, existing map[string][]byte) mo.Result[[]*packages.Package] {
 	overlay := map[string][]byte{}
-	for path, name := range existing {
-		overlay[path] = writing.Stub(name)
+	for path, content := range existing {
+		// A file too broken to stub is read as it is; its own errors are set aside like a stub's.
+		overlay[path] = mo.Fold(writing.StubOf(content), func(stub []byte) []byte { return stub }, func(error) []byte { return content })
 	}
 	config := &packages.Config{
 		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports,
@@ -395,44 +498,65 @@ func loadPackages(ctx context.Context, directory string, patterns []string, exis
 	return mo.TupleToResult(packages.Load(config, append(patterns, reading.NoContractPath)...))
 }
 
-// loadProblems is every problem Go reported in a package whose declarations were read.
-func loadProblems(loaded []*packages.Package, read []string) []string {
-	problems := []string{}
+// loadProblems is every problem Go reported in a package whose declarations were read, except a
+// type error inside a generated file, which is read as its stub and written again by this run.
+func loadProblems(loaded []*packages.Package, read []string) []error {
+	problems := []error{}
 	for _, each := range loaded {
 		if !slices.Contains(read, each.PkgPath) && each.PkgPath != reading.NoContractPath {
 			continue
 		}
 		for _, problem := range each.Errors {
-			problems = append(problems, problem.Error())
+			if problem.Kind != packages.TypeError {
+				problems = append(problems, problem)
+			}
+		}
+		for _, problem := range each.TypeErrors {
+			if filepath.Base(problem.Fset.Position(problem.Pos).Filename) != serverplan.FileName {
+				problems = append(problems, problem)
+			}
 		}
 	}
 	return problems
 }
 
 func writeFiles(files []generatedFile) Outcome {
-	return writeEach(files, files, []string{})
+	return writeEach(writeProgress{all: files, remaining: files, written: []string{}})
+}
+
+// writeProgress is a generate's progress through its files: every file, those not yet written,
+// and the paths written or deleted so far.
+type writeProgress struct {
+	all       []generatedFile
+	remaining []generatedFile
+	written   []string
+}
+
+// next is the progress past the first remaining file, having written it or not.
+func (progress writeProgress) next(written []string) writeProgress {
+	return writeProgress{all: progress.all, remaining: progress.remaining[1:], written: written}
 }
 
 // writeEach writes or deletes each remaining file that is not current, stopping at the first
 // that cannot be.
-func writeEach(all, remaining []generatedFile, written []string) Outcome {
-	if len(remaining) == 0 {
-		if len(written) == 0 {
-			return compareFiles(all)
+func writeEach(progress writeProgress) Outcome {
+	if len(progress.remaining) == 0 {
+		if len(progress.written) == 0 {
+			return compareFiles(progress.all)
 		}
-		return FilesWritten{Paths: written}
+		return FilesWritten{Paths: progress.written}
 	}
-	file := remaining[0]
+	file := progress.remaining[0]
 	if _, isCurrent := compareFiles([]generatedFile{file}).(FilesCurrent); isCurrent {
-		return writeEach(all, remaining[1:], written)
+		return writeEach(progress.next(progress.written))
 	}
 	failure := mo.Fold(file.content, func(content []byte) error {
 		return mo.Fold(mo.EmptyableToOption(os.MkdirAll(filepath.Dir(file.path), 0o755)), func(cause error) error { return cause },
 			func(error) error { return atomicfile.WriteData(file.path, content, 0o644) })
 	}, func(error) error { return os.Remove(file.path) })
 	return mo.Fold(mo.EmptyableToOption(failure), func(cause error) Outcome {
-		return FileNotWritten{Path: file.path, Reason: cause.Error()}
-	}, func(error) Outcome { return writeEach(all, remaining[1:], append(written, file.path)) })
+		return FileNotWritten{Path: file.path, Cause: cause}
+	}, func(error) Outcome { return writeEach(progress.next(append(progress.written, file.path))) })
 }
 
 func compareFiles(files []generatedFile) Outcome {

@@ -82,6 +82,74 @@ func (BalanceRead) isReadOutcome()     {}
 func (ShopperNotFound) isReadOutcome() {}
 ```
 
+A handler may be a method of a type its package declares, so it can hold what the route needs,
+such as a database:
+
+```go
+// Ledger reads balances from its store.
+type Ledger struct {
+	Store Store
+}
+
+// ReadBalance reads one shopper's balance.
+//
+//nocontract:route GET /shoppers/{shopper_id}/balance
+func (ledger Ledger) ReadBalance(ctx context.Context, input ReadInput) ReadOutcome {
+	// ...
+}
+```
+
+## Guards
+
+A guard is a check in front of the routes that name it, such as a sign-in check. Its refusal is a
+sealed type marked `//nocontract:guard` with the guard's name, whose members are failures:
+
+```go
+// Refusal is how the shopper check refuses a request before its route runs.
+//
+//sumtype:decl
+//nocontract:guard Shopper
+type Refusal interface {
+	isRefusal()
+}
+
+// NotSignedIn is a request carrying no shopper.
+//
+//ergo:code SH-1101
+//nocontract:status 401
+type NotSignedIn struct {
+	Scope string `json:"scope"`
+}
+
+func (NotSignedIn) isRefusal() {}
+```
+
+A route names its guard and the one argument the guard is handed:
+
+```go
+//nocontract:route GET /shoppers/{shopper_id}/balance
+//nocontract:guard Shopper read-balance
+func (ledger Ledger) ReadBalance(ctx context.Context, input ReadInput) ReadOutcome {
+```
+
+The guard implements `nocontract.Guard`, and answers a refusal through the function NoContract
+writes into the refusal's package, `NocontractAnswerRefusal`. Declare the guard in another package
+than its refusal: a package NoContract reads never calls the functions NoContract writes into it.
+
+```go
+func (Check) Guarded(route nocontract.GuardedRoute, serve http.Handler) mo.Result[http.Handler] {
+	return mo.Ok[http.Handler](http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("X-Shopper") == "" {
+			nocontract.Write(writer, refusal.NocontractAnswerRefusal(refusal.NotSignedIn{Scope: route.Argument}))
+			return
+		}
+		serve.ServeHTTP(writer, request)
+	}))
+}
+```
+
+Every route behind a guard lists the guard's refusals among its failures in the TypeScript client.
+
 ## Generating
 
 A `nocontract.json` beside `go.mod` names the backend's language, the packages holding routes,
@@ -101,18 +169,31 @@ go tool nocontract generate   # writes the files
 go tool nocontract check      # exits 1 when a file differs from what generate writes
 ```
 
-`generate` writes `nocontract_routes.go` into each package that declares a route, and the
-TypeScript file. Run `check` wherever your other checks run.
+`generate` writes `nocontract_routes.go` into each package that declares a route or a guard's
+refusal, and the TypeScript file. Run `check` wherever your other checks run.
 
 ## Serving
 
-Each package's generated `Routes` function lists its routes:
+Each package's generated `Routes` takes its `Serving`: one field for each handler's receiver type and
+each guard its routes name. A route cannot be served without its guard or its receiver.
+
+```go
+served := balance.Routes(balance.Serving{Ledger: balance.Ledger{Store: store}, Shopper: shopperauth.Check{}})
+```
+
+`Routes` answers every route, or why a guard could not check one:
 
 ```go
 mux := http.NewServeMux()
-for _, route := range balance.Routes() {
-	mux.Handle(route.Pattern(), route)
-}
+mo.Fold(served, func(routes []nocontract.Route) struct{} {
+	for _, route := range routes {
+		mux.Handle(route.Pattern(), route)
+	}
+	return struct{}{}
+}, func(cause error) struct{} {
+	// a guard refused a route it was asked to check
+	return struct{}{}
+})
 ```
 
 ## Calling
@@ -167,8 +248,8 @@ A path or query field is text, a whole number, a boolean or a string type with c
 
 `generate` and `check` refuse a declaration they cannot serve or describe, each with its file,
 line and code: a pointer field, a JSON tag option such as `omitempty`, an embedded field, an
-unsealed outcome, a member without a status, a failure without a code, a path segment no input
-field reads, and the rest listed in [ERROR_CODES.md](ERROR_CODES.md).
+unsealed outcome, a member without a status, a failure without a code, a guard no refusal declares,
+a path segment no input field reads, and the rest listed in [ERROR_CODES.md](ERROR_CODES.md).
 
 ## Versions
 

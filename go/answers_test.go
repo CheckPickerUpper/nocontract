@@ -73,14 +73,14 @@ func TestAnAnswerIsOneObjectOfItsTagCodeAndFields(t *testing.T) {
 		status int
 		body   string
 	}{
-		{answer: Succeeded(http.StatusAccepted, "Queued", mo.Ok([]byte(`{"reference":"r1"}`))), status: http.StatusAccepted, body: `{"_tag":"Queued","reference":"r1"}`},
-		{answer: Succeeded(http.StatusOK, "Empty", mo.Ok([]byte(`{}`))), status: http.StatusOK, body: `{"_tag":"Empty"}`},
+		{answer: Succeeded(Success{Status: http.StatusAccepted, Tag: "Queued", Fields: mo.Ok([]byte(`{"reference":"r1"}`))}), status: http.StatusAccepted, body: `{"_tag":"Queued","reference":"r1"}`},
+		{answer: Succeeded(Success{Status: http.StatusOK, Tag: "Empty", Fields: mo.Ok([]byte(`{}`))}), status: http.StatusOK, body: `{"_tag":"Empty"}`},
 		{
-			answer: Failed(http.StatusNotFound, "Missing", "AB-1001", mo.Ok([]byte(`{"id":7}`))), status: http.StatusNotFound,
+			answer: Failed(Failure{Status: http.StatusNotFound, Tag: "Missing", Code: "AB-1001", Fields: mo.Ok([]byte(`{"id":7}`))}), status: http.StatusNotFound,
 			body: `{"_tag":"Missing","code":"AB-1001","id":7}`,
 		},
 		{
-			answer: Succeeded(http.StatusOK, "Listed", mo.Ok([]byte(`[1,2]`))), status: http.StatusInternalServerError,
+			answer: Succeeded(Success{Status: http.StatusOK, Tag: "Listed", Fields: mo.Ok([]byte(`[1,2]`))}), status: http.StatusInternalServerError,
 			body: `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"Listed","reason":"nocontract: the answer Listed is not written as a JSON object"}`,
 		},
 		{answer: NoOutcome(), status: http.StatusInternalServerError, body: `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"","reason":"the route answered no outcome"}`},

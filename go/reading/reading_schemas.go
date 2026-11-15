@@ -147,8 +147,8 @@ func (reader *projectReader) structFields(fields *types.Struct) mo.Option[[]desc
 	return mo.Some(read)
 }
 
-func (reader *projectReader) unsupported(position token.Pos, written types.Type, reason string) mo.Option[description.Schema] {
-	reader.refuse(position, TypeUnsupported{Type: types.TypeString(written, nil), Reason: reason})
+func (reader *projectReader) unsupported(position token.Pos, written types.Type, flaw TypeFlaw) mo.Option[description.Schema] {
+	reader.refuse(position, TypeUnsupported{Type: types.TypeString(written, nil), Flaw: flaw})
 	return mo.None[description.Schema]()
 }
 
@@ -161,25 +161,25 @@ func (reader *projectReader) schemaOf(written types.Type, position token.Pos) mo
 		return reader.namedSchema(typed, position)
 	case *types.Slice:
 		if basic, isBasic := typed.Elem().Underlying().(*types.Basic); isBasic && basic.Kind() == types.Byte {
-			return reader.unsupported(position, written, "encoding/json writes a byte slice as base64 text")
+			return reader.unsupported(position, written, ByteSliceField{})
 		}
 		return mapOption(reader.schemaOf(typed.Elem(), position), func(item description.Schema) description.Schema { return description.List{Item: item} })
 	case *types.Array:
 		return mapOption(reader.schemaOf(typed.Elem(), position), func(item description.Schema) description.Schema { return description.List{Item: item} })
 	case *types.Map:
 		if key, isBasic := typed.Key().Underlying().(*types.Basic); !isBasic || key.Kind() != types.String {
-			return reader.unsupported(position, written, "only a map with string keys is a JSON object")
+			return reader.unsupported(position, written, MapKeyNotText{})
 		}
 		return mapOption(reader.schemaOf(typed.Elem(), position), func(value description.Schema) description.Schema { return description.Dictionary{Value: value} })
 	case *types.Struct:
 		return mapOption(reader.structFields(typed), func(fields []description.Field) description.Schema { return description.InlineStruct{Fields: fields} })
 	case *types.Pointer:
-		return reader.unsupported(position, written, "a pointer may be nil; a value that may be absent is a mo.Option")
+		return reader.unsupported(position, written, PointerField{})
 	case *types.Interface:
-		return reader.unsupported(position, written, "an interface has no single JSON shape")
+		return reader.unsupported(position, written, InterfaceField{})
 	case *types.Tuple, *types.Signature, *types.Chan, *types.Alias, *types.TypeParam, *types.Union, nil:
 	}
-	return reader.unsupported(position, written, "it has no JSON shape")
+	return reader.unsupported(position, written, ShapelessField{})
 }
 
 func (reader *projectReader) basicSchema(basic *types.Basic, position token.Pos) mo.Option[description.Schema] {
@@ -193,7 +193,7 @@ func (reader *projectReader) basicSchema(basic *types.Basic, position token.Pos)
 	case basic.Info()&types.IsFloat != 0:
 		return mo.Some[description.Schema](description.Finite{})
 	}
-	return reader.unsupported(position, basic, "it has no JSON shape")
+	return reader.unsupported(position, basic, ShapelessField{})
 }
 
 func (reader *projectReader) namedSchema(named *types.Named, position token.Pos) mo.Option[description.Schema] {

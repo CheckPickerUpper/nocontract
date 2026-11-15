@@ -4,23 +4,22 @@
 package description
 
 import (
+	"net/http"
+	"strconv"
 	"unicode"
 	"unicode/utf8"
+
+	ergo "github.com/CheckPickerUpper/ErGo"
+	"github.com/samber/mo"
 )
 
-// API is every route a backend serves, grouped by the module of the backend that declares it.
+// API is every route a backend serves, grouped by the module of the backend that declares it, every
+// member any route can answer and every named struct they use.
 type API struct {
 	Name    string
 	Groups  []Group
 	Members []Member
 	Structs []NamedStruct
-	Shared  SharedFailures
-}
-
-// SharedFailures names the members every route answers before or after its handler runs.
-type SharedFailures struct {
-	RequestRefused   string
-	AnswerNotWritten string
 }
 
 // Group is the routes one module of the backend declares, named for the module.
@@ -35,27 +34,78 @@ func GroupClassName(name string) string {
 	return string(unicode.ToUpper(first)) + name[size:] + "Group"
 }
 
-// Endpoint is one route: its name, its method and path, with {name} path segments, what it reads
-// from the request and the members of its outcome, in declaration order.
-type Endpoint struct {
-	Name    string
-	Method  string
-	Path    string
-	Params  []Field
-	Query   []Field
-	Body    Body
-	Members []string
+// Method is the HTTP method a route answers, with its name as a request spells it.
+//
+//sumtype:decl
+type Method interface {
+	isMethod()
+	Name() string
 }
 
-// ReadsRequest says whether the route reads any part of its request, so it can answer the
-// shared RequestRefused.
-func (endpoint Endpoint) ReadsRequest() bool {
-	switch endpoint.Body.(type) {
-	case JSONBody:
-		return true
-	case NoBody, nil:
-	}
-	return len(endpoint.Params) > 0 || len(endpoint.Query) > 0
+// Get is the GET method.
+//
+//ergo:not-an-error
+type Get struct{}
+
+// Post is the POST method.
+//
+//ergo:not-an-error
+type Post struct{}
+
+// Put is the PUT method.
+//
+//ergo:not-an-error
+type Put struct{}
+
+// Patch is the PATCH method.
+//
+//ergo:not-an-error
+type Patch struct{}
+
+// Delete is the DELETE method.
+//
+//ergo:not-an-error
+type Delete struct{}
+
+func (Get) isMethod()    {}
+func (Post) isMethod()   {}
+func (Put) isMethod()    {}
+func (Patch) isMethod()  {}
+func (Delete) isMethod() {}
+
+// Name is GET.
+func (Get) Name() string { return http.MethodGet }
+
+// Name is POST.
+func (Post) Name() string { return http.MethodPost }
+
+// Name is PUT.
+func (Put) Name() string { return http.MethodPut }
+
+// Name is PATCH.
+func (Patch) Name() string { return http.MethodPatch }
+
+// Name is DELETE.
+func (Delete) Name() string { return http.MethodDelete }
+
+// Methods is every method a route may answer.
+func Methods() []Method {
+	return []Method{Get{}, Post{}, Put{}, Patch{}, Delete{}}
+}
+
+// Endpoint is one route: its name, its method and path, with {name} path segments, what it reads
+// from the request, the members it succeeds with, and every member it can fail with: its outcome's
+// failures, then its guard's refusals and nocontract's own failures, which answer outside its
+// handler.
+type Endpoint struct {
+	Name      string
+	Method    Method
+	Path      string
+	Params    []Field
+	Query     []Field
+	Body      Body
+	Successes []string
+	Failures  []string
 }
 
 // Body is what a route reads from its request body.
@@ -76,12 +126,62 @@ type JSONBody struct{ Schema Schema }
 func (NoBody) isBody()   {}
 func (JSONBody) isBody() {}
 
-// Member is one member of a route's outcome: its name, which is its tag on the wire, how it
-// answers and its JSON fields.
+// Member is one member of a route's outcome or of a guard's refusal: its name, which is its tag on
+// the wire, how it answers and its JSON fields.
 type Member struct {
 	Name   string
 	Answer Answer
 	Fields []Field
+}
+
+// SuccessStatus is an HTTP status a success answers with: a 2xx that carries a body. ParseStatus
+// builds it.
+//
+//ergo:not-an-error
+type SuccessStatus struct{ code int }
+
+// FailureStatus is an HTTP status a failure answers with: a 4xx or 5xx. ParseStatus builds it.
+//
+//ergo:not-an-error
+type FailureStatus struct{ code int }
+
+// Code is the status's number.
+func (status SuccessStatus) Code() int { return status.code }
+
+// Code is the status's number.
+func (status FailureStatus) Code() int { return status.code }
+
+// Status is a status a member answers with, read from its declaration.
+//
+//sumtype:decl
+type Status interface {
+	isStatus()
+	Code() int
+}
+
+func (SuccessStatus) isStatus() {}
+func (FailureStatus) isStatus() {}
+
+// StatusUnanswerable is a number that is no HTTP status a member can answer with: not a known
+// status, a success without a body, or neither a success nor a failure.
+//
+//ergo:code NC-1052
+type StatusUnanswerable struct{ Number int }
+
+func (unanswerable StatusUnanswerable) Error() string {
+	return strconv.Itoa(unanswerable.Number) + " is no HTTP status a member answers with"
+}
+
+// ParseStatus is the success or failure status number names.
+func ParseStatus(number int) mo.Result[Status] {
+	known := http.StatusText(number) != ""
+	switch {
+	case known && number >= http.StatusOK && number < http.StatusMultipleChoices && number != http.StatusNoContent && number != http.StatusResetContent:
+		return mo.Ok[Status](SuccessStatus{code: number})
+	case known && number >= http.StatusBadRequest && number < 600:
+		return mo.Ok[Status](FailureStatus{code: number})
+	}
+	return mo.Err[Status](StatusUnanswerable{Number: number})
 }
 
 // Answer is whether a member answers as a success or as a failure with its permanent code.
@@ -89,17 +189,17 @@ type Member struct {
 //sumtype:decl
 type Answer interface{ isAnswer() }
 
-// Succeeds is a member answered with a success Status.
+// Succeeds is a member answered with a success status.
 //
 //ergo:not-an-error
-type Succeeds struct{ Status int }
+type Succeeds struct{ Status SuccessStatus }
 
-// Fails is a member answered with a failure Status and its permanent Code.
+// Fails is a member answered with a failure status and its permanent code.
 //
 //ergo:not-an-error
 type Fails struct {
-	Status int
-	Code   string
+	Status FailureStatus
+	Code   ergo.Code
 }
 
 func (Succeeds) isAnswer() {}

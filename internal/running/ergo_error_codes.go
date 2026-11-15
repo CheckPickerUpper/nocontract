@@ -16,6 +16,10 @@ func (PackagesNotLoaded) ErrorCode() ergo.Code { return "NC-1038" }
 
 func (FileNotWritten) ErrorCode() ergo.Code { return "NC-1039" }
 
-func (ProjectIncomplete) ErrorCode() ergo.Code { return "NC-1040" }
+func (PackagesMissing) ErrorCode() ergo.Code { return "NC-1040" }
 
-func (LoadFailed) ErrorCode() ergo.Code { return "NC-1041" }
+func (TypeScriptMissing) ErrorCode() ergo.Code { return "NC-1053" }
+
+func (APINameMissing) ErrorCode() ergo.Code { return "NC-1054" }
+
+func (LanguageUnknown) ErrorCode() ergo.Code { return "NC-1055" }

@@ -23,9 +23,6 @@ import (
 // failures every route can answer.
 const NoContractPath = "github.com/CheckPickerUpper/nocontract/go"
 
-// GeneratedFileName is the Go file written into each package that declares routes.
-const GeneratedFileName = "nocontract_routes.go"
-
 // Request is what the generator reads: the loaded packages, the project's own and nocontract's,
 // each with its syntax, and the name of the Effect API.
 type Request struct {
@@ -60,11 +57,6 @@ type RoutesRefused struct {
 func (RoutesRead) isReading()    {}
 func (RoutesRefused) isReading() {}
 
-// routeMethods is every method a route directive may name.
-func routeMethods() []string {
-	return []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
-}
-
 // reservedNames are the names the TypeScript file imports, which no declaration may take.
 func reservedNames() []string {
 	return []string{"Schema", "HttpApi", "HttpApiEndpoint", "HttpApiGroup", "HttpApiSchema"}
@@ -73,13 +65,12 @@ func reservedNames() []string {
 // ReadRoutes reads every route the project's packages declare.
 func ReadRoutes(request Request) Reading {
 	reader := newProjectReader(request)
-	shared := description.SharedFailures{
-		RequestRefused:   reader.readSharedFailure("RequestRefused"),
-		AnswerNotWritten: reader.readSharedFailure("AnswerNotWritten"),
-	}
+	reader.readSharedFailure(reader.shared.requestRefused)
+	reader.readSharedFailure(reader.shared.answerNotWritten)
+	reader.readGuards()
 	for _, loaded := range reader.projectPackages() {
 		for _, file := range loaded.Syntax {
-			if filepath.Base(loaded.Fset.File(file.Pos()).Name()) == GeneratedFileName {
+			if filepath.Base(loaded.Fset.File(file.Pos()).Name()) == serverplan.FileName {
 				continue
 			}
 			for _, declaration := range file.Decls {
@@ -97,7 +88,7 @@ func ReadRoutes(request Request) Reading {
 		})
 		return RoutesRefused{Refusals: refusals, Read: read}
 	}
-	return reader.routesRead(shared, read)
+	return reader.routesRead(read)
 }
 
 // typeKey names a declared type by its package's import path and its name, so types read through
@@ -137,16 +128,45 @@ type projectReader struct {
 	memberOut []description.Member
 	outcomes  map[typeKey]outcomeReading
 	patterns  map[string]token.Position
+	guards    map[string]guardReading
 	groups    map[string]*groupBuild
 	read      map[string]struct{}
+	shared    sharedFailures
 	refusals  []Refusal
 }
 
-// groupBuild is the endpoints of one package and the routes its generated code serves, as they
-// are read.
+// sharedFailures names nocontract's own failures: RequestRefused, which a route that reads its
+// request can answer before its handler runs, and AnswerNotWritten, which every route can answer.
+type sharedFailures struct {
+	requestRefused   string
+	answerNotWritten string
+}
+
+// groupBuild is the endpoints of one package and its generated code, as they are read, with the
+// place each endpoint name and each field of what its routes are served with was first taken.
 type groupBuild struct {
-	group description.Group
-	plan  serverplan.Package
+	group     description.Group
+	plan      serverplan.Package
+	endpoints map[string]token.Position
+	fields    map[string]servingField
+}
+
+// buildFor is the package's build, begun when the package first declares a route or a guard's
+// refusal.
+func (reader *projectReader) buildFor(loaded *packages.Package, position token.Pos) *groupBuild {
+	if build, known := reader.groups[loaded.PkgPath]; known {
+		return build
+	}
+	build := &groupBuild{
+		group: description.Group{Name: loaded.Name, Endpoints: []description.Endpoint{}},
+		plan: serverplan.Package{
+			Name: loaded.Name, Path: loaded.PkgPath, Directory: filepath.Dir(reader.files.Position(position).Filename), Routes: []serverplan.Route{},
+			Serving: serverplan.Serving{Receivers: []serverplan.GoName{}, Guards: []string{}}, Refusals: []serverplan.GuardRefusal{},
+		},
+		endpoints: map[string]token.Position{}, fields: map[string]servingField{},
+	}
+	reader.groups[loaded.PkgPath] = build
+	return build
 }
 
 func newProjectReader(request Request) *projectReader {
@@ -154,7 +174,8 @@ func newProjectReader(request Request) *projectReader {
 		request: request, files: token.NewFileSet(), declared: map[typeKey]declaredType{}, names: map[string]token.Position{},
 		structs: map[typeKey]structState{}, structOut: []description.NamedStruct{}, members: map[typeKey]memberReading{},
 		memberOut: []description.Member{}, outcomes: map[typeKey]outcomeReading{}, patterns: map[string]token.Position{},
-		groups: map[string]*groupBuild{}, read: map[string]struct{}{}, refusals: []Refusal{},
+		guards: map[string]guardReading{}, groups: map[string]*groupBuild{}, read: map[string]struct{}{},
+		shared: sharedFailures{requestRefused: "RequestRefused", answerNotWritten: "AnswerNotWritten"}, refusals: []Refusal{},
 	}
 	for _, loaded := range request.Packages {
 		reader.files = loaded.Fset
@@ -223,33 +244,34 @@ func (reader *projectReader) reserve(name string, position token.Pos) {
 	reader.names[name] = reader.files.Position(position)
 }
 
-// readSharedFailure reads one of nocontract's own failures as a member every route can answer.
-func (reader *projectReader) readSharedFailure(name string) string {
+// readSharedFailure reads one of nocontract's own failures as a member routes can answer.
+func (reader *projectReader) readSharedFailure(name string) {
 	declared, isDeclared := reader.declared[typeKey{path: NoContractPath, name: name}]
 	if !isDeclared {
 		reader.refuse(token.NoPos, DeclarationOutsideProject{Type: NoContractPath + "." + name})
-		return name
+		return
 	}
 	reader.readMember(declared)
-	return name
 }
 
-func (reader *projectReader) routesRead(shared description.SharedFailures, read []string) RoutesRead {
+func (reader *projectReader) routesRead(read []string) RoutesRead {
 	groups, packages := []description.Group{}, []serverplan.Package{}
 	for _, build := range reader.groups {
-		group := build.group
-		group.Endpoints = slices.Clone(group.Endpoints)
-		slices.SortFunc(group.Endpoints, func(left, right description.Endpoint) int { return cmp.Compare(left.Name, right.Name) })
-		groups = append(groups, group)
+		if len(build.group.Endpoints) > 0 {
+			group := build.group
+			group.Endpoints = slices.Clone(group.Endpoints)
+			slices.SortFunc(group.Endpoints, func(left, right description.Endpoint) int { return cmp.Compare(left.Name, right.Name) })
+			groups = append(groups, group)
+		}
 		served := build.plan
 		served.Routes = slices.Clone(served.Routes)
-		slices.SortFunc(served.Routes, func(left, right serverplan.Route) int { return cmp.Compare(left.Handler.Name, right.Handler.Name) })
+		slices.SortFunc(served.Routes, func(left, right serverplan.Route) int { return cmp.Compare(left.Name, right.Name) })
 		packages = append(packages, served)
 	}
 	slices.SortFunc(groups, func(left, right description.Group) int { return cmp.Compare(left.Name, right.Name) })
 	slices.SortFunc(packages, func(left, right serverplan.Package) int { return cmp.Compare(left.Path, right.Path) })
 	return RoutesRead{
-		API:  description.API{Name: reader.request.APIName, Groups: groups, Members: reader.memberOut, Structs: reader.structOut, Shared: shared},
+		API:  description.API{Name: reader.request.APIName, Groups: groups, Members: reader.memberOut, Structs: reader.structOut},
 		Plan: serverplan.Plan{Packages: packages},
 		Read: read,
 	}

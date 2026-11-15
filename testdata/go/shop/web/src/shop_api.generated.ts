@@ -22,6 +22,11 @@ export class AnswerNotWritten extends Schema.TaggedError<AnswerNotWritten>()("An
   reason: Schema.String,
 }, { httpApiStatus: 500 }) {}
 
+export class NotSignedIn extends Schema.TaggedError<NotSignedIn>()("NotSignedIn", {
+  code: Schema.Literal("SH-1101"),
+  scope: Schema.String,
+}, { httpApiStatus: 401 }) {}
+
 export const BalanceRead = Schema.TaggedStruct("BalanceRead", {
   balance: Money,
   changed: Schema.DateTimeUtcFromString,
@@ -53,7 +58,7 @@ export class BalanceGroup extends HttpApiGroup.make("balance").add(
       currency: Schema.Literals(["CAD", "USD"]),
     },
     success: [BalanceRead],
-    error: [ShopperNotFound, RequestRefused, AnswerNotWritten],
+    error: [ShopperNotFound, NotSignedIn, RequestRefused, AnswerNotWritten],
   }),
   HttpApiEndpoint.post("topUp", "/shoppers/:shopper_id/top-ups", {
     params: {

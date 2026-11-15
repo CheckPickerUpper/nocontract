@@ -3,6 +3,8 @@ package reading
 import (
 	"fmt"
 	"go/token"
+
+	"github.com/CheckPickerUpper/nocontract/description"
 )
 
 // Refusal is one declaration the generator cannot turn into served routes and their Effect API,
@@ -30,7 +32,7 @@ type RouteDirectiveMalformed struct{ Text string }
 //ergo:code NC-1005
 type HandlerSignatureUnsupported struct {
 	Handler string
-	Reason  string
+	Flaw    SignatureFlaw
 }
 
 // OutcomeNotNamedInterface is a route whose outcome type is not a named interface.
@@ -68,7 +70,7 @@ type GenericMember struct{ Member string }
 //ergo:code NC-1012
 type FailureWithoutCode struct {
 	Member string
-	Status int
+	Status description.FailureStatus
 }
 
 // SuccessWithCode is a member answered with a success status but marked //ergo:code.
@@ -76,7 +78,7 @@ type FailureWithoutCode struct {
 //ergo:code NC-1013
 type SuccessWithCode struct {
 	Member string
-	Status int
+	Status description.SuccessStatus
 }
 
 // MemberUndecided is a member without exactly one ErGo decision.
@@ -101,8 +103,8 @@ type EmbeddedFieldUnsupported struct{ Field string }
 //
 //ergo:code NC-1017
 type TypeUnsupported struct {
-	Type   string
-	Reason string
+	Type string
+	Flaw TypeFlaw
 }
 
 // NameRepeated is a name two declarations would both take in the TypeScript file.
@@ -195,6 +197,97 @@ type StatusDirectiveMalformed struct {
 //ergo:code NC-1033
 type FieldNameReserved struct{ Field string }
 
+// GuardDirectiveMalformed is a //nocontract:guard line on a handler that is not a guard name and
+// one argument, or a handler with more than one.
+//
+//ergo:code NC-1045
+type GuardDirectiveMalformed struct{ Text string }
+
+// GuardUndeclared is a route naming a guard no sealed refusal of the project declares.
+//
+//ergo:code NC-1046
+type GuardUndeclared struct{ Guard string }
+
+// GuardRepeated is a guard name two refusal types both declare.
+//
+//ergo:code NC-1047
+type GuardRepeated struct {
+	Guard string
+	First token.Position
+}
+
+// GuardMemberSucceeds is a member of a guard's refusal answered with a success status.
+//
+//ergo:code NC-1048
+type GuardMemberSucceeds struct {
+	Member string
+	Status description.SuccessStatus
+}
+
+// ReceiverUnsupported is a method handler whose receiver type the routes cannot be served with.
+//
+//ergo:code NC-1049
+type ReceiverUnsupported struct {
+	Receiver string
+	Flaw     ReceiverFlaw
+}
+
+// EndpointNameRepeated is a handler name two routes of one package both use.
+//
+//ergo:code NC-1050
+type EndpointNameRepeated struct {
+	Name  string
+	First token.Position
+}
+
+// GeneratedNameTaken is a name the package's generated file declares, already declared by the
+// package or by another field of what its routes are served with.
+//
+//ergo:code NC-1051
+type GeneratedNameTaken struct{ Name string }
+
+// Explain says why the directive is refused.
+func (refused GuardDirectiveMalformed) Explain() string {
+	return fmt.Sprintf("the guard directive %q is not one guard name and one argument", refused.Text)
+}
+
+// Explain says why the route is refused.
+func (refused GuardUndeclared) Explain() string {
+	return fmt.Sprintf("no sealed refusal marked //nocontract:guard %s is declared in the project's packages", refused.Guard)
+}
+
+// Explain says why the guard is refused.
+func (refused GuardRepeated) Explain() string {
+	return fmt.Sprintf("the guard %s is already declared at %s", refused.Guard, refused.First)
+}
+
+// Explain says why the member is refused.
+func (refused GuardMemberSucceeds) Explain() string {
+	return fmt.Sprintf("%s answers %d, a success, but a guard's refusal holds only failures", refused.Member, refused.Status.Code())
+}
+
+// Explain says why the handler is refused.
+func (refused ReceiverUnsupported) Explain() string {
+	return fmt.Sprintf("the routes cannot be served with the receiver %s: %s", refused.Receiver, refused.Flaw.explain())
+}
+
+// Explain says why the endpoint is refused.
+func (refused EndpointNameRepeated) Explain() string {
+	return fmt.Sprintf("the endpoint name %s is already taken in this package, at %s", refused.Name, refused.First)
+}
+
+// Explain says why the name is refused.
+func (refused GeneratedNameTaken) Explain() string {
+	return fmt.Sprintf("the generated file declares %s, which the package already uses", refused.Name)
+}
+
+func (GuardDirectiveMalformed) isProblem()     {}
+func (GuardUndeclared) isProblem()             {}
+func (GuardRepeated) isProblem()               {}
+func (GuardMemberSucceeds) isProblem()         {}
+func (ReceiverUnsupported) isProblem()         {}
+func (EndpointNameRepeated) isProblem()        {}
+func (GeneratedNameTaken) isProblem()          {}
 func (RouteDirectiveMalformed) isProblem()     {}
 func (HandlerSignatureUnsupported) isProblem() {}
 func (OutcomeNotNamedInterface) isProblem()    {}
@@ -232,7 +325,7 @@ func (refused RouteDirectiveMalformed) Explain() string {
 
 // Explain says why the handler is refused.
 func (refused HandlerSignatureUnsupported) Explain() string {
-	return fmt.Sprintf("the handler %s is not a func(context.Context, Input) Outcome: %s", refused.Handler, refused.Reason)
+	return fmt.Sprintf("the handler %s is not a func(context.Context, Input) Outcome: %s", refused.Handler, refused.Flaw.explain())
 }
 
 // Explain says why the outcome is refused.
@@ -267,12 +360,12 @@ func (refused GenericMember) Explain() string {
 
 // Explain says why the member is refused.
 func (refused FailureWithoutCode) Explain() string {
-	return fmt.Sprintf("%s answers %d, a failure, but carries no //ergo:code", refused.Member, refused.Status)
+	return fmt.Sprintf("%s answers %d, a failure, but carries no //ergo:code", refused.Member, refused.Status.Code())
 }
 
 // Explain says why the member is refused.
 func (refused SuccessWithCode) Explain() string {
-	return fmt.Sprintf("%s answers %d, a success, but is marked //ergo:code; mark it //ergo:not-an-error", refused.Member, refused.Status)
+	return fmt.Sprintf("%s answers %d, a success, but is marked //ergo:code; mark it //ergo:not-an-error", refused.Member, refused.Status.Code())
 }
 
 // Explain says why the member is refused.
@@ -292,7 +385,7 @@ func (refused EmbeddedFieldUnsupported) Explain() string {
 
 // Explain says why the type is refused.
 func (refused TypeUnsupported) Explain() string {
-	return fmt.Sprintf("the type %s cannot be declared on the wire: %s", refused.Type, refused.Reason)
+	return fmt.Sprintf("the type %s cannot be declared on the wire: %s", refused.Type, refused.Flaw.explain())
 }
 
 // Explain says why the name is refused.

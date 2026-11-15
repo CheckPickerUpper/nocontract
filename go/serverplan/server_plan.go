@@ -1,34 +1,115 @@
 // Package serverplan is what the Go writer needs, beyond the language-neutral description, to
-// write the code that serves a package's routes: the Go names of each route's handler, input and
-// outcome, how each input field is read, and each member's Go type.
+// write the code of each package: the Go names of each route's handler, guard, input and outcome,
+// how each input field is read, and each member's Go type. It owns the names the generated file
+// declares, which the reader keeps free and the command expects before the file is first written.
 package serverplan
 
-// Plan is the routes of every Go package that declares one.
+import "github.com/CheckPickerUpper/nocontract/description"
+
+// FileName is the Go file written into each package that declares a route or a guard's refusal.
+const FileName = "nocontract_routes.go"
+
+// The names a generated file declares that code outside it calls.
+const (
+	RoutesFunction      = "Routes"
+	ServingType         = "Serving"
+	RefusalAnswerPrefix = "NocontractAnswer"
+)
+
+// CalledNames are the names a package's generated file declares beside its routes, which the
+// package may not declare itself.
+func CalledNames() []string {
+	return []string{RoutesFunction, ServingType}
+}
+
+// Plan is the generated code of every Go package that declares a route or a guard's refusal.
 type Plan struct {
 	Packages []Package
 }
 
-// Package is one Go package's routes: its name, its import path and the folder its generated file
-// is written to.
+// Package is one Go package's generated code: its name, its import path, the folder its generated
+// file is written to, its routes, what they are served with, and the guard refusals it declares.
 type Package struct {
 	Name      string
 	Path      string
 	Directory string
 	Routes    []Route
+	Serving   Serving
+	Refusals  []GuardRefusal
 }
 
-// GoName is a Go type or function: its package's import path, empty for a predeclared type, and
-// its name.
+// Serving is what a package's routes are served with: the receiver of each method handler, by its
+// type, and each guard its routes name, in order.
+type Serving struct {
+	Receivers []GoName
+	Guards    []string
+}
+
+// GuardRefusal is a guard's sealed refusal declared in the package: the guard's name, the refusal
+// type and each of its members.
+type GuardRefusal struct {
+	Guard   string
+	Outcome GoName
+	Members []Member
+}
+
+// GoName is a Go type: its package's import path, empty for a predeclared type, and its name.
 type GoName struct {
 	Package string
 	Name    string
 }
 
-// Route is one route as the generated code serves it.
+// Handler is what answers a route: a function, or a method of a receiver the routes are served
+// with.
+//
+//sumtype:decl
+type Handler interface{ isHandler() }
+
+// FunctionHandler is a function of the route's package.
+//
+//ergo:not-an-error
+type FunctionHandler struct{ Name string }
+
+// MethodHandler is a method of a receiver type of the route's package.
+//
+//ergo:not-an-error
+type MethodHandler struct {
+	Receiver string
+	Method   string
+}
+
+func (FunctionHandler) isHandler() {}
+func (MethodHandler) isHandler()   {}
+
+// RouteGuard is the guard a route is served behind, if any.
+//
+//sumtype:decl
+type RouteGuard interface{ isRouteGuard() }
+
+// Unguarded is a route served behind no guard.
+//
+//ergo:not-an-error
+type Unguarded struct{}
+
+// Guarded is a route served behind the guard Name, which is handed Argument.
+//
+//ergo:not-an-error
+type Guarded struct {
+	Name     string
+	Argument string
+}
+
+func (Unguarded) isRouteGuard() {}
+func (Guarded) isRouteGuard()   {}
+
+// Route is one route as the generated code serves it: its endpoint name, method, path, handler,
+// guard, input and outcome, how its input is read and each member of its outcome.
 type Route struct {
-	Method  string
+	Name    string
+	Method  description.Method
 	Path    string
-	Handler GoName
+	Handler Handler
+	Guard   RouteGuard
 	Input   GoName
 	Outcome GoName
 	Params  []Param
@@ -100,29 +181,9 @@ type BodyFieldRead struct{}
 func (NoBodyRead) isBodyRead()    {}
 func (BodyFieldRead) isBodyRead() {}
 
-// Member is one member of a route's outcome: its Go type, its tag, its status and a failure's
-// code.
+// Member is one member of an outcome or a guard's refusal: its Go type, whose name is its tag, and
+// how it answers.
 type Member struct {
 	Go     GoName
-	Tag    string
-	Status int
-	Code   MemberCode
+	Answer description.Answer
 }
-
-// MemberCode is whether a member answers with a permanent code.
-//
-//sumtype:decl
-type MemberCode interface{ isMemberCode() }
-
-// NoCode is a success, which carries no code.
-//
-//ergo:not-an-error
-type NoCode struct{}
-
-// Coded is a failure and its permanent code.
-//
-//ergo:not-an-error
-type Coded struct{ Code string }
-
-func (NoCode) isMemberCode() {}
-func (Coded) isMemberCode()  {}

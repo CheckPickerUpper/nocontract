@@ -57,7 +57,7 @@ Declared in `go/reading/refusals.go`.
 | Field | Type |
 | --- | --- |
 | `Handler` | `string` |
-| `Reason` | `string` |
+| `Flaw` | `reading.SignatureFlaw` |
 
 ## NC-1006 OutcomeNotNamedInterface
 
@@ -128,7 +128,7 @@ Declared in `go/reading/refusals.go`.
 | Field | Type |
 | --- | --- |
 | `Member` | `string` |
-| `Status` | `int` |
+| `Status` | `description.FailureStatus` |
 
 ## NC-1013 SuccessWithCode
 
@@ -139,7 +139,7 @@ Declared in `go/reading/refusals.go`.
 | Field | Type |
 | --- | --- |
 | `Member` | `string` |
-| `Status` | `int` |
+| `Status` | `description.SuccessStatus` |
 
 ## NC-1014 MemberUndecided
 
@@ -181,7 +181,7 @@ Declared in `go/reading/refusals.go`.
 | Field | Type |
 | --- | --- |
 | `Type` | `string` |
-| `Reason` | `string` |
+| `Flaw` | `reading.TypeFlaw` |
 
 ## NC-1018 NameRepeated
 
@@ -370,24 +370,24 @@ Declared in `internal/running/running_command.go`.
 
 ## NC-1036 UsageRefused
 
-UsageRefused is a run whose arguments name no command it runs.
+UsageRefused is a run whose arguments name no command it runs, and the problem with them.
 
 Declared in `internal/running/running_command.go`.
 
 | Field | Type |
 | --- | --- |
-| `Reason` | `string` |
+| `Problem` | `running.UsageProblem` |
 
 ## NC-1037 ProjectUnreadable
 
-ProjectUnreadable is a project file that could not be read or holds no usable project.
+ProjectUnreadable is a project file that could not be read or holds no usable project, with why.
 
 Declared in `internal/running/running_command.go`.
 
 | Field | Type |
 | --- | --- |
 | `Path` | `string` |
-| `Reason` | `string` |
+| `Cause` | `error` |
 
 ## NC-1038 PackagesNotLoaded
 
@@ -397,7 +397,7 @@ Declared in `internal/running/running_command.go`.
 
 | Field | Type |
 | --- | --- |
-| `Problems` | `[]string` |
+| `Errors` | `[]error` |
 
 ## NC-1039 FileNotWritten
 
@@ -408,28 +408,13 @@ Declared in `internal/running/running_command.go`.
 | Field | Type |
 | --- | --- |
 | `Path` | `string` |
-| `Reason` | `string` |
+| `Cause` | `error` |
 
-## NC-1040 ProjectIncomplete
+## NC-1040 PackagesMissing
 
-ProjectIncomplete is a project file missing a value it needs, or naming a language NoContract
-has no reader for.
-
-Declared in `internal/running/running_command.go`.
-
-| Field | Type |
-| --- | --- |
-| `Missing` | `string` |
-
-## NC-1041 LoadFailed
-
-LoadFailed is a load Go's package driver refused outright.
+PackagesMissing is a project file naming no package patterns.
 
 Declared in `internal/running/running_command.go`.
-
-| Field | Type |
-| --- | --- |
-| `Reason` | `string` |
 
 ## NC-1043 LiteralUnknown
 
@@ -447,3 +432,112 @@ Declared in `go/request_reading.go`.
 BodyNotSingle is a body holding more than one JSON value.
 
 Declared in `go/request_reading.go`.
+
+## NC-1045 GuardDirectiveMalformed
+
+GuardDirectiveMalformed is a //nocontract:guard line on a handler that is not a guard name and
+one argument, or a handler with more than one.
+
+Declared in `go/reading/refusals.go`.
+
+| Field | Type |
+| --- | --- |
+| `Text` | `string` |
+
+## NC-1046 GuardUndeclared
+
+GuardUndeclared is a route naming a guard no sealed refusal of the project declares.
+
+Declared in `go/reading/refusals.go`.
+
+| Field | Type |
+| --- | --- |
+| `Guard` | `string` |
+
+## NC-1047 GuardRepeated
+
+GuardRepeated is a guard name two refusal types both declare.
+
+Declared in `go/reading/refusals.go`.
+
+| Field | Type |
+| --- | --- |
+| `Guard` | `string` |
+| `First` | `token.Position` |
+
+## NC-1048 GuardMemberSucceeds
+
+GuardMemberSucceeds is a member of a guard's refusal answered with a success status.
+
+Declared in `go/reading/refusals.go`.
+
+| Field | Type |
+| --- | --- |
+| `Member` | `string` |
+| `Status` | `description.SuccessStatus` |
+
+## NC-1049 ReceiverUnsupported
+
+ReceiverUnsupported is a method handler whose receiver type the routes cannot be served with.
+
+Declared in `go/reading/refusals.go`.
+
+| Field | Type |
+| --- | --- |
+| `Receiver` | `string` |
+| `Flaw` | `reading.ReceiverFlaw` |
+
+## NC-1050 EndpointNameRepeated
+
+EndpointNameRepeated is a handler name two routes of one package both use.
+
+Declared in `go/reading/refusals.go`.
+
+| Field | Type |
+| --- | --- |
+| `Name` | `string` |
+| `First` | `token.Position` |
+
+## NC-1051 GeneratedNameTaken
+
+GeneratedNameTaken is a name the package's generated file declares, already declared by the
+package or by another field of what its routes are served with.
+
+Declared in `go/reading/refusals.go`.
+
+| Field | Type |
+| --- | --- |
+| `Name` | `string` |
+
+## NC-1052 StatusUnanswerable
+
+StatusUnanswerable is a number that is no HTTP status a member can answer with: not a known
+status, a success without a body, or neither a success nor a failure.
+
+Declared in `description/api_description.go`.
+
+| Field | Type |
+| --- | --- |
+| `Number` | `int` |
+
+## NC-1053 TypeScriptMissing
+
+TypeScriptMissing is a project file naming no TypeScript file to write.
+
+Declared in `internal/running/running_command.go`.
+
+## NC-1054 APINameMissing
+
+APINameMissing is a project file naming no API class.
+
+Declared in `internal/running/running_command.go`.
+
+## NC-1055 LanguageUnknown
+
+LanguageUnknown is a project file naming a language NoContract reads no backend in.
+
+Declared in `internal/running/running_command.go`.
+
+| Field | Type |
+| --- | --- |
+| `Language` | `string` |

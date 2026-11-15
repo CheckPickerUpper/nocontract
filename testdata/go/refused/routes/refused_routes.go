@@ -137,12 +137,17 @@ type Statusless struct{}
 //nocontract:status 204
 type Teapot struct{}
 
+// Detail is a struct only Embedding embeds.
+type Detail struct {
+	Note string `json:"note"`
+}
+
 // Embedding embeds a struct.
 //
 //ergo:not-an-error
 //nocontract:status 200
 type Embedding struct {
-	Read
+	Detail
 }
 
 func (Fine) isFlawedOutcome()              {}
@@ -160,3 +165,58 @@ func (Embedding) isFlawedOutcome()         {}
 //
 //nocontract:route GET /flawed
 func ReadFlawed(context.Context, nocontract.NoInput) FlawedOutcome { return Fine{} }
+
+// StaffRefusal is a guard's refusal that holds a success.
+//
+//sumtype:decl
+//nocontract:guard Staff
+type StaffRefusal interface {
+	isStaffRefusal()
+}
+
+// Welcome answers 200 from inside a guard's refusal.
+//
+//ergo:not-an-error
+//nocontract:status 200
+type Welcome struct{}
+
+func (Welcome) isStaffRefusal() {}
+
+// UnknownGuard names a guard no refusal declares.
+//
+//nocontract:route GET /unknown-guard
+//nocontract:guard Nobody admin
+func UnknownGuard(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
+
+// BareGuard names its guard without an argument.
+//
+//nocontract:route GET /bare-guard
+//nocontract:guard Staff
+func BareGuard(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
+
+// hidden is a receiver type code mounting the routes cannot name.
+type hidden struct{}
+
+// Peek is a route answered by a method of an unexported type.
+//
+//nocontract:route GET /hidden
+func (hidden) Peek(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
+
+// Shelf counts what is on a shelf.
+type Shelf struct{}
+
+// Rack counts what is on a rack.
+type Rack struct{}
+
+// Count counts a shelf.
+//
+//nocontract:route GET /shelf
+func (Shelf) Count(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
+
+// Count counts a rack, under the endpoint name the shelf took.
+//
+//nocontract:route GET /rack
+func (Rack) Count(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
+
+// Serving takes a name the generated file declares.
+type Serving struct{}

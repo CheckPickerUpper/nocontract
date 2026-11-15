@@ -9,25 +9,35 @@ import (
 	http "net/http"
 )
 
-// Routes is every route this package declares.
-func Routes() []nocontract.Route {
-	return []nocontract.Route{
-		nocontract.NewRoute("GET", "/shoppers/{shopper_id}/balance", nocontractServeReadBalance),
-		nocontract.NewRoute("POST", "/shoppers/{shopper_id}/top-ups", nocontractServeTopUp),
-	}
+// Serving is what this package's routes are served with: the receiver of each method handler
+// and each guard its routes name.
+type Serving struct {
+	Ledger  Ledger
+	Shopper nocontract.Guard
 }
 
-func nocontractServeReadBalance(writer http.ResponseWriter, request *http.Request) {
-	nocontract.Write(writer, nocontractAnswerReadBalance(request))
+// Routes is every route this package declares, each behind the guard it names, or why a guard
+// cannot check one.
+func Routes(serving Serving) mo.Result[[]nocontract.Route] {
+	return nocontract.Collect(
+		nocontract.GuardedBy(serving.Shopper, nocontract.GuardedRoute{Method: "GET", Path: "/shoppers/{shopper_id}/balance", Argument: "read-balance"}, nocontractServeReadBalance(serving)),
+		nocontract.Served(nocontract.RouteAt{Method: "POST", Path: "/shoppers/{shopper_id}/top-ups"}, nocontractServeTopUp(serving)),
+	)
 }
 
-func nocontractAnswerReadBalance(request *http.Request) nocontract.Answer {
+func nocontractServeReadBalance(serving Serving) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		nocontract.Write(writer, nocontractAnswerReadBalance(serving, request))
+	})
+}
+
+func nocontractAnswerReadBalance(serving Serving, request *http.Request) nocontract.Answer {
 	var input ReadInput
 	return nocontract.Then(nocontract.Signed(nocontract.Path(request, "shopper_id"), 0), func(read int64) nocontract.Answer {
 		input.ShopperID = int(read)
 		return nocontract.Then(nocontract.Literal(nocontract.Query(request, "currency"), "CAD", "USD"), func(read string) nocontract.Answer {
 			input.Currency = Currency(read)
-			return nocontractAnswerReadOutcome(ReadBalance(request.Context(), input))
+			return nocontractAnswerReadOutcome(serving.Ledger.ReadBalance(request.Context(), input))
 		})
 	})
 }
@@ -35,19 +45,21 @@ func nocontractAnswerReadBalance(request *http.Request) nocontract.Answer {
 func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
 	switch member := outcome.(type) {
 	case BalanceRead:
-		return nocontract.Succeeded(200, "BalanceRead", mo.TupleToResult(json.Marshal(member)))
+		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "BalanceRead", Fields: mo.TupleToResult(json.Marshal(member))})
 	case ShopperNotFound:
-		return nocontract.Failed(404, "ShopperNotFound", "SH-1001", mo.TupleToResult(json.Marshal(member)))
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001", Fields: mo.TupleToResult(json.Marshal(member))})
 	case nil:
 	}
 	return nocontract.NoOutcome()
 }
 
-func nocontractServeTopUp(writer http.ResponseWriter, request *http.Request) {
-	nocontract.Write(writer, nocontractAnswerTopUp(request))
+func nocontractServeTopUp(serving Serving) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		nocontract.Write(writer, nocontractAnswerTopUp(serving, request))
+	})
 }
 
-func nocontractAnswerTopUp(request *http.Request) nocontract.Answer {
+func nocontractAnswerTopUp(serving Serving, request *http.Request) nocontract.Answer {
 	var input TopUpInput
 	return nocontract.Then(nocontract.Signed(nocontract.Path(request, "shopper_id"), 0), func(read int64) nocontract.Answer {
 		input.ShopperID = int(read)
@@ -60,11 +72,11 @@ func nocontractAnswerTopUp(request *http.Request) nocontract.Answer {
 func nocontractAnswerTopUpOutcome(outcome TopUpOutcome) nocontract.Answer {
 	switch member := outcome.(type) {
 	case ShopperNotFound:
-		return nocontract.Failed(404, "ShopperNotFound", "SH-1001", mo.TupleToResult(json.Marshal(member)))
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001", Fields: mo.TupleToResult(json.Marshal(member))})
 	case TopUpQueued:
-		return nocontract.Succeeded(202, "TopUpQueued", mo.TupleToResult(json.Marshal(member)))
+		return nocontract.Succeeded(nocontract.Success{Status: 202, Tag: "TopUpQueued", Fields: mo.TupleToResult(json.Marshal(member))})
 	case TopUpRefused:
-		return nocontract.Failed(409, "TopUpRefused", "SH-1002", mo.TupleToResult(json.Marshal(member)))
+		return nocontract.Failed(nocontract.Failure{Status: 409, Tag: "TopUpRefused", Code: "SH-1002", Fields: mo.TupleToResult(json.Marshal(member))})
 	case nil:
 	}
 	return nocontract.NoOutcome()

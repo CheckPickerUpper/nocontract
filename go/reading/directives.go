@@ -10,6 +10,7 @@ import (
 const (
 	routeDirective  = "nocontract:route"
 	statusDirective = "nocontract:status"
+	guardDirective  = "nocontract:guard"
 )
 
 // directive is one //nocontract: line: its name, the text after it and where it is written.

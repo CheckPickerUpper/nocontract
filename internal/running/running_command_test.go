@@ -45,7 +45,7 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 	slices.Sort(codes)
 	want := []string{
 		"NC-1004", "NC-1005", "NC-1007", "NC-1012", "NC-1013", "NC-1014", "NC-1015", "NC-1016", "NC-1017",
-		"NC-1022", "NC-1024", "NC-1025", "NC-1029", "NC-1032", "NC-1033",
+		"NC-1022", "NC-1024", "NC-1025", "NC-1029", "NC-1032", "NC-1033", "NC-1045", "NC-1046", "NC-1048", "NC-1049", "NC-1050", "NC-1051",
 	}
 	if !slices.Equal(codes, want) {
 		t.Fatalf("the refused project was refused with %v; want %v", codes, want)

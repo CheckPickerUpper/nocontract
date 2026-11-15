@@ -57,15 +57,22 @@ type ShopperNotFound struct {
 func (BalanceRead) isReadOutcome()     {}
 func (ShopperNotFound) isReadOutcome() {}
 
-// ReadBalance reads one shopper's balance.
+// Ledger holds the one shopper whose balance the example shop keeps.
+type Ledger struct {
+	ShopperID int
+	Cents     int
+}
+
+// ReadBalance reads one shopper's balance, for a request the Shopper guard admitted.
 //
 //nocontract:route GET /shoppers/{shopper_id}/balance
-func ReadBalance(_ context.Context, input ReadInput) ReadOutcome {
-	if input.ShopperID != 7 {
+//nocontract:guard Shopper read-balance
+func (ledger Ledger) ReadBalance(_ context.Context, input ReadInput) ReadOutcome {
+	if input.ShopperID != ledger.ShopperID {
 		return ShopperNotFound{ShopperID: input.ShopperID}
 	}
 	return BalanceRead{
-		Balance: Money{Cents: 1250, Currency: input.Currency},
+		Balance: Money{Cents: ledger.Cents, Currency: input.Currency},
 		Changed: time.Date(2026, time.November, 14, 12, 0, 0, 0, time.UTC),
 		Note:    mo.Some("first top-up"),
 	}

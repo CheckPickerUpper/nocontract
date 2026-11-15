@@ -63,3 +63,17 @@ func (RoutesRefused) ErrorCode() ergo.Code { return "NC-1031" }
 func (StatusDirectiveMalformed) ErrorCode() ergo.Code { return "NC-1032" }
 
 func (FieldNameReserved) ErrorCode() ergo.Code { return "NC-1033" }
+
+func (GuardDirectiveMalformed) ErrorCode() ergo.Code { return "NC-1045" }
+
+func (GuardUndeclared) ErrorCode() ergo.Code { return "NC-1046" }
+
+func (GuardRepeated) ErrorCode() ergo.Code { return "NC-1047" }
+
+func (GuardMemberSucceeds) ErrorCode() ergo.Code { return "NC-1048" }
+
+func (ReceiverUnsupported) ErrorCode() ergo.Code { return "NC-1049" }
+
+func (EndpointNameRepeated) ErrorCode() ergo.Code { return "NC-1050" }
+
+func (GeneratedNameTaken) ErrorCode() ergo.Code { return "NC-1051" }
