@@ -1,0 +1,16 @@
+# Agent instructions and tool settings belong to whoever works on a checkout, not to the project.
+AGENTS.md
+CLAUDE.md
+_docs/
+.claude/
+.codex/
+agentsonrails.json
+
+# Build output and installed packages.
+/nocontract
+node_modules/
+
+# Local environment and scratch.
+.env
+.env.*
+*.local

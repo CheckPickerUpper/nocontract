@@ -1,0 +1,6 @@
+{
+  "language": "go",
+  "packages": ["./..."],
+  "typescript": "refused_api.generated.ts",
+  "api": "RefusedApi"
+}

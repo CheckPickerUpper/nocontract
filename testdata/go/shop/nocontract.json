@@ -1,0 +1,6 @@
+{
+  "language": "go",
+  "packages": ["./..."],
+  "typescript": "web/src/shop_api.generated.ts",
+  "api": "ShopApi"
+}
