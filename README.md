@@ -1,16 +1,39 @@
 # NoContract
 
-NoContract writes the TypeScript client of an HTTP backend from the backend's own code. You
-declare each route and every answer it can give in the backend; NoContract writes the code that
-serves the routes and an [Effect](https://effect.website) `HttpApi` your frontend calls them
-through. There is no API contract file to keep in step with either side.
+Your frontend's API client, generated from your backend's handlers, with every error each route
+can return. There is no OpenAPI file, and no list of responses written by hand.
 
-Each answer a route can give, failures included, is a member of a closed type in the backend.
-The served route can only answer with those members, and the TypeScript client knows each one:
-its fields, its HTTP status and, for a failure, its permanent error code. Adding, removing or
-changing an answer changes both sides on the next `generate`, and `check` fails until you run it.
+## The problem it solves
 
-NoContract reads Go backends today.
+In most setups the errors a route can return are written down twice: once in the handler, and
+once in a contract beside it. Nothing checks the two against each other. A handler that starts
+answering 409 still compiles, the client still believes the route can only fail with 404, and the
+first person to find out is a user.
+
+| Approach | Where a route's errors are listed | What keeps that list true |
+| --- | --- | --- |
+| OpenAPI file with generators (ogen, openapi-typescript) | the contract file, edited by hand | generating both sides from the file |
+| [utoipa](https://github.com/juhaku/utoipa) (Rust), [huma](https://github.com/danielgtaylor/huma) (Go) | an annotation or registration beside the handler | nothing; the list is not checked against what the handler returns |
+| NoContract | the handler's return type | the compiler |
+
+With NoContract a handler returns a closed type, and each member of that type is one answer the
+route can give. NoContract reads that type and writes both the code that serves the route and an
+[Effect](https://effect.website) `HttpApi` client for it. Add a failure to the type and it appears
+in the route's error type in TypeScript on the next `generate`; `check` fails in CI until you run
+it.
+
+## What you get
+
+- Each failure is its own tagged error in the Effect client, with its fields.
+  `Effect.catchTag("ShopperNotFound", ...)` on a route that cannot return `ShopperNotFound` is a
+  type error.
+- Every failure carries a permanent code such as `SH-1001`, declared once with
+  [ErGo](https://github.com/CheckPickerUpper/ErGo) and sent in every response. A log line or a
+  user's screenshot names the exact failure after its wording has changed.
+- The generated route code writes only the members of the handler's type, each with its declared
+  HTTP status. A route behind a guard cannot be mounted without that guard.
+- Go, Odin and Gleam backends are read into the same description and checked by the same rules,
+  so they produce the same client and the same JSON.
 
 ## Install
 
@@ -22,7 +45,7 @@ go get -tool github.com/CheckPickerUpper/nocontract/cmd/nocontract
 
 The frontend needs `effect` 4.
 
-## Declaring a route
+## Declaring a route in Go
 
 A route is a function taking a `context.Context` and an input, returning a sealed outcome. Its
 `//nocontract:route` line names the method and the path:
@@ -227,7 +250,7 @@ Two failures can answer any route. `RequestRefused` (400, `NC-1001`) is a path s
 parameter or body the input could not read, before the handler runs. `AnswerNotWritten`
 (500, `NC-1002`) is an outcome that could not be written as JSON.
 
-## Field types
+## Go field types
 
 | Go | TypeScript schema |
 | --- | --- |
