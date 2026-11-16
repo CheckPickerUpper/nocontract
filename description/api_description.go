@@ -5,12 +5,13 @@ package description
 
 import (
 	"net/http"
-	"strconv"
 	"unicode"
 	"unicode/utf8"
 
 	ergo "github.com/CheckPickerUpper/ErGo"
 	"github.com/samber/mo"
+
+	"github.com/CheckPickerUpper/nocontract/messages"
 )
 
 // API is every route a backend serves, grouped by the module of the backend that declares it, every
@@ -249,10 +250,12 @@ func (FailureStatus) isStatus() {}
 // status, a success without a body, or neither a success nor a failure.
 //
 //ergo:code NC-1052
+//ergo:message {Number} is no HTTP status a member answers with.
 type StatusUnanswerable struct{ Number int }
 
+// Error is the failure's message in the source language.
 func (unanswerable StatusUnanswerable) Error() string {
-	return strconv.Itoa(unanswerable.Number) + " is no HTTP status a member answers with"
+	return unanswerable.Report(messages.Match("")).Message
 }
 
 // ParseStatus is the success or failure status number names.

@@ -3,7 +3,7 @@ module github.com/CheckPickerUpper/nocontract
 go 1.26.5
 
 require (
-	github.com/CheckPickerUpper/ErGo v0.1.0
+	github.com/CheckPickerUpper/ErGo v0.0.0-20261115191336-da68dcb0f844
 	github.com/creachadair/atomicfile v0.4.2
 	github.com/fatih/structtag v1.2.0
 	github.com/samber/mo v1.17.0

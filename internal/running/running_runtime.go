@@ -11,6 +11,7 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/go/reading"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
+	"github.com/CheckPickerUpper/nocontract/messages"
 )
 
 // RunRuntime runs generate or check on nocontract's own runtime package, found from the current
@@ -22,21 +23,24 @@ func RunRuntime(request Request) Outcome {
 		return mo.Fold(runtimeDirectory(request.Context), func(directory string) Outcome {
 			return generatedRuntime(request.Context, directory, parsed.finish)
 		}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
-	case UsageRefused:
-		return parsed
+	case verbRefused:
+		return UsageRefused{Problem: parsed.problem, Usage: runtimeUsage}
 	case nil:
 	}
-	return UsageRefused{Problem: NoCommand{}}
+	return UsageRefused{Problem: NoCommand{}, Usage: runtimeUsage}
 }
+
+// runtimeUsage is how the runtime-answers command is run.
+const runtimeUsage = "runtime-answers generate|check"
 
 // RuntimeNotFound is a module whose packages do not include nocontract's runtime package.
 //
 //ergo:code NC-1058
+//ergo:message The current folder's module does not hold NoContract's runtime package.
 type RuntimeNotFound struct{}
 
-func (RuntimeNotFound) Error() string {
-	return "the current folder's module does not hold " + serverplan.NoContractPath
-}
+// Error is the failure's message in the source language.
+func (missing RuntimeNotFound) Error() string { return missing.Report(messages.Match("")).Message }
 
 // runtimeDirectory is the folder holding the runtime package's files.
 func runtimeDirectory(ctx context.Context) mo.Result[string] {

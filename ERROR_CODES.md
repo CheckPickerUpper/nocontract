@@ -9,6 +9,8 @@ not read. Every route that reads its request can answer it, before its handler r
 
 Declared in `go/shared_failures.go`.
 
+Message: `The request's {Part} {Name} could not be read: {Reason}`
+
 | Field | Type |
 | --- | --- |
 | `Part` | `nocontract.RequestPart` |
@@ -22,6 +24,8 @@ outcome at all. Every route can answer it.
 
 Declared in `go/shared_failures.go`.
 
+Message: `The route could not write its answer: {Reason}`
+
 | Field | Type |
 | --- | --- |
 | `Answer` | `string` |
@@ -34,6 +38,8 @@ tag.
 
 Declared in `go/answers.go`.
 
+Message: `The answer {Tag} is not written as a JSON object.`
+
 | Field | Type |
 | --- | --- |
 | `Tag` | `string` |
@@ -44,6 +50,8 @@ RouteDirectiveMalformed is a //nocontract:route line that is not a method and a 
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The route directive "{Text}" is not a method (GET, POST, PUT, PATCH or DELETE) and a path starting with /.`
+
 | Field | Type |
 | --- | --- |
 | `Text` | `string` |
@@ -53,6 +61,8 @@ Declared in `go/reading/refusals.go`.
 HandlerSignatureUnsupported is a route handler that is not func(context.Context, Input) Outcome.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The handler {Handler} is not a func(context.Context, Input) Outcome: {Flaw, select, NotAFunction {it is not a function} TypeParametersDeclared {it has type parameters, so it has no single input or outcome} WrongShape {it does not take a context and an input and return one outcome} ContextMissing {its first parameter is not a context.Context} PointerReceiver {its receiver is a pointer; give the method a value receiver}}.`
 
 | Field | Type |
 | --- | --- |
@@ -65,6 +75,8 @@ OutcomeNotNamedInterface is a route whose outcome type is not a named interface.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The route's outcome {Type} is not a named interface.`
+
 | Field | Type |
 | --- | --- |
 | `Type` | `string` |
@@ -74,6 +86,8 @@ Declared in `go/reading/refusals.go`.
 OutcomeNotSealed is an outcome interface without //sumtype:decl and an unexported method.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The outcome {Outcome} is not sealed: mark it //sumtype:decl and give it an unexported method.`
 
 | Field | Type |
 | --- | --- |
@@ -85,6 +99,8 @@ DeclarationOutsideProject is a type declared in a package the project file does 
 
 Declared in `go/reading/refusals.go`.
 
+Message: `{Type} is declared in a package the project file does not list.`
+
 | Field | Type |
 | --- | --- |
 | `Type` | `string` |
@@ -94,6 +110,8 @@ Declared in `go/reading/refusals.go`.
 PointerMember is a type whose pointer, not the type itself, implements an outcome.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `Only *{Member} implements the outcome; give its methods value receivers.`
 
 | Field | Type |
 | --- | --- |
@@ -105,6 +123,8 @@ MemberNotStruct is an outcome member that is not a struct.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The outcome member {Member} is not a struct.`
+
 | Field | Type |
 | --- | --- |
 | `Member` | `string` |
@@ -114,6 +134,8 @@ Declared in `go/reading/refusals.go`.
 GenericMember is an outcome member or named struct with type parameters.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `{Member} has type parameters, so it has no single name on the wire.`
 
 | Field | Type |
 | --- | --- |
@@ -125,10 +147,12 @@ FailureWithoutCode is a member answered with a failure status but no //ergo:code
 
 Declared in `go/reading/refusals.go`.
 
+Message: `{Member} answers {Status}, a failure, but carries no //ergo:code.`
+
 | Field | Type |
 | --- | --- |
 | `Member` | `string` |
-| `Status` | `description.FailureStatus` |
+| `Status` | `int` |
 
 ## NC-1013 SuccessWithCode
 
@@ -136,16 +160,20 @@ SuccessWithCode is a member answered with a success status but marked //ergo:cod
 
 Declared in `go/reading/refusals.go`.
 
+Message: `{Member} answers {Status}, a success, but is marked //ergo:code; mark it //ergo:not-an-error.`
+
 | Field | Type |
 | --- | --- |
 | `Member` | `string` |
-| `Status` | `description.SuccessStatus` |
+| `Status` | `int` |
 
 ## NC-1014 MemberUndecided
 
 MemberUndecided is a member without exactly one ErGo decision.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `{Member} needs exactly one of //ergo:code and //ergo:not-an-error.`
 
 | Field | Type |
 | --- | --- |
@@ -156,6 +184,8 @@ Declared in `go/reading/refusals.go`.
 FieldOptionUnsupported is a JSON field whose tag carries an option, such as omitempty.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The field {Field} carries the JSON option "{Option}"; a value that may be absent is a mo.Option.`
 
 | Field | Type |
 | --- | --- |
@@ -168,6 +198,8 @@ EmbeddedFieldUnsupported is an embedded field, which has no single JSON name.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The embedded field {Field} has no single JSON name; give it a named field.`
+
 | Field | Type |
 | --- | --- |
 | `Field` | `string` |
@@ -178,6 +210,8 @@ TypeUnsupported is a field type with no JSON shape the Effect API can declare.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The type {Type} cannot be declared on the wire: {Flaw, select, ByteSliceField {encoding/json writes a byte slice as base64 text} MapKeyNotText {only a map with string keys is a JSON object} PointerField {a pointer may be nil; a value that may be absent is a mo.Option} InterfaceField {an interface has no single JSON shape} ShapelessField {encoding/json cannot write it}}.`
+
 | Field | Type |
 | --- | --- |
 | `Type` | `string` |
@@ -185,20 +219,25 @@ Declared in `go/reading/refusals.go`.
 
 ## NC-1018 NameRepeated
 
-NameRepeated is a name two declarations would both take in the TypeScript file.
+NameRepeated is a name two declarations would both take in the TypeScript file, and where the
+first takes it.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The name {Name} is already taken by {First}.`
 
 | Field | Type |
 | --- | --- |
 | `Name` | `string` |
-| `First` | `token.Position` |
+| `First` | `string` |
 
 ## NC-1019 RecursiveStruct
 
 RecursiveStruct is a named struct that holds itself.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The struct {Struct} holds itself.`
 
 | Field | Type |
 | --- | --- |
@@ -210,6 +249,8 @@ InputNotStruct is a route input that is not a named struct.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The route input {Input} is not a named struct.`
+
 | Field | Type |
 | --- | --- |
 | `Input` | `string` |
@@ -219,6 +260,8 @@ Declared in `go/reading/refusals.go`.
 InputFieldUnread is an input field with no path or query tag that is not named Body.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The input field {Field} has no path or query tag and is not named Body.`
 
 | Field | Type |
 | --- | --- |
@@ -230,6 +273,8 @@ PathParameterUndeclared is a path segment no input field reads.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `No input field reads the path segment named {Parameter}.`
+
 | Field | Type |
 | --- | --- |
 | `Parameter` | `string` |
@@ -239,6 +284,8 @@ Declared in `go/reading/refusals.go`.
 PathFieldUnused is an input field reading a path segment the path does not have.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `An input field reads the path segment named {Parameter}, which the path does not have.`
 
 | Field | Type |
 | --- | --- |
@@ -250,6 +297,8 @@ PathWildcardUnsupported is a path holding a {name...} or {$} segment.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The path segment {Segment} has no Effect HttpApi form.`
+
 | Field | Type |
 | --- | --- |
 | `Segment` | `string` |
@@ -260,16 +309,20 @@ BodyOnGet is a GET route whose input reads a body.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `A GET route's input reads a body, which a GET request does not carry.`
+
 ## NC-1026 RouteRepeated
 
-RouteRepeated is a method and path two routes both serve.
+RouteRepeated is a method and path two routes both serve, and where the first serves it.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `{Pattern} is already served by the route at {First}.`
 
 | Field | Type |
 | --- | --- |
 | `Pattern` | `string` |
-| `First` | `token.Position` |
+| `First` | `string` |
 
 ## NC-1027 TypeNotReachable
 
@@ -277,6 +330,8 @@ TypeNotReachable is an unexported type declared in a package other than the rout
 route's generated code cannot name.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `{Type} is unexported and declared in another package, so the route's generated code cannot name it.`
 
 | Field | Type |
 | --- | --- |
@@ -288,6 +343,8 @@ OutcomeWithoutSuccess is an outcome with no member answered with a success statu
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The outcome {Outcome} has no member answered with a success status.`
+
 | Field | Type |
 | --- | --- |
 | `Outcome` | `string` |
@@ -297,6 +354,8 @@ Declared in `go/reading/refusals.go`.
 StatusDirectiveMissing is an outcome member without a //nocontract:status line.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The outcome member {Member} has no //nocontract:status line.`
 
 | Field | Type |
 | --- | --- |
@@ -309,6 +368,8 @@ boolean or a set of string constants.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The path or query field {Field} is a {Type}, not text, a whole number, a boolean or a set of string constants.`
+
 | Field | Type |
 | --- | --- |
 | `Field` | `string` |
@@ -319,6 +380,8 @@ Declared in `go/reading/refusals.go`.
 RoutesRefused is every declaration that could not be read, in source order.
 
 Declared in `go/reading/reading_routes.go`.
+
+Message: `The project's route declarations were refused.`
 
 | Field | Type |
 | --- | --- |
@@ -331,6 +394,8 @@ member with more than one.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The status "{Text}" of {Member} is not one known HTTP status, written once.`
+
 | Field | Type |
 | --- | --- |
 | `Member` | `string` |
@@ -342,6 +407,8 @@ FieldNameReserved is a member field whose JSON name is one every answer starts w
 
 Declared in `go/reading/refusals.go`.
 
+Message: `The JSON name "{Field}" is taken by the tag and code every answer starts with.`
+
 | Field | Type |
 | --- | --- |
 | `Field` | `string` |
@@ -351,6 +418,8 @@ Declared in `go/reading/refusals.go`.
 FilesStale is a check that found the listed files differing from what generate writes.
 
 Declared in `internal/running/running_command.go`.
+
+Message: `These files differ from what nocontract generate writes; run it again:`
 
 | Field | Type |
 | --- | --- |
@@ -362,25 +431,33 @@ DeclarationsRefused is a run that refused declarations, listed in source order.
 
 Declared in `internal/running/running_command.go`.
 
+Message: `NoContract refused these declarations:`
+
 | Field | Type |
 | --- | --- |
 | `Refusals` | `[]reading.Refusal` |
 
 ## NC-1036 UsageRefused
 
-UsageRefused is a run whose arguments name no command it runs, and the problem with them.
+UsageRefused is a run whose arguments name no command it runs: the problem with them, and how
+the command is run.
 
 Declared in `internal/running/running_command.go`.
+
+Message: `The command could not run: {Problem}.`
 
 | Field | Type |
 | --- | --- |
 | `Problem` | `running.UsageProblem` |
+| `Usage` | `string` |
 
 ## NC-1037 ProjectUnreadable
 
 ProjectUnreadable is a project file that could not be read or holds no usable project, with why.
 
 Declared in `internal/running/running_command.go`.
+
+Message: `The project file {Path} could not be used.`
 
 | Field | Type |
 | --- | --- |
@@ -393,6 +470,8 @@ PackagesNotLoaded is a project whose packages holding routes Go could not load a
 
 Declared in `internal/running/running_command.go`.
 
+Message: `Go could not load the packages holding routes.`
+
 | Field | Type |
 | --- | --- |
 | `Errors` | `[]error` |
@@ -402,6 +481,8 @@ Declared in `internal/running/running_command.go`.
 FileNotWritten is a generate that could not write or delete one file.
 
 Declared in `internal/running/running_command.go`.
+
+Message: `The file {Path} could not be written.`
 
 | Field | Type |
 | --- | --- |
@@ -414,11 +495,23 @@ PackagesMissing is a project file naming no package patterns.
 
 Declared in `internal/running/running_command.go`.
 
+Message: `The project file names no packages.`
+
+## NC-1042 NoCommand
+
+NoCommand is a run given no arguments.
+
+Declared in `internal/running/running_command.go`.
+
+Message: `no command was given`
+
 ## NC-1043 LiteralUnknown
 
 LiteralUnknown is text that is none of the values its field accepts.
 
 Declared in `go/request_reading.go`.
+
+Message: `"{Text}" is not one of the values this field accepts.`
 
 | Field | Type |
 | --- | --- |
@@ -431,12 +524,16 @@ BodyNotSingle is a body holding more than one JSON value.
 
 Declared in `go/request_reading.go`.
 
+Message: `The body holds more than one JSON value.`
+
 ## NC-1045 GuardDirectiveMalformed
 
 GuardDirectiveMalformed is a //nocontract:guard line on a handler that is not a guard name and
 one argument, or a handler with more than one.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The guard directive "{Text}" is not one guard name and one argument.`
 
 | Field | Type |
 | --- | --- |
@@ -448,20 +545,24 @@ GuardUndeclared is a route naming a guard no sealed refusal of the project decla
 
 Declared in `go/reading/refusals.go`.
 
+Message: `No sealed refusal marked //nocontract:guard {Guard} is declared in the project's packages.`
+
 | Field | Type |
 | --- | --- |
 | `Guard` | `string` |
 
 ## NC-1047 GuardRepeated
 
-GuardRepeated is a guard name two refusal types both declare.
+GuardRepeated is a guard name two refusal types both declare, and where the first declares it.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The guard {Guard} is already declared at {First}.`
 
 | Field | Type |
 | --- | --- |
 | `Guard` | `string` |
-| `First` | `token.Position` |
+| `First` | `string` |
 
 ## NC-1048 GuardMemberSucceeds
 
@@ -469,16 +570,20 @@ GuardMemberSucceeds is a member of a guard's refusal answered with a success sta
 
 Declared in `go/reading/refusals.go`.
 
+Message: `{Member} answers {Status}, a success, but a guard's refusal holds only failures.`
+
 | Field | Type |
 | --- | --- |
 | `Member` | `string` |
-| `Status` | `description.SuccessStatus` |
+| `Status` | `int` |
 
 ## NC-1049 ReceiverUnsupported
 
 ReceiverUnsupported is a method handler whose receiver type the routes cannot be served with.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The routes cannot be served with the receiver {Receiver}: {Flaw, select, ReceiverElsewhere {its type is declared in another package} ReceiverUnexported {its type is unexported, so code mounting the routes cannot name it}}.`
 
 | Field | Type |
 | --- | --- |
@@ -487,14 +592,17 @@ Declared in `go/reading/refusals.go`.
 
 ## NC-1050 EndpointNameRepeated
 
-EndpointNameRepeated is a handler name two routes of one package both use.
+EndpointNameRepeated is a handler name two routes of one package both use, and where the first
+uses it.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The endpoint name {Name} is already taken in this package, at {First}.`
 
 | Field | Type |
 | --- | --- |
 | `Name` | `string` |
-| `First` | `token.Position` |
+| `First` | `string` |
 
 ## NC-1051 GeneratedNameTaken
 
@@ -502,6 +610,8 @@ GeneratedNameTaken is a name the package's generated file declares, already decl
 package or by another field of what its routes are served with.
 
 Declared in `go/reading/refusals.go`.
+
+Message: `The generated file declares {Name}, which the package already uses.`
 
 | Field | Type |
 | --- | --- |
@@ -514,6 +624,8 @@ status, a success without a body, or neither a success nor a failure.
 
 Declared in `description/api_description.go`.
 
+Message: `{Number} is no HTTP status a member answers with.`
+
 | Field | Type |
 | --- | --- |
 | `Number` | `int` |
@@ -524,17 +636,23 @@ TypeScriptMissing is a project file naming no TypeScript file to write.
 
 Declared in `internal/running/running_command.go`.
 
+Message: `The project file names no typescript file.`
+
 ## NC-1054 APINameMissing
 
 APINameMissing is a project file naming no API class.
 
 Declared in `internal/running/running_command.go`.
 
+Message: `The project file names no api.`
+
 ## NC-1055 LanguageUnknown
 
 LanguageUnknown is a project file naming a language NoContract reads no backend in.
 
 Declared in `internal/running/running_command.go`.
+
+Message: `The project file names the language "{Language}"; NoContract reads go.`
 
 | Field | Type |
 | --- | --- |
@@ -547,6 +665,8 @@ misspelled one, which would otherwise be ignored.
 
 Declared in `go/reading/refusals.go`.
 
+Message: `"{Text}" names no directive NoContract reads: route, status or guard.`
+
 | Field | Type |
 | --- | --- |
 | `Text` | `string` |
@@ -558,6 +678,8 @@ source order.
 
 Declared in `go/reading/reading_runtime.go`.
 
+Message: `The runtime's shared failures were refused.`
+
 | Field | Type |
 | --- | --- |
 | `Refusals` | `[]reading.Refusal` |
@@ -567,3 +689,41 @@ Declared in `go/reading/reading_runtime.go`.
 RuntimeNotFound is a module whose packages do not include nocontract's runtime package.
 
 Declared in `internal/running/running_runtime.go`.
+
+Message: `The current folder's module does not hold NoContract's runtime package.`
+
+## NC-1059 UnknownCommand
+
+UnknownCommand is a run naming a command NoContract does not run.
+
+Declared in `internal/running/running_command.go`.
+
+Message: `{Name} is not a command it runs`
+
+| Field | Type |
+| --- | --- |
+| `Name` | `string` |
+
+## NC-1060 ExtraArguments
+
+ExtraArguments is a run given arguments after its flags.
+
+Declared in `internal/running/running_command.go`.
+
+Message: `it was given arguments after its flags`
+
+| Field | Type |
+| --- | --- |
+| `Arguments` | `[]string` |
+
+## NC-1061 FlagsUnread
+
+FlagsUnread is a run whose flags the flag package refused, with its error.
+
+Declared in `internal/running/running_command.go`.
+
+Message: `its flags could not be parsed`
+
+| Field | Type |
+| --- | --- |
+| `Cause` | `error` |

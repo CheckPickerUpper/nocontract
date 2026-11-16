@@ -1,11 +1,13 @@
-github.com/CheckPickerUpper/ErGo v0.1.0 h1:AKYTi6IHzbzac7/FbpK2x7aCo4L0/03NCKDUG9e79LM=
-github.com/CheckPickerUpper/ErGo v0.1.0/go.mod h1:MNmZh2bLsuM/QBkttyR0hae7NTtyFOQdWYEb7jR86jg=
+github.com/CheckPickerUpper/ErGo v0.0.0-20261115191336-da68dcb0f844 h1:Q4b1IYzePeNWXVlLE2hV7eSPcwHbbzO9FCNR9wEfuko=
+github.com/CheckPickerUpper/ErGo v0.0.0-20261115191336-da68dcb0f844/go.mod h1:MNmZh2bLsuM/QBkttyR0hae7NTtyFOQdWYEb7jR86jg=
 github.com/creachadair/atomicfile v0.4.2 h1:pSSsKxmUefqCTg+QgyCG2bw1KmsB76apBL4lhJjichI=
 github.com/creachadair/atomicfile v0.4.2/go.mod h1:ts9VunJluQvSXtkrl0YlDn9ckZaS+eMkBW2g20gB5II=
 github.com/creachadair/mds v0.29.2 h1:1IBhfyolZUCA53twI1hXembOdpIe4bJ4OGJELBbGrN4=
 github.com/creachadair/mds v0.29.2/go.mod h1:dMBTCSy3iS3dwh4Rb1zxeZz2d7K8+N24GCTsayWtQRI=
 github.com/fatih/structtag v1.2.0 h1:/OdNE99OxoI/PqaW/SuSK9uxxT3f/tcSZgon/ssNSx4=
 github.com/fatih/structtag v1.2.0/go.mod h1:mBJUNpUnHmRKrKlQQlmCrh5PuhftFbNv8Ys4/aAZl94=
+github.com/go-json-experiment/json v1.27.2 h1:rZIyqYh+Qq+nEa+Y5iwohr8h7G/MfLJqu2CD4/ZONqM=
+github.com/go-json-experiment/json v1.27.2/go.mod h1:tphK2c80bpPhMOI4v6bIc2xWywPfbqi1Z06+RcrMkDg=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/samber/mo v1.17.0 h1:EbeLc7nxIdpalstxQQakLOcXxULuMRqo7PJPtY18bQg=

@@ -228,7 +228,7 @@ func answerOf(index projectIndex, member declaredType, status description.Status
 		case declarations.NotAnError:
 			return readAs[description.Answer](description.Succeeds{Status: read}, nothingFound())
 		case declarations.Coded:
-			return refused(SuccessWithCode{Member: name, Status: read})
+			return refused(SuccessWithCode{Member: name, Status: read.Code()})
 		case declarations.Undecided, declarations.MarkedBoth, declarations.RepeatedCode, nil:
 		}
 	case description.FailureStatus:
@@ -236,7 +236,7 @@ func answerOf(index projectIndex, member declaredType, status description.Status
 		case declarations.Coded:
 			return readAs[description.Answer](description.Fails{Status: read, Code: ergo.Code(decided.Directive.Text)}, nothingFound())
 		case declarations.NotAnError:
-			return refused(FailureWithoutCode{Member: name, Status: read})
+			return refused(FailureWithoutCode{Member: name, Status: read.Code()})
 		case declarations.Undecided, declarations.MarkedBoth, declarations.RepeatedCode, nil:
 		}
 	case nil:

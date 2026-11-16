@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"go/token"
@@ -28,6 +27,7 @@ import (
 	"github.com/CheckPickerUpper/nocontract/go/reading"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 	"github.com/CheckPickerUpper/nocontract/go/writing"
+	"github.com/CheckPickerUpper/nocontract/messages"
 )
 
 // DefaultProjectFile is the project file read when -project names none.
@@ -84,7 +84,7 @@ func parseBackend(language string) mo.Option[Backend] {
 type Outcome interface {
 	isOutcome()
 	ExitCode() int
-	Report() string
+	Lines() []string
 }
 
 // FilesWritten is a generate that wrote or deleted the files it lists.
@@ -100,44 +100,52 @@ type FilesCurrent struct{ Paths []string }
 // FilesStale is a check that found the listed files differing from what generate writes.
 //
 //ergo:code NC-1034
+//ergo:message These files differ from what nocontract generate writes; run it again:
 type FilesStale struct{ Paths []string }
 
 // DeclarationsRefused is a run that refused declarations, listed in source order.
 //
 //ergo:code NC-1035
+//ergo:message NoContract refused these declarations:
 type DeclarationsRefused struct{ Refusals []reading.Refusal }
 
-// UsageRefused is a run whose arguments name no command it runs, and the problem with them.
+// UsageRefused is a run whose arguments name no command it runs: the problem with them, and how
+// the command is run.
 //
 //ergo:code NC-1036
-type UsageRefused struct{ Problem UsageProblem }
+//ergo:message The command could not run: {Problem}.
+type UsageRefused struct {
+	Problem UsageProblem
+	Usage   string
+}
 
 // UsageProblem is what is wrong with a run's arguments.
 //
 //sumtype:decl
-type UsageProblem interface {
-	isUsageProblem()
-	explain() string
-}
+type UsageProblem interface{ isUsageProblem() }
 
 // NoCommand is a run given no arguments.
 //
-//ergo:not-an-error
+//ergo:code NC-1042
+//ergo:message no command was given
 type NoCommand struct{}
 
 // UnknownCommand is a run naming a command NoContract does not run.
 //
-//ergo:not-an-error
+//ergo:code NC-1059
+//ergo:message {Name} is not a command it runs
 type UnknownCommand struct{ Name string }
 
 // ExtraArguments is a run given arguments after its flags.
 //
-//ergo:not-an-error
+//ergo:code NC-1060
+//ergo:message it was given arguments after its flags
 type ExtraArguments struct{ Arguments []string }
 
 // FlagsUnread is a run whose flags the flag package refused, with its error.
 //
-//ergo:not-an-error
+//ergo:code NC-1061
+//ergo:message its flags could not be parsed
 type FlagsUnread struct{ Cause error }
 
 func (NoCommand) isUsageProblem()      {}
@@ -145,25 +153,10 @@ func (UnknownCommand) isUsageProblem() {}
 func (ExtraArguments) isUsageProblem() {}
 func (FlagsUnread) isUsageProblem()    {}
 
-func (NoCommand) explain() string {
-	return "no command was given"
-}
-
-func (unknown UnknownCommand) explain() string {
-	return "unknown command " + unknown.Name
-}
-
-func (extra ExtraArguments) explain() string {
-	return "unexpected arguments: " + strings.Join(extra.Arguments, " ")
-}
-
-func (unread FlagsUnread) explain() string {
-	return unread.Cause.Error()
-}
-
 // ProjectUnreadable is a project file that could not be read or holds no usable project, with why.
 //
 //ergo:code NC-1037
+//ergo:message The project file {Path} could not be used.
 type ProjectUnreadable struct {
 	Path  string
 	Cause error
@@ -172,11 +165,13 @@ type ProjectUnreadable struct {
 // PackagesNotLoaded is a project whose packages holding routes Go could not load and type-check.
 //
 //ergo:code NC-1038
+//ergo:message Go could not load the packages holding routes.
 type PackagesNotLoaded struct{ Errors []error }
 
 // FileNotWritten is a generate that could not write or delete one file.
 //
 //ergo:code NC-1039
+//ergo:message The file {Path} could not be written.
 type FileNotWritten struct {
 	Path  string
 	Cause error
@@ -215,62 +210,76 @@ func (PackagesNotLoaded) ExitCode() int { return 2 }
 // ExitCode is 2: the run could not write its result.
 func (FileNotWritten) ExitCode() int { return 2 }
 
-// Report lists the files written or deleted.
-func (written FilesWritten) Report() string {
-	return "wrote " + strings.Join(written.Paths, "\nwrote ")
-}
-
-// Report lists the current files.
-func (current FilesCurrent) Report() string {
-	return strings.Join(current.Paths, " is current\n") + " is current"
-}
-
-// Report lists the stale files and how to refresh them.
-func (stale FilesStale) Report() string {
-	return codeOf(stale) + " these files differ from what nocontract generate writes; run it again:\n" + strings.Join(stale.Paths, "\n")
-}
-
-// Report lists each refusal with its place and code.
-func (refused DeclarationsRefused) Report() string {
+// Lines lists the files written or deleted.
+func (written FilesWritten) Lines() []string {
 	lines := []string{}
+	for _, path := range written.Paths {
+		lines = append(lines, "wrote "+path)
+	}
+	return lines
+}
+
+// Lines lists the current files.
+func (current FilesCurrent) Lines() []string {
+	lines := []string{}
+	for _, path := range current.Paths {
+		lines = append(lines, path+" is current")
+	}
+	return lines
+}
+
+// Lines is the failure, then each stale file.
+func (stale FilesStale) Lines() []string {
+	return append(described(stale), stale.Paths...)
+}
+
+// Lines is the failure, then each refusal with where it is written, its code and its message.
+func (refused DeclarationsRefused) Lines() []string {
+	lines := described(refused)
 	for _, refusal := range refused.Refusals {
-		lines = append(lines, fmt.Sprintf("%s: %s %s", refusal.Position, problemCode(refusal.Problem), refusal.Problem.Explain()))
+		// described's first line is always the code and message; the rest are causes.
+		problem := described(refusal.Problem)
+		lines = append(append(lines, refusal.Position.String()+": "+problem[0]), problem[1:]...)
 	}
-	return strings.Join(lines, "\n")
+	return lines
 }
 
-// Report says how to run the command.
-func (refused UsageRefused) Report() string {
-	return codeOf(refused) + " " + refused.Problem.explain() + "\nusage: nocontract generate|check [-project " + DefaultProjectFile + "]"
+// Lines is the failure, then how the command is run.
+func (refused UsageRefused) Lines() []string {
+	return append(described(refused), "usage: "+refused.Usage)
 }
 
-// Report names the project file and why it is unusable.
-func (unreadable ProjectUnreadable) Report() string {
-	return codeOf(unreadable) + " " + unreadable.Path + ": " + unreadable.Cause.Error()
+// Lines is the failure and its cause.
+func (unreadable ProjectUnreadable) Lines() []string { return described(unreadable) }
+
+// Lines is the failure and what Go reported.
+func (failed PackagesNotLoaded) Lines() []string { return described(failed) }
+
+// Lines is the failure and its cause.
+func (failed FileNotWritten) Lines() []string { return described(failed) }
+
+// describedFailure is a failure with the methods ErGo generates for it.
+type describedFailure interface {
+	ErrorCode() ergo.Code
+	Report(language messages.Language) ergo.Report
+	Causes() []error
 }
 
-// Report lists what Go could not load.
-func (failed PackagesNotLoaded) Report() string {
-	return codeOf(failed) + " the packages holding routes did not load:\n" + errors.Join(failed.Errors...).Error()
-}
-
-// Report names the file and why it was not written.
-func (failed FileNotWritten) Report() string {
-	return codeOf(failed) + " " + failed.Path + " was not written: " + failed.Cause.Error()
-}
-
-func codeOf(failure ergo.Failure) string { return failure.ErrorCode().String() }
-
-func problemCode(problem reading.Problem) string {
-	if coded, isCoded := problem.(ergo.Failure); isCoded {
-		return coded.ErrorCode().String()
+// described is a failure as ErGo's own command prints one: its code and its message in the source
+// language, then one cause line for each line of each Go error it holds.
+func described(failure describedFailure) []string {
+	lines := []string{failure.ErrorCode().String() + " " + failure.Report(messages.Match("")).Message}
+	for _, cause := range failure.Causes() {
+		for line := range strings.SplitSeq(cause.Error(), "\n") {
+			lines = append(lines, "  cause: "+line)
+		}
 	}
-	return ""
+	return lines
 }
 
-// Print writes the outcome's report to stream, with a closing newline.
+// Print writes the outcome's lines to stream, each with a closing newline.
 func Print(outcome Outcome, stream io.Writer) mo.Result[int] {
-	return mo.TupleToResult(fmt.Fprintln(stream, outcome.Report()))
+	return mo.TupleToResult(fmt.Fprintln(stream, strings.Join(outcome.Lines(), "\n")))
 }
 
 // Finish reports a command's outcome, to standard output when it succeeded and standard error when
@@ -313,19 +322,24 @@ type verbParse interface{ isVerbParse() }
 //ergo:not-an-error
 type verbRead struct{ finish finisher }
 
-func (verbRead) isVerbParse()     {}
-func (UsageRefused) isVerbParse() {}
+// verbRefused is a command line that names nothing to run, and what is wrong with it.
+//
+//ergo:not-an-error
+type verbRefused struct{ problem UsageProblem }
+
+func (verbRead) isVerbParse()    {}
+func (verbRefused) isVerbParse() {}
 
 // parseVerb reads the first argument as generate or check and the rest as the flags declared on
 // flags, which the caller reads once the line is read.
 func parseVerb(arguments []string, flags *flag.FlagSet) verbParse {
 	if len(arguments) == 0 {
-		return UsageRefused{Problem: NoCommand{}}
+		return verbRefused{problem: NoCommand{}}
 	}
 	flags.SetOutput(io.Discard)
 	return mo.Fold(mo.TupleToResult(struct{}{}, flags.Parse(arguments[1:])), func(struct{}) verbParse {
 		if flags.NArg() > 0 {
-			return UsageRefused{Problem: ExtraArguments{Arguments: flags.Args()}}
+			return verbRefused{problem: ExtraArguments{Arguments: flags.Args()}}
 		}
 		switch arguments[0] {
 		case "generate":
@@ -333,9 +347,12 @@ func parseVerb(arguments []string, flags *flag.FlagSet) verbParse {
 		case "check":
 			return verbRead{finish: compareFiles}
 		}
-		return UsageRefused{Problem: UnknownCommand{Name: arguments[0]}}
-	}, func(cause error) verbParse { return UsageRefused{Problem: FlagsUnread{Cause: cause}} })
+		return verbRefused{problem: UnknownCommand{Name: arguments[0]}}
+	}, func(cause error) verbParse { return verbRefused{problem: FlagsUnread{Cause: cause}} })
 }
+
+// commandUsage is how the nocontract command is run.
+const commandUsage = "nocontract generate|check [-project " + DefaultProjectFile + "]"
 
 func parseCommand(arguments []string) command {
 	flags := flag.NewFlagSet("nocontract", flag.ContinueOnError)
@@ -343,11 +360,11 @@ func parseCommand(arguments []string) command {
 	switch parsed := parseVerb(arguments, flags).(type) {
 	case verbRead:
 		return projectRun{projectFile: *projectFile, finish: parsed.finish}
-	case UsageRefused:
-		return parsed
+	case verbRefused:
+		return UsageRefused{Problem: parsed.problem, Usage: commandUsage}
 	case nil:
 	}
-	return UsageRefused{Problem: NoCommand{}}
+	return UsageRefused{Problem: NoCommand{}, Usage: commandUsage}
 }
 
 // Run runs the command the arguments name.
@@ -359,7 +376,7 @@ func Run(request Request) Outcome {
 		return parsed
 	case nil:
 	}
-	return UsageRefused{Problem: NoCommand{}}
+	return UsageRefused{Problem: NoCommand{}, Usage: commandUsage}
 }
 
 // absolute runs next on the project file's absolute path, so every file the run names, found by
@@ -445,32 +462,38 @@ func goFiles(served []serverplan.Package) mo.Result[[]generatedFile] {
 // PackagesMissing is a project file naming no package patterns.
 //
 //ergo:code NC-1040
+//ergo:message The project file names no packages.
 type PackagesMissing struct{}
 
-func (PackagesMissing) Error() string { return "the project file names no packages" }
+// Error is the failure's message in the source language.
+func (missing PackagesMissing) Error() string { return missing.Report(messages.Match("")).Message }
 
 // TypeScriptMissing is a project file naming no TypeScript file to write.
 //
 //ergo:code NC-1053
+//ergo:message The project file names no typescript file.
 type TypeScriptMissing struct{}
 
-func (TypeScriptMissing) Error() string { return "the project file names no typescript file" }
+// Error is the failure's message in the source language.
+func (missing TypeScriptMissing) Error() string { return missing.Report(messages.Match("")).Message }
 
 // APINameMissing is a project file naming no API class.
 //
 //ergo:code NC-1054
+//ergo:message The project file names no api.
 type APINameMissing struct{}
 
-func (APINameMissing) Error() string { return "the project file names no api" }
+// Error is the failure's message in the source language.
+func (missing APINameMissing) Error() string { return missing.Report(messages.Match("")).Message }
 
 // LanguageUnknown is a project file naming a language NoContract reads no backend in.
 //
 //ergo:code NC-1055
+//ergo:message The project file names the language "{Language}"; NoContract reads go.
 type LanguageUnknown struct{ Language string }
 
-func (unknown LanguageUnknown) Error() string {
-	return fmt.Sprintf("the project file names the language %q; NoContract reads go", unknown.Language)
-}
+// Error is the failure's message in the source language.
+func (unknown LanguageUnknown) Error() string { return unknown.Report(messages.Match("")).Message }
 
 func readProject(projectFile string) mo.Result[Project] {
 	return mo.Fold(mo.TupleToResult(os.ReadFile(projectFile)), func(content []byte) mo.Result[Project] {

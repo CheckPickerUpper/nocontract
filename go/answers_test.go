@@ -31,7 +31,7 @@ func TestAnAnswerIsOneObjectOfItsTagCodeAndFields(t *testing.T) {
 		},
 		{
 			answer: Succeeded(Success{Status: http.StatusOK, Tag: "Listed", Fields: mo.Ok([]byte(`[1,2]`))}), status: http.StatusInternalServerError,
-			body: `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"Listed","reason":"nocontract: the answer Listed is not written as a JSON object"}`,
+			body: `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"Listed","reason":"The answer Listed is not written as a JSON object."}`,
 		},
 		{answer: NoOutcome(), status: http.StatusInternalServerError, body: `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"","reason":"the route answered no outcome"}`},
 	} {

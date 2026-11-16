@@ -103,7 +103,7 @@ func repeatedPatterns(index projectIndex, entries []routeEntry) found {
 	for _, entry := range entries {
 		pattern := entry.route.Method.Name() + " " + entry.route.Path
 		if served, taken := first[pattern]; taken {
-			finding = finding.with(index.refused(entry.position, RouteRepeated{Pattern: pattern, First: served}))
+			finding = finding.with(index.refused(entry.position, RouteRepeated{Pattern: pattern, First: served.String()}))
 			continue
 		}
 		first[pattern] = index.position(entry.position)
@@ -159,7 +159,7 @@ func packageChecks(index projectIndex, group packageRoutes) found {
 	finding, endpoints, fields := nothingFound(), map[string]token.Position{}, map[string]servingField{}
 	for _, entry := range group.entries {
 		if first, taken := endpoints[entry.endpoint.Name]; taken {
-			finding = finding.with(index.refused(entry.position, EndpointNameRepeated{Name: entry.endpoint.Name, First: first}))
+			finding = finding.with(index.refused(entry.position, EndpointNameRepeated{Name: entry.endpoint.Name, First: first.String()}))
 		}
 		endpoints[entry.endpoint.Name] = index.position(entry.position)
 		for _, field := range servingFieldsOf(entry.route) {
@@ -216,7 +216,7 @@ func repeatedNames(index projectIndex, finding found, groups []packageRoutes) fo
 		case !isTaken:
 			first[claim.name] = claim
 		case taken.owner != claim.owner:
-			refused = refused.with(refusedAt(claim.position, NameRepeated{Name: claim.name, First: taken.position}))
+			refused = refused.with(refusedAt(claim.position, NameRepeated{Name: claim.name, First: taken.position.String()}))
 		}
 	}
 	return refused

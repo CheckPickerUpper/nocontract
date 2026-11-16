@@ -78,7 +78,7 @@ func readGuardDeclaration(index projectIndex, guards map[string]guardEntry, mark
 	case oneLine:
 		return mo.Fold(guardName(lines.line.argument), func(name string) reading[namedGuard] {
 			if first, known := guards[name]; known {
-				return notRead[namedGuard](index.refused(marked.declared.spec.Pos(), GuardRepeated{Guard: name, First: index.position(first.declared.spec.Pos())}))
+				return notRead[namedGuard](index.refused(marked.declared.spec.Pos(), GuardRepeated{Guard: name, First: index.position(first.declared.spec.Pos()).String()}))
 			}
 			read := readGuardRefusal(index, marked.declared)
 			return readAs(namedGuard{name: name, entry: guardEntry{declared: marked.declared, members: read.value}}, read.found)
@@ -95,7 +95,7 @@ func readGuardDeclaration(index projectIndex, guards map[string]guardEntry, mark
 func readGuardRefusal(index projectIndex, declared declaredType) reading[[]sealedMember] {
 	return andThen(readSealed(index, keyOf(declared.object), declared.spec.Pos()), func(sealed sealedRead) reading[[]sealedMember] {
 		refused := collected(sealed.successes, func(member succeededMember) reading[succeededMember] {
-			return notRead[succeededMember](index.refused(member.object.Pos(), GuardMemberSucceeds{Member: member.object.Name(), Status: member.status}))
+			return notRead[succeededMember](index.refused(member.object.Pos(), GuardMemberSucceeds{Member: member.object.Name(), Status: member.status.Code()}))
 		})
 		return andThen(refused, func([]succeededMember) reading[[]sealedMember] { return readAs(sealed.failures, nothingFound()) })
 	})

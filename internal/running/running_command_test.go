@@ -23,7 +23,7 @@ func TestTheShopsCommittedFilesAreWhatGenerateWrites(t *testing.T) {
 	t.Parallel()
 	outcome := check(t.Context(), "shop")
 	if _, isCurrent := outcome.(running.FilesCurrent); !isCurrent {
-		t.Fatalf("check answered %s; want the shop's files current", outcome.Report())
+		t.Fatalf("check answered %v; want the shop's files current", outcome.Lines())
 	}
 }
 
@@ -33,7 +33,7 @@ func TestTheRuntimesCommittedFileIsWhatGenerateWrites(t *testing.T) {
 	t.Parallel()
 	outcome := running.RunRuntime(running.Request{Arguments: []string{"check"}, Context: t.Context()})
 	if _, isCurrent := outcome.(running.FilesCurrent); !isCurrent {
-		t.Fatalf("check answered %s; want the runtime's file current", outcome.Report())
+		t.Fatalf("check answered %v; want the runtime's file current", outcome.Lines())
 	}
 }
 

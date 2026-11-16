@@ -52,6 +52,7 @@ type RoutesRead struct {
 // RoutesRefused is every declaration that could not be read, in source order.
 //
 //ergo:code NC-1031
+//ergo:message The project's route declarations were refused.
 type RoutesRefused struct {
 	Refusals []Refusal
 }

@@ -2,26 +2,445 @@
 
 package running
 
-import ergo "github.com/CheckPickerUpper/ErGo"
+import (
+	ergo "github.com/CheckPickerUpper/ErGo"
+	messageformat "github.com/CheckPickerUpper/ErGo/messageformat"
+	messages "github.com/CheckPickerUpper/nocontract/messages"
+)
 
 func (FilesStale) ErrorCode() ergo.Code { return "NC-1034" }
 
+// FilesStaleArguments holds the arguments FilesStale's message names, in the order the message first names them.
+type FilesStaleArguments struct {
+}
+
+// ReportArguments marks FilesStaleArguments as the arguments of a report.
+func (FilesStaleArguments) ReportArguments() {}
+
+// Report is FilesStale's code, its message in language and the arguments the message names.
+func (failure FilesStale) Report(language messages.Language) ergo.Report {
+	arguments := FilesStaleArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "These files differ from what nocontract generate writes; run it again:"}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1034", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error FilesStale holds, then the causes of every failure it holds.
+func (failure FilesStale) Causes() []error {
+	return nil
+}
+
 func (DeclarationsRefused) ErrorCode() ergo.Code { return "NC-1035" }
+
+// DeclarationsRefusedArguments holds the arguments DeclarationsRefused's message names, in the order the message first names them.
+type DeclarationsRefusedArguments struct {
+}
+
+// ReportArguments marks DeclarationsRefusedArguments as the arguments of a report.
+func (DeclarationsRefusedArguments) ReportArguments() {}
+
+// Report is DeclarationsRefused's code, its message in language and the arguments the message names.
+func (failure DeclarationsRefused) Report(language messages.Language) ergo.Report {
+	arguments := DeclarationsRefusedArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "NoContract refused these declarations:"}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1035", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error DeclarationsRefused holds, then the causes of every failure it holds.
+func (failure DeclarationsRefused) Causes() []error {
+	return nil
+}
 
 func (UsageRefused) ErrorCode() ergo.Code { return "NC-1036" }
 
+// UsageRefusedArguments holds the arguments UsageRefused's message names, in the order the message first names them.
+type UsageRefusedArguments struct {
+	Problem string `json:"Problem"`
+}
+
+// ReportArguments marks UsageRefusedArguments as the arguments of a report.
+func (UsageRefusedArguments) ReportArguments() {}
+
+// Report is UsageRefused's code, its message in language and the arguments the message names.
+func (failure UsageRefused) Report(language messages.Language) ergo.Report {
+	argumentProblem := ""
+	switch member := failure.Problem.(type) {
+	case NoCommand:
+		argumentProblem = member.Report(language).Message
+	case UnknownCommand:
+		argumentProblem = member.Report(language).Message
+	case ExtraArguments:
+		argumentProblem = member.Report(language).Message
+	case FlagsUnread:
+		argumentProblem = member.Report(language).Message
+	case nil:
+	}
+	arguments := UsageRefusedArguments{Problem: argumentProblem}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The command could not run: "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1036", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Problem}}}), Arguments: arguments}
+}
+
+// Causes is every error UsageRefused holds, then the causes of every failure it holds.
+func (failure UsageRefused) Causes() []error {
+	var causes []error
+	switch member := failure.Problem.(type) {
+	case NoCommand:
+		causes = append(causes, member.Causes()...)
+	case UnknownCommand:
+		causes = append(causes, member.Causes()...)
+	case ExtraArguments:
+		causes = append(causes, member.Causes()...)
+	case FlagsUnread:
+		causes = append(causes, member.Causes()...)
+	case nil:
+	}
+	return causes
+}
+
 func (ProjectUnreadable) ErrorCode() ergo.Code { return "NC-1037" }
+
+// ProjectUnreadableArguments holds the arguments ProjectUnreadable's message names, in the order the message first names them.
+type ProjectUnreadableArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks ProjectUnreadableArguments as the arguments of a report.
+func (ProjectUnreadableArguments) ReportArguments() {}
+
+// Report is ProjectUnreadable's code, its message in language and the arguments the message names.
+func (failure ProjectUnreadable) Report(language messages.Language) ergo.Report {
+	arguments := ProjectUnreadableArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " could not be used."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1037", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error ProjectUnreadable holds, then the causes of every failure it holds.
+func (failure ProjectUnreadable) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}
 
 func (PackagesNotLoaded) ErrorCode() ergo.Code { return "NC-1038" }
 
+// PackagesNotLoadedArguments holds the arguments PackagesNotLoaded's message names, in the order the message first names them.
+type PackagesNotLoadedArguments struct {
+}
+
+// ReportArguments marks PackagesNotLoadedArguments as the arguments of a report.
+func (PackagesNotLoadedArguments) ReportArguments() {}
+
+// Report is PackagesNotLoaded's code, its message in language and the arguments the message names.
+func (failure PackagesNotLoaded) Report(language messages.Language) ergo.Report {
+	arguments := PackagesNotLoadedArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "Go could not load the packages holding routes."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1038", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error PackagesNotLoaded holds, then the causes of every failure it holds.
+func (failure PackagesNotLoaded) Causes() []error {
+	var causes []error
+	for _, cause := range failure.Errors {
+		if cause := cause; cause != nil {
+			causes = append(causes, cause)
+		}
+	}
+	return causes
+}
+
 func (FileNotWritten) ErrorCode() ergo.Code { return "NC-1039" }
+
+// FileNotWrittenArguments holds the arguments FileNotWritten's message names, in the order the message first names them.
+type FileNotWrittenArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks FileNotWrittenArguments as the arguments of a report.
+func (FileNotWrittenArguments) ReportArguments() {}
+
+// Report is FileNotWritten's code, its message in language and the arguments the message names.
+func (failure FileNotWritten) Report(language messages.Language) ergo.Report {
+	arguments := FileNotWrittenArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The file "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " could not be written."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1039", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error FileNotWritten holds, then the causes of every failure it holds.
+func (failure FileNotWritten) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}
 
 func (PackagesMissing) ErrorCode() ergo.Code { return "NC-1040" }
 
+// PackagesMissingArguments holds the arguments PackagesMissing's message names, in the order the message first names them.
+type PackagesMissingArguments struct {
+}
+
+// ReportArguments marks PackagesMissingArguments as the arguments of a report.
+func (PackagesMissingArguments) ReportArguments() {}
+
+// Report is PackagesMissing's code, its message in language and the arguments the message names.
+func (failure PackagesMissing) Report(language messages.Language) ergo.Report {
+	arguments := PackagesMissingArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no packages."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1040", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error PackagesMissing holds, then the causes of every failure it holds.
+func (failure PackagesMissing) Causes() []error {
+	return nil
+}
+
+func (NoCommand) ErrorCode() ergo.Code { return "NC-1042" }
+
+// NoCommandArguments holds the arguments NoCommand's message names, in the order the message first names them.
+type NoCommandArguments struct {
+}
+
+// ReportArguments marks NoCommandArguments as the arguments of a report.
+func (NoCommandArguments) ReportArguments() {}
+
+// Report is NoCommand's code, its message in language and the arguments the message names.
+func (failure NoCommand) Report(language messages.Language) ergo.Report {
+	arguments := NoCommandArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "no command was given"}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1042", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error NoCommand holds, then the causes of every failure it holds.
+func (failure NoCommand) Causes() []error {
+	return nil
+}
+
 func (TypeScriptMissing) ErrorCode() ergo.Code { return "NC-1053" }
+
+// TypeScriptMissingArguments holds the arguments TypeScriptMissing's message names, in the order the message first names them.
+type TypeScriptMissingArguments struct {
+}
+
+// ReportArguments marks TypeScriptMissingArguments as the arguments of a report.
+func (TypeScriptMissingArguments) ReportArguments() {}
+
+// Report is TypeScriptMissing's code, its message in language and the arguments the message names.
+func (failure TypeScriptMissing) Report(language messages.Language) ergo.Report {
+	arguments := TypeScriptMissingArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no typescript file."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1053", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error TypeScriptMissing holds, then the causes of every failure it holds.
+func (failure TypeScriptMissing) Causes() []error {
+	return nil
+}
 
 func (APINameMissing) ErrorCode() ergo.Code { return "NC-1054" }
 
+// APINameMissingArguments holds the arguments APINameMissing's message names, in the order the message first names them.
+type APINameMissingArguments struct {
+}
+
+// ReportArguments marks APINameMissingArguments as the arguments of a report.
+func (APINameMissingArguments) ReportArguments() {}
+
+// Report is APINameMissing's code, its message in language and the arguments the message names.
+func (failure APINameMissing) Report(language messages.Language) ergo.Report {
+	arguments := APINameMissingArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no api."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1054", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error APINameMissing holds, then the causes of every failure it holds.
+func (failure APINameMissing) Causes() []error {
+	return nil
+}
+
 func (LanguageUnknown) ErrorCode() ergo.Code { return "NC-1055" }
 
+// LanguageUnknownArguments holds the arguments LanguageUnknown's message names, in the order the message first names them.
+type LanguageUnknownArguments struct {
+	Language string `json:"Language"`
+}
+
+// ReportArguments marks LanguageUnknownArguments as the arguments of a report.
+func (LanguageUnknownArguments) ReportArguments() {}
+
+// Report is LanguageUnknown's code, its message in language and the arguments the message names.
+func (failure LanguageUnknown) Report(language messages.Language) ergo.Report {
+	arguments := LanguageUnknownArguments{Language: string(failure.Language)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names the language \""}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "\"; NoContract reads go."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1055", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Language}}}), Arguments: arguments}
+}
+
+// Causes is every error LanguageUnknown holds, then the causes of every failure it holds.
+func (failure LanguageUnknown) Causes() []error {
+	return nil
+}
+
 func (RuntimeNotFound) ErrorCode() ergo.Code { return "NC-1058" }
+
+// RuntimeNotFoundArguments holds the arguments RuntimeNotFound's message names, in the order the message first names them.
+type RuntimeNotFoundArguments struct {
+}
+
+// ReportArguments marks RuntimeNotFoundArguments as the arguments of a report.
+func (RuntimeNotFoundArguments) ReportArguments() {}
+
+// Report is RuntimeNotFound's code, its message in language and the arguments the message names.
+func (failure RuntimeNotFound) Report(language messages.Language) ergo.Report {
+	arguments := RuntimeNotFoundArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The current folder's module does not hold NoContract's runtime package."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1058", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error RuntimeNotFound holds, then the causes of every failure it holds.
+func (failure RuntimeNotFound) Causes() []error {
+	return nil
+}
+
+func (UnknownCommand) ErrorCode() ergo.Code { return "NC-1059" }
+
+// UnknownCommandArguments holds the arguments UnknownCommand's message names, in the order the message first names them.
+type UnknownCommandArguments struct {
+	Name string `json:"Name"`
+}
+
+// ReportArguments marks UnknownCommandArguments as the arguments of a report.
+func (UnknownCommandArguments) ReportArguments() {}
+
+// Report is UnknownCommand's code, its message in language and the arguments the message names.
+func (failure UnknownCommand) Report(language messages.Language) ergo.Report {
+	arguments := UnknownCommandArguments{Name: string(failure.Name)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is not a command it runs"}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1059", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Name}}}), Arguments: arguments}
+}
+
+// Causes is every error UnknownCommand holds, then the causes of every failure it holds.
+func (failure UnknownCommand) Causes() []error {
+	return nil
+}
+
+func (ExtraArguments) ErrorCode() ergo.Code { return "NC-1060" }
+
+// ExtraArgumentsArguments holds the arguments ExtraArguments's message names, in the order the message first names them.
+type ExtraArgumentsArguments struct {
+}
+
+// ReportArguments marks ExtraArgumentsArguments as the arguments of a report.
+func (ExtraArgumentsArguments) ReportArguments() {}
+
+// Report is ExtraArguments's code, its message in language and the arguments the message names.
+func (failure ExtraArguments) Report(language messages.Language) ergo.Report {
+	arguments := ExtraArgumentsArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "it was given arguments after its flags"}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1060", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error ExtraArguments holds, then the causes of every failure it holds.
+func (failure ExtraArguments) Causes() []error {
+	return nil
+}
+
+func (FlagsUnread) ErrorCode() ergo.Code { return "NC-1061" }
+
+// FlagsUnreadArguments holds the arguments FlagsUnread's message names, in the order the message first names them.
+type FlagsUnreadArguments struct {
+}
+
+// ReportArguments marks FlagsUnreadArguments as the arguments of a report.
+func (FlagsUnreadArguments) ReportArguments() {}
+
+// Report is FlagsUnread's code, its message in language and the arguments the message names.
+func (failure FlagsUnread) Report(language messages.Language) ergo.Report {
+	arguments := FlagsUnreadArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "its flags could not be parsed"}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1061", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error FlagsUnread holds, then the causes of every failure it holds.
+func (failure FlagsUnread) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}

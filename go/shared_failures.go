@@ -26,6 +26,7 @@ func (AnswerNotWritten) isSharedFailure() {}
 // not read. Every route that reads its request can answer it, before its handler runs.
 //
 //ergo:code NC-1001
+//ergo:message The request's {Part} {Name} could not be read: {Reason}
 //nocontract:status 400
 type RequestRefused struct {
 	Part   RequestPart `json:"part"`
@@ -37,6 +38,7 @@ type RequestRefused struct {
 // outcome at all. Every route can answer it.
 //
 //ergo:code NC-1002
+//ergo:message The route could not write its answer: {Reason}
 //nocontract:status 500
 type AnswerNotWritten struct {
 	Answer string `json:"answer"`

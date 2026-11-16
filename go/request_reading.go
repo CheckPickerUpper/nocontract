@@ -5,9 +5,10 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/samber/mo"
+
+	"github.com/CheckPickerUpper/nocontract/messages"
 )
 
 // Value is a value read from one part of a request: text, a whole number, a boolean, or the empty
@@ -118,13 +119,15 @@ func Truth(text Text) Reading[bool] {
 // LiteralUnknown is text that is none of the values its field accepts.
 //
 //ergo:code NC-1043
+//ergo:message "{Text}" is not one of the values this field accepts.
 type LiteralUnknown struct {
 	Text   string
 	Values []string
 }
 
+// Error is the failure's message in the source language.
 func (unknown LiteralUnknown) Error() string {
-	return strconv.Quote(unknown.Text) + " is not one of " + strings.Join(unknown.Values, ", ")
+	return unknown.Report(messages.Match("")).Message
 }
 
 // Literal is the part's text when it is one of values.
@@ -140,9 +143,13 @@ func Literal(text Text, values ...string) Reading[string] {
 // BodyNotSingle is a body holding more than one JSON value.
 //
 //ergo:code NC-1044
+//ergo:message The body holds more than one JSON value.
 type BodyNotSingle struct{}
 
-func (BodyNotSingle) Error() string { return "the body holds more than one JSON value" }
+// Error is the failure's message in the source language.
+func (refused BodyNotSingle) Error() string {
+	return refused.Report(messages.Match("")).Message
+}
 
 // Body reads the request's JSON body with decode, which decodes it into the input's Body field.
 // The body may hold only the fields that field declares, and only one JSON value.

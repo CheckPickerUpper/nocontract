@@ -8,6 +8,7 @@ import (
 	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/description"
+	"github.com/CheckPickerUpper/nocontract/messages"
 )
 
 // Answer is what a route writes: its member's status, its member's Go type name as the tag the
@@ -59,10 +60,12 @@ const fallbackFields = `{"answer":"","reason":"the failure could not be encoded"
 // tag.
 //
 //ergo:code NC-1003
+//ergo:message The answer {Tag} is not written as a JSON object.
 type FieldsNotObject struct{ Tag string }
 
+// Error is the failure's message in the source language.
 func (refused FieldsNotObject) Error() string {
-	return "nocontract: the answer " + refused.Tag + " is not written as a JSON object"
+	return refused.Report(messages.Match("")).Message
 }
 
 // Write writes the answer with its status, as one JSON object holding its tag, a failure's code

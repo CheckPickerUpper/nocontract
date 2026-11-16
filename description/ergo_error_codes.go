@@ -2,6 +2,35 @@
 
 package description
 
-import ergo "github.com/CheckPickerUpper/ErGo"
+import (
+	ergo "github.com/CheckPickerUpper/ErGo"
+	messageformat "github.com/CheckPickerUpper/ErGo/messageformat"
+	messages "github.com/CheckPickerUpper/nocontract/messages"
+)
 
 func (StatusUnanswerable) ErrorCode() ergo.Code { return "NC-1052" }
+
+// StatusUnanswerableArguments holds the arguments StatusUnanswerable's message names, in the order the message first names them.
+type StatusUnanswerableArguments struct {
+	Number int `json:"Number"`
+}
+
+// ReportArguments marks StatusUnanswerableArguments as the arguments of a report.
+func (StatusUnanswerableArguments) ReportArguments() {}
+
+// Report is StatusUnanswerable's code, its message in language and the arguments the message names.
+func (failure StatusUnanswerable) Report(language messages.Language) ergo.Report {
+	arguments := StatusUnanswerableArguments{Number: int(failure.Number)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is no HTTP status a member answers with."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1052", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.SignedWhole{Value: int64(arguments.Number)}}}), Arguments: arguments}
+}
+
+// Causes is every error StatusUnanswerable holds, then the causes of every failure it holds.
+func (failure StatusUnanswerable) Causes() []error {
+	return nil
+}

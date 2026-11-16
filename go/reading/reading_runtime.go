@@ -24,6 +24,7 @@ type RuntimeRead struct{ Package serverplan.Package }
 // source order.
 //
 //ergo:code NC-1057
+//ergo:message The runtime's shared failures were refused.
 type RuntimeRefused struct{ Refusals []Refusal }
 
 func (RuntimeRead) isRuntimeReading()    {}
