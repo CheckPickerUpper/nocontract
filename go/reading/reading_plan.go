@@ -2,6 +2,7 @@ package reading
 
 import (
 	"cmp"
+	"go/token"
 	"go/types"
 	"maps"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
+	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 )
 
 // assembledPlan is everything the routes read found: the API they declare, which package
@@ -26,22 +28,9 @@ func assembledPlan(index projectIndex, earlier found, guards guardTable, routes 
 	for _, group := range byPackage {
 		finding = finding.with(generatedNameChecks(index, group))
 	}
-	read := distinctBy(finding.packages, func(path string) string { return path })
+	read := keyed.FirstOfEach(finding.packages, func(path string) string { return path })
 	slices.Sort(read)
 	return Reading{Read: read, Declared: declaredAPI(index, finding, byPackage), Refused: finding.refusals, Plan: goPlan(index, guards, byPackage)}
-}
-
-// distinctBy is every item once: the first of each key, in order.
-func distinctBy[Item any, Key comparable](items []Item, key func(Item) Key) []Item {
-	seen, kept := map[Key]struct{}{}, []Item{}
-	for _, item := range items {
-		if _, isSeen := seen[key(item)]; isSeen {
-			continue
-		}
-		seen[key(item)] = struct{}{}
-		kept = append(kept, item)
-	}
-	return kept
 }
 
 // unknownDirectiveLines refuses every //nocontract: line of the project's own files that names no
@@ -67,10 +56,8 @@ type packageRoutes struct {
 func routesByPackage(entries []routeEntry) []packageRoutes {
 	grouped := map[string]packageRoutes{}
 	for _, entry := range entries {
-		group, known := grouped[entry.loaded.PkgPath]
-		if !known {
-			group = packageRoutes{loaded: entry.loaded, entries: []routeEntry{}}
-		}
+		group := mo.Fold(keyed.Entry(grouped, entry.loaded.PkgPath), func(group packageRoutes) packageRoutes { return group },
+			func(error) packageRoutes { return packageRoutes{loaded: entry.loaded, entries: []routeEntry{}} })
 		grouped[entry.loaded.PkgPath] = packageRoutes{loaded: group.loaded, entries: append(slices.Clone(group.entries), entry)}
 	}
 	groups := []packageRoutes{}
@@ -84,11 +71,11 @@ func routesByPackage(entries []routeEntry) []packageRoutes {
 // member and named struct once, in the order found.
 func declaredAPI(index projectIndex, finding found, groups []packageRoutes) assembling.Declared {
 	members := []assembling.DeclaredMember{}
-	for _, member := range distinctBy(finding.members, func(member foundMember) typeKey { return member.key }) {
+	for _, member := range keyed.FirstOfEach(finding.members, func(member foundMember) typeKey { return member.key }) {
 		members = append(members, assembling.DeclaredMember{Member: member.member, Position: member.position})
 	}
 	structs := []assembling.DeclaredStruct{}
-	for _, named := range distinctBy(finding.structs, func(named foundStruct) typeKey { return named.key }) {
+	for _, named := range keyed.FirstOfEach(finding.structs, func(named foundStruct) typeKey { return named.key }) {
 		structs = append(structs, assembling.DeclaredStruct{Struct: named.named, Position: named.position})
 	}
 	declaredGroups := []assembling.DeclaredGroup{}
@@ -143,19 +130,28 @@ func servingFieldsNeeded(route serverplan.Route) []servingField {
 	return fields
 }
 
+// neededField is a field of what a package's routes are served with, and the first route needing
+// it.
+type neededField struct {
+	field    servingField
+	position token.Pos
+}
+
 // generatedNameChecks refuses, within one package, a field of what the routes are served with that
 // two kinds of field take, and a name the generated file declares that the package already
 // declares.
 func generatedNameChecks(index projectIndex, group packageRoutes) found {
-	finding, fields := nothingFound(), map[string]servingField{}
+	needed := []neededField{}
 	for _, entry := range group.entries {
 		for _, field := range servingFieldsNeeded(entry.route) {
-			if held, taken := fields[field.fieldName()]; taken && held != field {
-				finding = finding.with(index.refused(entry.position, GeneratedNameTaken{Name: serverplan.ServingType + "." + field.fieldName()}))
-				continue
-			}
-			fields[field.fieldName()] = field
+			needed = append(needed, neededField{field: field, position: entry.position})
 		}
+	}
+	// Routes needing one field share it; two fields of different kinds cannot share a name.
+	distinct := keyed.FirstOfEach(needed, func(each neededField) servingField { return each.field })
+	finding := nothingFound()
+	for _, repeat := range keyed.Repeats(distinct, func(each neededField) string { return each.field.fieldName() }) {
+		finding = finding.with(index.refused(repeat.Item.position, GeneratedNameTaken{Name: serverplan.ServingType + "." + repeat.Item.field.fieldName()}))
 	}
 	for _, name := range serverplan.CalledNames() {
 		mo.EmptyableToOption(group.loaded.Types.Scope().Lookup(name)).ForEach(func(declared types.Object) {
@@ -193,13 +189,12 @@ func goPlan(index projectIndex, guards guardTable, groups []packageRoutes) serve
 		guard.members.ForEach(func(members []sealedMember) {
 			refusal := serverplan.SealedAnswer{Use: serverplan.GuardAnswers{Guard: name}, Outcome: goName(guard.declared), Members: memberPlans(members)}
 			path := guard.declared.loaded.PkgPath
-			declaring, known := planned[path]
-			if !known {
-				declaring = plannedPackage{
+			declaring := mo.Fold(keyed.Entry(planned, path), func(declaring plannedPackage) plannedPackage { return declaring }, func(error) plannedPackage {
+				return plannedPackage{
 					loaded: guard.declared.loaded, directory: filepath.Dir(index.position(guard.declared.spec.Pos()).Filename),
 					serves: serverplan.ServesNoRoutes{}, answers: []serverplan.SealedAnswer{},
 				}
-			}
+			})
 			planned[path] = plannedPackage{
 				loaded: declaring.loaded, directory: declaring.directory, serves: declaring.serves,
 				answers: append(slices.Clone(declaring.answers), refusal),
@@ -235,7 +230,7 @@ func servedRoutes(group packageRoutes) serverplan.ServesRoutes {
 		outcomes = append(outcomes, entry.outcome)
 	}
 	serving := serverplan.Serving{Receivers: []serverplan.GoName{}, Guards: []string{}}
-	for _, field := range distinctBy(fields, func(field servingField) servingField { return field }) {
+	for _, field := range keyed.FirstOfEach(fields, func(field servingField) servingField { return field }) {
 		switch needed := field.(type) {
 		case receiverField:
 			serving = serverplan.Serving{Receivers: append(slices.Clone(serving.Receivers), serverplan.GoName{Package: group.loaded.PkgPath, Name: needed.name}), Guards: serving.Guards}
@@ -247,6 +242,6 @@ func servedRoutes(group packageRoutes) serverplan.ServesRoutes {
 	slices.SortFunc(routes, func(left, right serverplan.Route) int { return cmp.Compare(left.Name, right.Name) })
 	return serverplan.ServesRoutes{
 		Routes: routes, Serving: serving,
-		Outcomes: distinctBy(outcomes, func(answered serverplan.OutcomeAnswer) serverplan.GoName { return answered.Outcome }),
+		Outcomes: keyed.FirstOfEach(outcomes, func(answered serverplan.OutcomeAnswer) serverplan.GoName { return answered.Outcome }),
 	}
 }

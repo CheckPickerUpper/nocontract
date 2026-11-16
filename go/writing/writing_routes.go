@@ -24,6 +24,7 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
+	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 )
 
 // Stubbed is an existing generated file as it is read while the routes are read again: its imports,
@@ -78,12 +79,9 @@ func usedImports(file *ast.File, kept []ast.Decl) *ast.GenDecl {
 	}
 	specs := []ast.Spec{}
 	for _, spec := range file.Imports {
-		mo.Fold(mo.EmptyableToOption(spec.Name), func(alias *ast.Ident) struct{} {
-			if _, isUsed := used[alias.Name]; isUsed {
-				specs = append(specs, spec)
-			}
-			return struct{}{}
-		}, func(error) struct{} { return struct{}{} })
+		mo.EmptyableToOption(spec.Name).ForEach(func(alias *ast.Ident) {
+			keyed.Entry(used, alias.Name).ForEach(func(struct{}) { specs = append(specs, spec) })
+		})
 	}
 	return &ast.GenDecl{Doc: &ast.CommentGroup{List: []*ast.Comment{}}, TokPos: token.NoPos, Tok: token.IMPORT, Lparen: 1, Specs: specs, Rparen: 1}
 }
@@ -129,10 +127,10 @@ func routesText(served serverplan.ServesRoutes, names *imports) string {
 	}
 	for _, route := range served.Routes {
 		text.WriteString(routeText(route, names))
-		if outcome, isUnwritten := unwritten[route.Outcome]; isUnwritten {
+		keyed.Entry(unwritten, route.Outcome).ForEach(func(outcome serverplan.OutcomeAnswer) {
 			delete(unwritten, route.Outcome)
 			text.WriteString(answerText(answerFunction{name: outcomeFunction(outcome.Outcome, names), sealed: names.qualified(outcome.Outcome), members: outcome.Members}, names))
-		}
+		})
 	}
 	return text.String()
 }
@@ -317,9 +315,12 @@ func (names *imports) reference(path string) reference {
 	if path == names.home {
 		return unqualified{}
 	}
-	if alias, known := names.aliases[path]; known {
-		return qualifiedBy{alias: alias}
-	}
+	return mo.Fold(keyed.Entry(names.aliases, path), func(alias string) reference { return qualifiedBy{alias: alias} },
+		func(error) reference { return names.imported(path) })
+}
+
+// imported is the package at path imported under an alias no other import or local name takes.
+func (names *imports) imported(path string) reference {
 	base := path[strings.LastIndex(path, "/")+1:]
 	cleaned := strings.Map(func(letter rune) rune {
 		if unicode.IsLetter(letter) || unicode.IsDigit(letter) {

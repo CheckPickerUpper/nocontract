@@ -11,6 +11,7 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/effect"
+	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 )
 
 // Declared is an API as one backend's reader declared it: its name, each group of routes, and
@@ -239,14 +240,10 @@ func sharedFailureNames(declared DeclaredEndpoint, shared []description.SharedFa
 
 // repeatedRoutes refuses every route serving a method and path an earlier route serves.
 func repeatedRoutes(endpoints []DeclaredEndpoint) []Refusal {
-	refusals, first := []Refusal{}, map[string]Position{}
-	for _, declared := range endpoints {
-		pattern := declared.Method.Name() + " " + declared.Path
-		if served, taken := first[pattern]; taken {
-			refusals = append(refusals, Refusal{Position: declared.Position, Problem: RouteRepeated{Pattern: pattern, First: served.String()}})
-			continue
-		}
-		first[pattern] = declared.Position
+	pattern := func(declared DeclaredEndpoint) string { return declared.Method.Name() + " " + declared.Path }
+	refusals := []Refusal{}
+	for _, repeat := range keyed.Repeats(endpoints, pattern) {
+		refusals = append(refusals, Refusal{Position: repeat.Item.Position, Problem: RouteRepeated{Pattern: pattern(repeat.Item), First: repeat.First.Position.String()}})
 	}
 	return refusals
 }
@@ -254,13 +251,9 @@ func repeatedRoutes(endpoints []DeclaredEndpoint) []Refusal {
 // repeatedEndpointNames refuses every route of a group whose name an earlier route of the group
 // takes.
 func repeatedEndpointNames(group DeclaredGroup) []Refusal {
-	refusals, first := []Refusal{}, map[string]Position{}
-	for _, declared := range group.Endpoints {
-		if taken, isTaken := first[declared.Name]; isTaken {
-			refusals = append(refusals, Refusal{Position: declared.Position, Problem: EndpointNameRepeated{Name: declared.Name, First: taken.String()}})
-			continue
-		}
-		first[declared.Name] = declared.Position
+	refusals := []Refusal{}
+	for _, repeat := range keyed.Repeats(group.Endpoints, func(declared DeclaredEndpoint) string { return declared.Name }) {
+		refusals = append(refusals, Refusal{Position: repeat.Item.Position, Problem: EndpointNameRepeated{Name: repeat.Item.Name, First: repeat.First.Position.String()}})
 	}
 	return refusals
 }
@@ -293,13 +286,9 @@ func repeatedNames(declared Declared, shared []description.SharedFailure) []Refu
 	for _, named := range declared.Structs {
 		claims = append(claims, nameClaim{name: named.Struct.Name, takenBy: named.Position.String(), position: named.Position})
 	}
-	refusals, first := []Refusal{}, map[string]nameClaim{}
-	for _, claim := range claims {
-		if taken, isTaken := first[claim.name]; isTaken {
-			refusals = append(refusals, Refusal{Position: claim.position, Problem: NameRepeated{Name: claim.name, First: taken.takenBy}})
-			continue
-		}
-		first[claim.name] = claim
+	refusals := []Refusal{}
+	for _, repeat := range keyed.Repeats(claims, func(claim nameClaim) string { return claim.name }) {
+		refusals = append(refusals, Refusal{Position: repeat.Item.position, Problem: NameRepeated{Name: repeat.Item.name, First: repeat.First.takenBy}})
 	}
 	return refusals
 }

@@ -5,7 +5,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/samber/mo"
+
 	"github.com/CheckPickerUpper/nocontract/description"
+	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 )
 
 // pathBinding is a route's path with each parameter bound to the field that reads it, or every
@@ -43,13 +46,14 @@ func boundPath(declared DeclaredEndpoint) pathBinding {
 		case literalSegment:
 			segments = append(segments, description.PathText{Text: text})
 		case parameterSegment:
-			field, reads := unbound[segment.name]
-			if !reads {
+			mo.Fold(keyed.Entry(unbound, segment.name), func(field description.Field) struct{} {
+				delete(unbound, segment.name)
+				segments = append(segments, description.PathParameter{Field: field})
+				return struct{}{}
+			}, func(error) struct{} {
 				refused(PathParameterUndeclared{Parameter: segment.name})
-				continue
-			}
-			delete(unbound, segment.name)
-			segments = append(segments, description.PathParameter{Field: field})
+				return struct{}{}
+			})
 		case unsupportedSegment:
 			refused(PathSegmentUnsupported{Segment: text})
 		case nil:
@@ -89,15 +93,25 @@ func (literalSegment) isSegmentRead()     {}
 func (parameterSegment) isSegmentRead()   {}
 func (unsupportedSegment) isSegmentRead() {}
 
-// parsedSegment reads one segment of a path.
+// parsedSegment reads one segment of a path: one {name}, text holding no brace, or neither.
 func parsedSegment(text string) segmentRead {
-	inner, opens := strings.CutPrefix(text, "{")
-	name, closes := strings.CutSuffix(inner, "}")
+	braced := mo.TupleToOption(strings.CutPrefix(text, "{")).FlatMap(func(inner string) mo.Option[string] {
+		return mo.TupleToOption(strings.CutSuffix(inner, "}"))
+	})
+	return mo.Fold(braced, parameterNamed, func(error) segmentRead {
+		if strings.ContainsAny(text, "{}") {
+			return unsupportedSegment{}
+		}
+		return literalSegment{}
+	})
+}
+
+// parameterNamed is a segment that is one {name}: a parameter, or a wildcard or empty name the
+// client has no form for.
+func parameterNamed(name string) segmentRead {
 	switch {
-	case opens && closes && name != "" && name != "$" && !strings.HasSuffix(name, "...") && !strings.ContainsAny(name, "{}"):
-		return parameterSegment{name: name}
-	case strings.ContainsAny(text, "{}"):
+	case name == "", name == "$", strings.HasSuffix(name, "..."), strings.ContainsAny(name, "{}"):
 		return unsupportedSegment{}
 	}
-	return literalSegment{}
+	return parameterSegment{name: name}
 }

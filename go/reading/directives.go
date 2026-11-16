@@ -81,11 +81,9 @@ func (unknownLine) isDirectiveLine() {}
 func directiveLinesIn(comment *ast.CommentGroup) []directiveLine {
 	lines := []directiveLine{}
 	for _, line := range comment.List {
-		body, isDirective := strings.CutPrefix(line.Text, directivePrefix)
-		if !isDirective {
-			continue
-		}
-		lines = append(lines, readDirectiveLine(body, line.Pos()))
+		mo.TupleToOption(strings.CutPrefix(line.Text, directivePrefix)).ForEach(func(body string) {
+			lines = append(lines, readDirectiveLine(body, line.Pos()))
+		})
 	}
 	return lines
 }

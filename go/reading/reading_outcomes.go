@@ -14,6 +14,7 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
+	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 )
 
 // outcomeShape is a route's outcome and its members in declaration order, as the generated code
@@ -84,10 +85,16 @@ func sortedByAnswer(declared declaredType, members []sealedMember) sealedRead {
 
 // readSealed reads a sealed interface of the project and every member's answer.
 func readSealed(index projectIndex, key typeKey, position token.Pos) reading[sealedRead] {
-	declared, isDeclared := index.declared[key]
-	if !isDeclared {
+	return mo.Fold(keyed.Entry(index.declared, key), func(declared declaredType) reading[sealedRead] {
+		return readDeclaredSealed(index, key, declared, position)
+	}, func(error) reading[sealedRead] {
 		return notRead[sealedRead](index.refused(position, DeclarationOutsideProject{Type: key.path + "." + key.name}))
-	}
+	})
+}
+
+// readDeclaredSealed reads a sealed interface the project's syntax declares and every member's
+// answer.
+func readDeclaredSealed(index projectIndex, key typeKey, declared declaredType, position token.Pos) reading[sealedRead] {
 	contract, isInterface := declared.object.Type().Underlying().(*types.Interface)
 	if !isInterface {
 		return notRead[sealedRead](index.refused(position, OutcomeNotNamedInterface{Type: key.name}).with(packageRead(key.path)))
@@ -133,9 +140,7 @@ func sealedMemberCandidates(index projectIndex, outcome declaredType, contract *
 			}
 			continue
 		}
-		if declared, isDeclared := index.declared[typeKeyFor(object)]; isDeclared {
-			members = append(members, declared)
-		}
+		keyed.Entry(index.declared, typeKeyFor(object)).ForEach(func(declared declaredType) { members = append(members, declared) })
 	}
 	slices.SortFunc(members, func(left, right declaredType) int { return cmp.Compare(left.object.Pos(), right.object.Pos()) })
 	return memberCandidates{members: members, found: finding}

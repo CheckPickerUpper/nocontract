@@ -7,6 +7,7 @@ import (
 
 	ergo "github.com/CheckPickerUpper/ErGo"
 
+	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 	"github.com/CheckPickerUpper/nocontract/messages"
 )
 
@@ -40,14 +41,7 @@ type Problem interface {
 // sortedRefusals is every refusal once, in source order: a declaration refused for one reason by
 // several routes is refused once.
 func sortedRefusals(refusals []Refusal) []Refusal {
-	kept, seen := []Refusal{}, map[Refusal]struct{}{}
-	for _, refusal := range refusals {
-		if _, isSeen := seen[refusal]; isSeen {
-			continue
-		}
-		seen[refusal] = struct{}{}
-		kept = append(kept, refusal)
-	}
+	kept := keyed.FirstOfEach(refusals, func(refusal Refusal) Refusal { return refusal })
 	slices.SortStableFunc(kept, func(left, right Refusal) int {
 		return cmp.Or(cmp.Compare(left.Position.File, right.Position.File), cmp.Compare(left.Position.Line, right.Position.Line))
 	})
