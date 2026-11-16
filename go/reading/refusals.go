@@ -1,21 +1,12 @@
 package reading
 
 import (
-	"go/token"
-
 	ergo "github.com/CheckPickerUpper/ErGo"
 
 	"github.com/CheckPickerUpper/nocontract/messages"
 )
 
-// Refusal is one declaration the generator cannot turn into served routes and their Effect API,
-// where it is written and why.
-type Refusal struct {
-	Position token.Position
-	Problem  Problem
-}
-
-// Problem is why a declaration is refused: its permanent code and its message, which ErGo
+// Problem is why a Go declaration is refused: its permanent code and its message, which ErGo
 // generates from its declaration.
 //
 //sumtype:decl
@@ -31,6 +22,13 @@ type Problem interface {
 //ergo:code NC-1004
 //ergo:message The route directive "{Text}" is not a method (GET, POST, PUT, PATCH or DELETE) and a path starting with /.
 type RouteDirectiveMalformed struct{ Text string }
+
+// RouteDirectiveRepeated is a handler with more than one //nocontract:route line, which serves one
+// route.
+//
+//ergo:code NC-1064
+//ergo:message The handler {Handler} has more than one //nocontract:route line; a handler serves one route.
+type RouteDirectiveRepeated struct{ Handler string }
 
 // HandlerSignatureUnsupported is a route handler that is not func(context.Context, Input) Outcome.
 //
@@ -125,16 +123,6 @@ type TypeUnsupported struct {
 	Flaw TypeFlaw
 }
 
-// NameRepeated is a name two declarations would both take in the TypeScript file, and where the
-// first takes it.
-//
-//ergo:code NC-1018
-//ergo:message The name {Name} is already taken by {First}.
-type NameRepeated struct {
-	Name  string
-	First string
-}
-
 // RecursiveStruct is a named struct that holds itself.
 //
 //ergo:code NC-1019
@@ -153,51 +141,12 @@ type InputNotStruct struct{ Input string }
 //ergo:message The input field {Field} has no path or query tag and is not named Body.
 type InputFieldUnread struct{ Field string }
 
-// PathParameterUndeclared is a path segment no input field reads.
-//
-//ergo:code NC-1022
-//ergo:message No input field reads the path segment named {Parameter}.
-type PathParameterUndeclared struct{ Parameter string }
-
-// PathFieldUnused is an input field reading a path segment the path does not have.
-//
-//ergo:code NC-1023
-//ergo:message An input field reads the path segment named {Parameter}, which the path does not have.
-type PathFieldUnused struct{ Parameter string }
-
-// PathWildcardUnsupported is a path holding a {name...} or {$} segment.
-//
-//ergo:code NC-1024
-//ergo:message The path segment {Segment} has no Effect HttpApi form.
-type PathWildcardUnsupported struct{ Segment string }
-
-// BodyOnGet is a GET route whose input reads a body.
-//
-//ergo:code NC-1025
-//ergo:message A GET route's input reads a body, which a GET request does not carry.
-type BodyOnGet struct{}
-
-// RouteRepeated is a method and path two routes both serve, and where the first serves it.
-//
-//ergo:code NC-1026
-//ergo:message {Pattern} is already served by the route at {First}.
-type RouteRepeated struct {
-	Pattern string
-	First   string
-}
-
 // TypeNotReachable is an unexported type declared in a package other than the route's, which the
 // route's generated code cannot name.
 //
 //ergo:code NC-1027
 //ergo:message {Type} is unexported and declared in another package, so the route's generated code cannot name it.
 type TypeNotReachable struct{ Type string }
-
-// OutcomeWithoutSuccess is an outcome with no member answered with a success status.
-//
-//ergo:code NC-1028
-//ergo:message The outcome {Outcome} has no member answered with a success status.
-type OutcomeWithoutSuccess struct{ Outcome string }
 
 // StatusDirectiveMissing is an outcome member without a //nocontract:status line.
 //
@@ -224,12 +173,6 @@ type StatusDirectiveMalformed struct {
 	Member string
 	Text   string
 }
-
-// FieldNameReserved is a member field whose JSON name is one every answer starts with.
-//
-//ergo:code NC-1033
-//ergo:message The JSON name "{Field}" is taken by the tag and code every answer starts with.
-type FieldNameReserved struct{ Field string }
 
 // GuardDirectiveMalformed is a //nocontract:guard line on a handler that is not a guard name and
 // one argument, or a handler with more than one.
@@ -271,16 +214,6 @@ type ReceiverUnsupported struct {
 	Flaw     ReceiverFlaw
 }
 
-// EndpointNameRepeated is a handler name two routes of one package both use, and where the first
-// uses it.
-//
-//ergo:code NC-1050
-//ergo:message The endpoint name {Name} is already taken in this package, at {First}.
-type EndpointNameRepeated struct {
-	Name  string
-	First string
-}
-
 // GeneratedNameTaken is a name the package's generated file declares, already declared by the
 // package or by another field of what its routes are served with.
 //
@@ -296,6 +229,7 @@ type GeneratedNameTaken struct{ Name string }
 type DirectiveUnknown struct{ Text string }
 
 func (RouteDirectiveMalformed) isProblem()     {}
+func (RouteDirectiveRepeated) isProblem()      {}
 func (HandlerSignatureUnsupported) isProblem() {}
 func (OutcomeNotNamedInterface) isProblem()    {}
 func (OutcomeNotSealed) isProblem()            {}
@@ -309,26 +243,17 @@ func (MemberUndecided) isProblem()             {}
 func (FieldOptionUnsupported) isProblem()      {}
 func (EmbeddedFieldUnsupported) isProblem()    {}
 func (TypeUnsupported) isProblem()             {}
-func (NameRepeated) isProblem()                {}
 func (RecursiveStruct) isProblem()             {}
 func (InputNotStruct) isProblem()              {}
 func (InputFieldUnread) isProblem()            {}
-func (PathParameterUndeclared) isProblem()     {}
-func (PathFieldUnused) isProblem()             {}
-func (PathWildcardUnsupported) isProblem()     {}
-func (BodyOnGet) isProblem()                   {}
-func (RouteRepeated) isProblem()               {}
 func (TypeNotReachable) isProblem()            {}
-func (OutcomeWithoutSuccess) isProblem()       {}
 func (StatusDirectiveMissing) isProblem()      {}
 func (ParameterTypeUnsupported) isProblem()    {}
 func (StatusDirectiveMalformed) isProblem()    {}
-func (FieldNameReserved) isProblem()           {}
 func (GuardDirectiveMalformed) isProblem()     {}
 func (GuardUndeclared) isProblem()             {}
 func (GuardRepeated) isProblem()               {}
 func (GuardMemberSucceeds) isProblem()         {}
 func (ReceiverUnsupported) isProblem()         {}
-func (EndpointNameRepeated) isProblem()        {}
 func (GeneratedNameTaken) isProblem()          {}
 func (DirectiveUnknown) isProblem()            {}

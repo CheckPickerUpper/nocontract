@@ -17,6 +17,10 @@ const FileName = "nocontract_routes.go"
 // failures every route can answer.
 const NoContractPath = "github.com/CheckPickerUpper/nocontract/go"
 
+// NoContractPackage is the name of the Go package at NoContractPath, which every generated file
+// refers to it by.
+const NoContractPackage = "nocontract"
+
 // SourceFile is who wrote a Go file: NoContract, or the project.
 //
 //sumtype:decl

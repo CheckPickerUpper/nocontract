@@ -1,5 +1,9 @@
 package nocontract
 
+// nocontract_routes.go declares the failures nocontract answers on a route's behalf, from their one
+// declaration in package description.
+//go:generate go run ../internal/cmd/runtime-answers generate
+
 import (
 	"bytes"
 	"encoding/json"

@@ -41,12 +41,7 @@ func readOutcome(index projectIndex, loaded *packages.Package, outcome types.Typ
 	if !isNamed {
 		return notRead[outcomeShape](index.refused(position, OutcomeNotNamedInterface{Type: types.TypeString(outcome, nil)}))
 	}
-	members := andThen(readSealed(index, keyOf(named.Obj()), position), func(sealed sealedRead) reading[[]sealedMember] {
-		if len(sealed.successes) == 0 {
-			return notRead[[]sealedMember](index.refused(sealed.declared.spec.Pos(), OutcomeWithoutSuccess{Outcome: named.Obj().Name()}))
-		}
-		return readAs(sealed.members, nothingFound())
-	})
+	members := mapped(readSealed(index, typeKeyFor(named.Obj()), position), func(sealed sealedRead) []sealedMember { return sealed.members })
 	return andThen(members, func(read []sealedMember) reading[outcomeShape] {
 		return andThen(reachableName(index, named.Obj(), loaded.PkgPath, position), func(name serverplan.GoName) reading[outcomeShape] {
 			plans := collected(read, func(member sealedMember) reading[serverplan.Member] {
@@ -72,8 +67,8 @@ type succeededMember struct {
 	status description.SuccessStatus
 }
 
-// sealedOf is a sealed interface's members, sorted by how each answers.
-func sealedOf(declared declaredType, members []sealedMember) sealedRead {
+// sortedByAnswer is a sealed interface's members, sorted by how each answers.
+func sortedByAnswer(declared declaredType, members []sealedMember) sealedRead {
 	sealed := sealedRead{declared: declared, members: members, successes: []succeededMember{}, failures: []sealedMember{}}
 	for _, member := range members {
 		switch answer := member.answer.(type) {
@@ -102,13 +97,13 @@ func readSealed(index projectIndex, key typeKey, position token.Pos) reading[sea
 	case declarations.UnsealedOutcome, declarations.NotAnOutcome, nil:
 		return notRead[sealedRead](index.refused(declared.spec.Pos(), OutcomeNotSealed{Outcome: key.name}).with(packageRead(key.path)))
 	}
-	candidates := membersOf(index, declared, contract)
+	candidates := sealedMemberCandidates(index, declared, contract)
 	members := collected(candidates.members, func(member declaredType) reading[sealedMember] {
 		return mapped(readMember(index, member), func(answer description.Answer) sealedMember {
 			return sealedMember{declared: member, answer: answer}
 		})
 	})
-	return alongside(mapped(members, func(read []sealedMember) sealedRead { return sealedOf(declared, read) }),
+	return alongside(mapped(members, func(read []sealedMember) sealedRead { return sortedByAnswer(declared, read) }),
 		candidates.found.with(packageRead(key.path)))
 }
 
@@ -119,9 +114,9 @@ type memberCandidates struct {
 	found   found
 }
 
-// membersOf is every type of the outcome's package that implements it, in source order. Its
+// sealedMemberCandidates is every type of the outcome's package that implements it, in source order. Its
 // unexported method seals it, so no other package declares a member.
-func membersOf(index projectIndex, outcome declaredType, contract *types.Interface) memberCandidates {
+func sealedMemberCandidates(index projectIndex, outcome declaredType, contract *types.Interface) memberCandidates {
 	scope := outcome.loaded.Types.Scope()
 	members, finding := []declaredType{}, nothingFound()
 	for _, name := range scope.Names() {
@@ -138,7 +133,7 @@ func membersOf(index projectIndex, outcome declaredType, contract *types.Interfa
 			}
 			continue
 		}
-		if declared, isDeclared := index.declared[keyOf(object)]; isDeclared {
+		if declared, isDeclared := index.declared[typeKeyFor(object)]; isDeclared {
 			members = append(members, declared)
 		}
 	}
@@ -158,13 +153,13 @@ func readMember(index projectIndex, member declaredType) reading[description.Ans
 	if !isStruct {
 		return notRead[description.Answer](index.refused(member.spec.Pos(), MemberNotStruct{Member: name}))
 	}
-	read := collected(fieldsOf(fields), func(field indexedField) reading[mo.Option[description.Field]] {
-		return memberField(index, field)
+	read := collected(indexedFields(fields), func(field indexedField) reading[mo.Option[description.Field]] {
+		return readField(index, field, []typeKey{})
 	})
-	answer := andThen(statusOf(index, member), func(status description.Status) reading[description.Answer] { return answerOf(index, member, status) })
+	answer := andThen(readStatus(index, member), func(status description.Status) reading[description.Answer] { return readAnswer(index, member, status) })
 	return andThen(read, func(written []mo.Option[description.Field]) reading[description.Answer] {
 		return andThen(answer, func(decided description.Answer) reading[description.Answer] {
-			whole := memberRead(foundMember{key: keyOf(member.object), position: index.position(member.spec.Pos()), member: description.Member{
+			whole := memberRead(foundMember{key: typeKeyFor(member.object), position: index.placed(member.spec.Pos()), member: description.Member{
 				Name: name, Answer: decided, Fields: present(written),
 			}})
 			return readAs(decided, whole)
@@ -181,27 +176,14 @@ func present(fields []mo.Option[description.Field]) []description.Field {
 	return written
 }
 
-// memberField reads one field of a member: refused when its JSON name is one every answer starts
-// with.
-func memberField(index projectIndex, field indexedField) reading[mo.Option[description.Field]] {
-	return andThen(fieldOf(index, field, []typeKey{}), func(written mo.Option[description.Field]) reading[mo.Option[description.Field]] {
-		return mo.Fold(written, func(value description.Field) reading[mo.Option[description.Field]] {
-			if slices.Contains(description.ReservedFields(), value.Name) {
-				return notRead[mo.Option[description.Field]](index.refused(field.variable.Pos(), FieldNameReserved{Field: value.Name}))
-			}
-			return readAs(written, nothingFound())
-		}, func(error) reading[mo.Option[description.Field]] { return readAs(written, nothingFound()) })
-	})
-}
-
-// statusOf is the one status a member's //nocontract:status line declares: a success that
+// readStatus is the one status a member's //nocontract:status line declares: a success that
 // carries a body, or a failure.
-func statusOf(index projectIndex, member declaredType) reading[description.Status] {
+func readStatus(index projectIndex, member declaredType) reading[description.Status] {
 	name := member.object.Name()
 	malformed := func(line directive) reading[description.Status] {
 		return notRead[description.Status](index.refused(line.position, StatusDirectiveMalformed{Member: name, Text: line.argument}))
 	}
-	switch lines := linesOf(member.comment, statusKind{}).(type) {
+	switch lines := writtenLines(member.comment, statusKind{}).(type) {
 	case oneLine:
 		return mo.Fold(mo.TupleToResult(strconv.Atoi(lines.line.argument)), func(number int) reading[description.Status] {
 			return mo.Fold(description.ParseStatus(number), func(status description.Status) reading[description.Status] {
@@ -215,8 +197,8 @@ func statusOf(index projectIndex, member declaredType) reading[description.Statu
 	return notRead[description.Status](index.refused(member.spec.Pos(), StatusDirectiveMissing{Member: name}))
 }
 
-// answerOf joins a member's status with its ErGo decision, which must agree on whether it fails.
-func answerOf(index projectIndex, member declaredType, status description.Status) reading[description.Answer] {
+// readAnswer joins a member's status with its ErGo decision, which must agree on whether it fails.
+func readAnswer(index projectIndex, member declaredType, status description.Status) reading[description.Answer] {
 	name := member.object.Name()
 	marking := declarations.ReadMarking(member.comment, index.files)
 	refused := func(problem Problem) reading[description.Answer] {

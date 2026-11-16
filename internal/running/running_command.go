@@ -23,6 +23,8 @@ import (
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
 
+	"github.com/CheckPickerUpper/nocontract/assembling"
+	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/effect"
 	"github.com/CheckPickerUpper/nocontract/go/reading"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
@@ -107,7 +109,7 @@ type FilesStale struct{ Paths []string }
 //
 //ergo:code NC-1035
 //ergo:message NoContract refused these declarations:
-type DeclarationsRefused struct{ Refusals []reading.Refusal }
+type DeclarationsRefused struct{ Refusals []assembling.Refusal }
 
 // UsageRefused is a run whose arguments name no command it runs: the problem with them, and how
 // the command is run.
@@ -410,28 +412,30 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 	directory := filepath.Dir(projectFile)
 	existing := existingGenerated(directory)
 	return mo.Fold(loadPackages(ctx, directory, project.Packages, existing), func(loaded []*packages.Package) Outcome {
-		read := reading.ReadRoutes(reading.Request{Packages: loaded, APIName: project.API})
+		// The API's name is given in the project file, which is where a name it repeats is refused.
+		named := assembling.NamedAPI{Name: project.API, Position: assembling.Position{File: projectFile, Line: 1, Column: 1}}
+		read := reading.ReadRoutes(reading.Request{Packages: loaded, API: named})
 		if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
 			return PackagesNotLoaded{Errors: problems}
 		}
-		switch routes := read.Routes.(type) {
-		case reading.RoutesRead:
-			return mo.Fold(renderedFiles(routes, filepath.Join(directory, project.TypeScript), existing), finish,
+		switch assembled := assembling.Assemble(assembling.Request{Declared: read.Declared, Refused: read.Refused}).(type) {
+		case assembling.APIAssembled:
+			return mo.Fold(renderedFiles(assembled.API, read.Plan, filepath.Join(directory, project.TypeScript), existing), finish,
 				func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
-		case reading.RoutesRefused:
-			return DeclarationsRefused{Refusals: routes.Refusals}
+		case assembling.APIRefused:
+			return DeclarationsRefused{Refusals: assembled.Refusals}
 		case nil:
 		}
-		return DeclarationsRefused{Refusals: []reading.Refusal{}}
+		return DeclarationsRefused{Refusals: []assembling.Refusal{}}
 	}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
 }
 
 // renderedFiles is the TypeScript file, each package's Go file, and every generated Go file of a
 // package that no longer declares a route, which must go.
-func renderedFiles(read reading.RoutesRead, typeScript string, existing map[string][]byte) mo.Result[[]generatedFile] {
-	return mo.Fold(goFiles(read.Plan.Packages), func(served []generatedFile) mo.Result[[]generatedFile] {
+func renderedFiles(api description.API, plan serverplan.Plan, typeScript string, existing map[string][]byte) mo.Result[[]generatedFile] {
+	return mo.Fold(goFiles(plan.Packages), func(served []generatedFile) mo.Result[[]generatedFile] {
 		// Every existing generated file goes unless this run writes it again.
-		contents := map[string]mo.Option[[]byte]{typeScript: mo.Some(effect.Render(read.API))}
+		contents := map[string]mo.Option[[]byte]{typeScript: mo.Some(effect.Render(api))}
 		for path := range existing {
 			contents[path] = mo.None[[]byte]()
 		}
@@ -549,7 +553,7 @@ func loadPackages(ctx context.Context, directory string, patterns []string, exis
 	overlay := map[string][]byte{}
 	for path, content := range existing {
 		// A file too broken to stub is read as it is; its own errors are set aside like a stub's.
-		overlay[path] = mo.Fold(writing.StubOf(content), func(stub []byte) []byte { return stub }, func(error) []byte { return content })
+		overlay[path] = mo.Fold(writing.Stubbed(content), func(stub []byte) []byte { return stub }, func(error) []byte { return content })
 	}
 	config := &packages.Config{
 		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports,

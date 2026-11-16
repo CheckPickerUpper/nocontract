@@ -1,11 +1,10 @@
 // Package reading reads a Go project's //nocontract:route handlers, their inputs and the members
-// of their outcomes out of Go's type checker, as the language-neutral description and the Go
-// server plan, and refuses every declaration the generated server and its client cannot hold.
+// of their outcomes out of Go's type checker, as the API they declare and the Go server plan, and
+// refuses every Go declaration the generated server cannot hold. The checks that span routes, and
+// hold for every backend language, run in package assembling over the API declared here.
 //
 // Every reading step is a function returning its value and everything it found: refusals, the
-// members and named structs it read, and the packages whose declarations it read. The checks
-// that span routes, such as two routes serving one pattern or two declarations taking one
-// TypeScript name, run once over everything found, in assembling.go.
+// members and named structs it read, and the packages whose declarations it read.
 package reading
 
 import (
@@ -19,58 +18,34 @@ import (
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
 
-	"github.com/CheckPickerUpper/nocontract/description"
+	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 )
 
 // Request is what the generator reads: the loaded packages, the project's own and nocontract's,
-// each with its syntax, and the name of the Effect API.
+// each with its syntax, and the API's name and where it is given.
 type Request struct {
 	Packages []*packages.Package
-	APIName  string
+	API      assembling.NamedAPI
 }
 
-// Reading is the import path of every package read, sorted, and what reading the routes ended as.
+// Reading is what reading a project's routes found: the import path of every package read,
+// sorted, the API the routes read declare, every Go declaration refused, and the Go server plan of
+// the routes read. Package assembling decides whether anything was refused, and the plan is
+// written only when nothing was.
 type Reading struct {
-	Read   []string
-	Routes RoutesOutcome
+	Read     []string
+	Declared assembling.Declared
+	Refused  []assembling.Refusal
+	Plan     serverplan.Plan
 }
 
-// RoutesOutcome is what reading a project's routes ended as.
-//
-//sumtype:decl
-type RoutesOutcome interface{ isRoutesOutcome() }
-
-// RoutesRead is every route, read without a refusal, as the description and the Go server plan.
-//
-//ergo:not-an-error
-type RoutesRead struct {
-	API  description.API
-	Plan serverplan.Plan
-}
-
-// RoutesRefused is every declaration that could not be read, in source order.
-//
-//ergo:code NC-1031
-//ergo:message The project's route declarations were refused.
-type RoutesRefused struct {
-	Refusals []Refusal
-}
-
-func (RoutesRead) isRoutesOutcome()    {}
-func (RoutesRefused) isRoutesOutcome() {}
-
-// reservedNames are the names the TypeScript file imports, which no declaration may take.
-func reservedNames() []string {
-	return []string{"Schema", "HttpApi", "HttpApiEndpoint", "HttpApiGroup", "HttpApiSchema"}
-}
-
-// ReadRoutes reads every route the project's packages declare.
+// ReadRoutes reads every route the project's packages declare. The packages read include
+// nocontract's own, whose declarations the routes' generated code uses.
 func ReadRoutes(request Request) Reading {
-	index := indexOf(request)
-	shared := readShared(index)
+	index := indexed(request)
 	guards := readGuards(index)
-	return assemble(index, shared.found.with(guards.found), guards, readRoutes(index, guards))
+	return assembledPlan(index, guards.found.with(packageRead(serverplan.NoContractPath)), guards, readRoutes(index, guards))
 }
 
 // typeKey names a declared type by its package's import path and its name, so types read through
@@ -80,7 +55,8 @@ type typeKey struct {
 	name string
 }
 
-func keyOf(object *types.TypeName) typeKey {
+// typeKeyFor is the key of a declared type.
+func typeKeyFor(object *types.TypeName) typeKey {
 	return typeKey{path: packagePath(object), name: object.Name()}
 }
 
@@ -98,13 +74,6 @@ type declaredType struct {
 	comment *ast.CommentGroup
 }
 
-// sharedFailures names nocontract's own failures: RequestRefused, which a route that reads its
-// request can answer before its handler runs, and AnswerNotWritten, which every route can answer.
-type sharedFailures struct {
-	requestRefused   string
-	answerNotWritten string
-}
-
 // ownFile is a Go file the project wrote, and its package.
 type ownFile struct {
 	loaded *packages.Package
@@ -113,8 +82,7 @@ type ownFile struct {
 
 // projectIndex is what every reading step reads from: the request, the file set positions are
 // read through, every type declaration of the loaded syntax, the project's own packages in import
-// path order, the files of them the project wrote and the types those declare, and nocontract's
-// own failures.
+// path order, and the files of them the project wrote and the types those declare.
 type projectIndex struct {
 	request  Request
 	files    *token.FileSet
@@ -122,11 +90,10 @@ type projectIndex struct {
 	project  []*packages.Package
 	own      []ownFile
 	ownTypes []declaredType
-	shared   sharedFailures
 }
 
-// indexOf indexes the loaded packages once.
-func indexOf(request Request) projectIndex {
+// indexed is the loaded packages indexed once.
+func indexed(request Request) projectIndex {
 	files := token.NewFileSet()
 	declared := map[typeKey]declaredType{}
 	project := []*packages.Package{}
@@ -134,7 +101,7 @@ func indexOf(request Request) projectIndex {
 		files = loaded.Fset
 		for _, file := range loaded.Syntax {
 			for _, entry := range typeDeclarations(loaded, file) {
-				declared[keyOf(entry.object)] = entry
+				declared[typeKeyFor(entry.object)] = entry
 			}
 		}
 		if loaded.PkgPath != serverplan.NoContractPath {
@@ -155,7 +122,6 @@ func indexOf(request Request) projectIndex {
 	}
 	return projectIndex{
 		request: request, files: files, declared: declared, project: project, own: own, ownTypes: ownTypes,
-		shared: sharedFailures{requestRefused: "RequestRefused", answerNotWritten: "AnswerNotWritten"},
 	}
 }
 
@@ -189,14 +155,17 @@ func (index projectIndex) position(pos token.Pos) token.Position {
 	return index.files.Position(pos)
 }
 
-// refused is a step refusing the declaration at pos.
-func (index projectIndex) refused(pos token.Pos, problem Problem) found {
-	return refusedAt(index.position(pos), problem)
+// placed is where pos is written, as every backend's refusals name a place.
+func (index projectIndex) placed(pos token.Pos) assembling.Position {
+	return placedAt(index.position(pos))
 }
 
-// readShared reads the runtime's sealed SharedFailure: every failure nocontract answers on a
-// route's behalf, each a member routes can answer.
-func readShared(index projectIndex) reading[sealedRead] {
-	return alongside(readSealed(index, typeKey{path: serverplan.NoContractPath, name: serverplan.SharedFailureType}, token.NoPos),
-		packageRead(serverplan.NoContractPath))
+// placedAt is a Go position as every backend's refusals name a place.
+func placedAt(position token.Position) assembling.Position {
+	return assembling.Position{File: position.Filename, Line: position.Line, Column: position.Column}
+}
+
+// refused is a step refusing the declaration at pos.
+func (index projectIndex) refused(pos token.Pos, problem Problem) found {
+	return refusedAt(index.placed(pos), problem)
 }

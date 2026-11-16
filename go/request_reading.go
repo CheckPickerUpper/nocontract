@@ -51,7 +51,7 @@ func Then[V Value](reading Reading[V], next func(V) Answer) Answer {
 
 // Text is one named part of a request as the text it carries.
 type Text struct {
-	part    RequestPart
+	part    RequestRefusedPart
 	name    string
 	reading textReading
 }
@@ -70,16 +70,16 @@ type textPresent struct{ text string }
 
 // Path is the path segment the route's pattern names name.
 func Path(request *http.Request, name string) Text {
-	return Text{part: PartPath, name: name, reading: textPresent{text: request.PathValue(name)}}
+	return Text{part: RequestRefusedPartPath, name: name, reading: textPresent{text: request.PathValue(name)}}
 }
 
 // Query is the query parameter name, refused when the request does not carry it.
 func Query(request *http.Request, name string) Text {
 	query := request.URL.Query()
 	if !query.Has(name) {
-		return Text{part: PartQuery, name: name, reading: RequestRefused{Part: PartQuery, Name: name, Reason: "the query parameter is missing"}}
+		return Text{part: RequestRefusedPartQuery, name: name, reading: RequestRefused{Part: RequestRefusedPartQuery, Name: name, Reason: "the query parameter is missing"}}
 	}
-	return Text{part: PartQuery, name: name, reading: textPresent{text: query.Get(name)}}
+	return Text{part: RequestRefusedPartQuery, name: name, reading: textPresent{text: query.Get(name)}}
 }
 
 // parsed reads the part's text with parse, refusing it with parse's error.
@@ -157,7 +157,7 @@ func Body(request *http.Request, decode func(*json.Decoder) error) Reading[struc
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()
 	refused := func(cause error) Reading[struct{}] {
-		return RequestRefused{Part: PartBody, Name: "Body", Reason: cause.Error()}
+		return RequestRefused{Part: RequestRefusedPartBody, Name: "Body", Reason: cause.Error()}
 	}
 	return mo.Fold(mo.EmptyableToOption(decode(decoder)), refused, func(error) Reading[struct{}] {
 		if decoder.More() {

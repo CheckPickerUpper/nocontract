@@ -19,8 +19,8 @@ type indexedField struct {
 	tag      string
 }
 
-// fieldsOf is every field of a struct, in order, with its tag.
-func fieldsOf(fields *types.Struct) []indexedField {
+// indexedFields is every field of a struct, in order, with its tag.
+func indexedFields(fields *types.Struct) []indexedField {
 	indexed := []indexedField{}
 	for position := range fields.NumFields() {
 		indexed = append(indexed, indexedField{variable: fields.Field(position), tag: fields.Tag(position)})
@@ -69,10 +69,10 @@ func readJSONTag(field indexedField) jsonTag {
 	}, func(error) jsonTag { return jsonNamed{name: goName} })
 }
 
-// fieldOf reads one struct field under encoding/json's naming: nothing for an unexported field or
+// readField reads one struct field under encoding/json's naming: nothing for an unexported field or
 // one tagged json:"-", which encoding/json never writes. An embedded field and a tag option such as
 // omitempty are refused. open is every named struct whose fields are being read.
-func fieldOf(index projectIndex, field indexedField, open []typeKey) reading[mo.Option[description.Field]] {
+func readField(index projectIndex, field indexedField, open []typeKey) reading[mo.Option[description.Field]] {
 	position := field.variable.Pos()
 	if field.variable.Embedded() {
 		return notRead[mo.Option[description.Field]](index.refused(position, EmbeddedFieldUnsupported{Field: field.variable.Name()}))
@@ -82,7 +82,7 @@ func fieldOf(index projectIndex, field indexedField, open []typeKey) reading[mo.
 	}
 	switch tag := readJSONTag(field).(type) {
 	case jsonNamed:
-		return mapped(schemaOf(index, field.variable.Type(), position, open), func(schema description.Schema) mo.Option[description.Field] {
+		return mapped(readSchema(index, field.variable.Type(), position, open), func(schema description.Schema) mo.Option[description.Field] {
 			return mo.Some(description.Field{Name: tag.name, Schema: schema})
 		})
 	case jsonOmitted:
@@ -96,7 +96,7 @@ func fieldOf(index projectIndex, field indexedField, open []typeKey) reading[mo.
 
 // structFields reads every written field of a struct that is not an outcome member.
 func structFields(index projectIndex, fields *types.Struct, open []typeKey) reading[[]description.Field] {
-	read := collected(fieldsOf(fields), func(field indexedField) reading[mo.Option[description.Field]] { return fieldOf(index, field, open) })
+	read := collected(indexedFields(fields), func(field indexedField) reading[mo.Option[description.Field]] { return readField(index, field, open) })
 	return mapped(read, present)
 }
 
@@ -104,9 +104,9 @@ func unsupported(index projectIndex, position token.Pos, written types.Type, fla
 	return notRead[description.Schema](index.refused(position, TypeUnsupported{Type: types.TypeString(written, nil), Flaw: flaw}))
 }
 
-// schemaOf is the JSON shape encoding/json writes a value of written as. open is every named
+// readSchema is the JSON shape encoding/json writes a value of written as. open is every named
 // struct whose fields are being read, which written may not be again.
-func schemaOf(index projectIndex, written types.Type, position token.Pos, open []typeKey) reading[description.Schema] {
+func readSchema(index projectIndex, written types.Type, position token.Pos, open []typeKey) reading[description.Schema] {
 	switch typed := types.Unalias(written).(type) {
 	case *types.Basic:
 		return basicSchema(index, typed, position)
@@ -116,14 +116,14 @@ func schemaOf(index projectIndex, written types.Type, position token.Pos, open [
 		if basic, isBasic := typed.Elem().Underlying().(*types.Basic); isBasic && basic.Kind() == types.Byte {
 			return unsupported(index, position, written, ByteSliceField{})
 		}
-		return mapped(schemaOf(index, typed.Elem(), position, open), func(item description.Schema) description.Schema { return description.List{Item: item} })
+		return mapped(readSchema(index, typed.Elem(), position, open), func(item description.Schema) description.Schema { return description.List{Item: item} })
 	case *types.Array:
-		return mapped(schemaOf(index, typed.Elem(), position, open), func(item description.Schema) description.Schema { return description.List{Item: item} })
+		return mapped(readSchema(index, typed.Elem(), position, open), func(item description.Schema) description.Schema { return description.List{Item: item} })
 	case *types.Map:
 		if key, isBasic := typed.Key().Underlying().(*types.Basic); !isBasic || key.Kind() != types.String {
 			return unsupported(index, position, written, MapKeyNotText{})
 		}
-		return mapped(schemaOf(index, typed.Elem(), position, open), func(value description.Schema) description.Schema { return description.Dictionary{Value: value} })
+		return mapped(readSchema(index, typed.Elem(), position, open), func(value description.Schema) description.Schema { return description.Dictionary{Value: value} })
 	case *types.Struct:
 		return mapped(structFields(index, typed, open), func(fields []description.Field) description.Schema { return description.InlineStruct{Fields: fields} })
 	case *types.Pointer:
@@ -155,7 +155,7 @@ func namedSchema(index projectIndex, named *types.Named, position token.Pos, ope
 	case packagePath(object) == "time" && object.Name() == "Time":
 		return readAs[description.Schema](description.Instant{}, nothingFound())
 	case packagePath(object) == "github.com/samber/mo" && object.Name() == "Option":
-		return mapped(schemaOf(index, named.TypeArgs().At(0), position, open), func(inner description.Schema) description.Schema { return description.Nullable{Inner: inner} })
+		return mapped(readSchema(index, named.TypeArgs().At(0), position, open), func(inner description.Schema) description.Schema { return description.Nullable{Inner: inner} })
 	}
 	if fields, isStruct := named.Underlying().(*types.Struct); isStruct {
 		return namedStruct(index, named, fields, position, open)
@@ -165,7 +165,7 @@ func namedSchema(index projectIndex, named *types.Named, position token.Pos, ope
 			return readAs[description.Schema](description.Literals{Values: values}, nothingFound())
 		}
 	}
-	return schemaOf(index, named.Underlying(), position, open)
+	return readSchema(index, named.Underlying(), position, open)
 }
 
 // stringConstants is every string constant of the named type declared in its package, sorted.
@@ -186,7 +186,7 @@ func stringConstants(named *types.Named) []string {
 // read. A struct met again while its own fields are read holds itself.
 func namedStruct(index projectIndex, named *types.Named, fields *types.Struct, position token.Pos, open []typeKey) reading[description.Schema] {
 	object := named.Obj()
-	key := keyOf(object)
+	key := typeKeyFor(object)
 	switch {
 	case named.TypeParams().Len() > 0 || named.TypeArgs().Len() > 0:
 		return notRead[description.Schema](index.refused(position, GenericMember{Member: object.Name()}))
@@ -194,7 +194,7 @@ func namedStruct(index projectIndex, named *types.Named, fields *types.Struct, p
 		return notRead[description.Schema](index.refused(position, RecursiveStruct{Struct: object.Name()}))
 	}
 	return andThen(structFields(index, fields, append(slices.Clone(open), key)), func(read []description.Field) reading[description.Schema] {
-		whole := structRead(foundStruct{key: key, position: index.position(object.Pos()), named: description.NamedStruct{Name: object.Name(), Fields: read}})
+		whole := structRead(foundStruct{key: key, position: index.placed(object.Pos()), named: description.NamedStruct{Name: object.Name(), Fields: read}})
 		return readAs[description.Schema](description.StructRef{Name: object.Name()}, whole)
 	})
 }

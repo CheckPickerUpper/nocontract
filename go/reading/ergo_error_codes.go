@@ -419,34 +419,6 @@ func (failure TypeUnsupported) Causes() []error {
 	return nil
 }
 
-func (NameRepeated) ErrorCode() ergo.Code { return "NC-1018" }
-
-// NameRepeatedArguments holds the arguments NameRepeated's message names, in the order the message first names them.
-type NameRepeatedArguments struct {
-	Name  string `json:"Name"`
-	First string `json:"First"`
-}
-
-// ReportArguments marks NameRepeatedArguments as the arguments of a report.
-func (NameRepeatedArguments) ReportArguments() {}
-
-// Report is NameRepeated's code, its message in language and the arguments the message names.
-func (failure NameRepeated) Report(language messages.Language) ergo.Report {
-	arguments := NameRepeatedArguments{Name: string(failure.Name), First: string(failure.First)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The name "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is already taken by "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1018", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Name}, messageformat.TextValue{Text: arguments.First}}}), Arguments: arguments}
-}
-
-// Causes is every error NameRepeated holds, then the causes of every failure it holds.
-func (failure NameRepeated) Causes() []error {
-	return nil
-}
-
 func (RecursiveStruct) ErrorCode() ergo.Code { return "NC-1019" }
 
 // RecursiveStructArguments holds the arguments RecursiveStruct's message names, in the order the message first names them.
@@ -528,141 +500,6 @@ func (failure InputFieldUnread) Causes() []error {
 	return nil
 }
 
-func (PathParameterUndeclared) ErrorCode() ergo.Code { return "NC-1022" }
-
-// PathParameterUndeclaredArguments holds the arguments PathParameterUndeclared's message names, in the order the message first names them.
-type PathParameterUndeclaredArguments struct {
-	Parameter string `json:"Parameter"`
-}
-
-// ReportArguments marks PathParameterUndeclaredArguments as the arguments of a report.
-func (PathParameterUndeclaredArguments) ReportArguments() {}
-
-// Report is PathParameterUndeclared's code, its message in language and the arguments the message names.
-func (failure PathParameterUndeclared) Report(language messages.Language) ergo.Report {
-	arguments := PathParameterUndeclaredArguments{Parameter: string(failure.Parameter)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "No input field reads the path segment named "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1022", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Parameter}}}), Arguments: arguments}
-}
-
-// Causes is every error PathParameterUndeclared holds, then the causes of every failure it holds.
-func (failure PathParameterUndeclared) Causes() []error {
-	return nil
-}
-
-func (PathFieldUnused) ErrorCode() ergo.Code { return "NC-1023" }
-
-// PathFieldUnusedArguments holds the arguments PathFieldUnused's message names, in the order the message first names them.
-type PathFieldUnusedArguments struct {
-	Parameter string `json:"Parameter"`
-}
-
-// ReportArguments marks PathFieldUnusedArguments as the arguments of a report.
-func (PathFieldUnusedArguments) ReportArguments() {}
-
-// Report is PathFieldUnused's code, its message in language and the arguments the message names.
-func (failure PathFieldUnused) Report(language messages.Language) ergo.Report {
-	arguments := PathFieldUnusedArguments{Parameter: string(failure.Parameter)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "An input field reads the path segment named "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: ", which the path does not have."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1023", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Parameter}}}), Arguments: arguments}
-}
-
-// Causes is every error PathFieldUnused holds, then the causes of every failure it holds.
-func (failure PathFieldUnused) Causes() []error {
-	return nil
-}
-
-func (PathWildcardUnsupported) ErrorCode() ergo.Code { return "NC-1024" }
-
-// PathWildcardUnsupportedArguments holds the arguments PathWildcardUnsupported's message names, in the order the message first names them.
-type PathWildcardUnsupportedArguments struct {
-	Segment string `json:"Segment"`
-}
-
-// ReportArguments marks PathWildcardUnsupportedArguments as the arguments of a report.
-func (PathWildcardUnsupportedArguments) ReportArguments() {}
-
-// Report is PathWildcardUnsupported's code, its message in language and the arguments the message names.
-func (failure PathWildcardUnsupported) Report(language messages.Language) ergo.Report {
-	arguments := PathWildcardUnsupportedArguments{Segment: string(failure.Segment)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The path segment "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " has no Effect HttpApi form."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1024", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Segment}}}), Arguments: arguments}
-}
-
-// Causes is every error PathWildcardUnsupported holds, then the causes of every failure it holds.
-func (failure PathWildcardUnsupported) Causes() []error {
-	return nil
-}
-
-func (BodyOnGet) ErrorCode() ergo.Code { return "NC-1025" }
-
-// BodyOnGetArguments holds the arguments BodyOnGet's message names, in the order the message first names them.
-type BodyOnGetArguments struct {
-}
-
-// ReportArguments marks BodyOnGetArguments as the arguments of a report.
-func (BodyOnGetArguments) ReportArguments() {}
-
-// Report is BodyOnGet's code, its message in language and the arguments the message names.
-func (failure BodyOnGet) Report(language messages.Language) ergo.Report {
-	arguments := BodyOnGetArguments{}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "A GET route's input reads a body, which a GET request does not carry."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1025", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
-}
-
-// Causes is every error BodyOnGet holds, then the causes of every failure it holds.
-func (failure BodyOnGet) Causes() []error {
-	return nil
-}
-
-func (RouteRepeated) ErrorCode() ergo.Code { return "NC-1026" }
-
-// RouteRepeatedArguments holds the arguments RouteRepeated's message names, in the order the message first names them.
-type RouteRepeatedArguments struct {
-	Pattern string `json:"Pattern"`
-	First   string `json:"First"`
-}
-
-// ReportArguments marks RouteRepeatedArguments as the arguments of a report.
-func (RouteRepeatedArguments) ReportArguments() {}
-
-// Report is RouteRepeated's code, its message in language and the arguments the message names.
-func (failure RouteRepeated) Report(language messages.Language) ergo.Report {
-	arguments := RouteRepeatedArguments{Pattern: string(failure.Pattern), First: string(failure.First)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is already served by the route at "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1026", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Pattern}, messageformat.TextValue{Text: arguments.First}}}), Arguments: arguments}
-}
-
-// Causes is every error RouteRepeated holds, then the causes of every failure it holds.
-func (failure RouteRepeated) Causes() []error {
-	return nil
-}
-
 func (TypeNotReachable) ErrorCode() ergo.Code { return "NC-1027" }
 
 // TypeNotReachableArguments holds the arguments TypeNotReachable's message names, in the order the message first names them.
@@ -687,33 +524,6 @@ func (failure TypeNotReachable) Report(language messages.Language) ergo.Report {
 
 // Causes is every error TypeNotReachable holds, then the causes of every failure it holds.
 func (failure TypeNotReachable) Causes() []error {
-	return nil
-}
-
-func (OutcomeWithoutSuccess) ErrorCode() ergo.Code { return "NC-1028" }
-
-// OutcomeWithoutSuccessArguments holds the arguments OutcomeWithoutSuccess's message names, in the order the message first names them.
-type OutcomeWithoutSuccessArguments struct {
-	Outcome string `json:"Outcome"`
-}
-
-// ReportArguments marks OutcomeWithoutSuccessArguments as the arguments of a report.
-func (OutcomeWithoutSuccessArguments) ReportArguments() {}
-
-// Report is OutcomeWithoutSuccess's code, its message in language and the arguments the message names.
-func (failure OutcomeWithoutSuccess) Report(language messages.Language) ergo.Report {
-	arguments := OutcomeWithoutSuccessArguments{Outcome: string(failure.Outcome)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The outcome "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " has no member answered with a success status."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1028", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Outcome}}}), Arguments: arguments}
-}
-
-// Causes is every error OutcomeWithoutSuccess holds, then the causes of every failure it holds.
-func (failure OutcomeWithoutSuccess) Causes() []error {
 	return nil
 }
 
@@ -772,32 +582,6 @@ func (failure ParameterTypeUnsupported) Causes() []error {
 	return nil
 }
 
-func (RoutesRefused) ErrorCode() ergo.Code { return "NC-1031" }
-
-// RoutesRefusedArguments holds the arguments RoutesRefused's message names, in the order the message first names them.
-type RoutesRefusedArguments struct {
-}
-
-// ReportArguments marks RoutesRefusedArguments as the arguments of a report.
-func (RoutesRefusedArguments) ReportArguments() {}
-
-// Report is RoutesRefused's code, its message in language and the arguments the message names.
-func (failure RoutesRefused) Report(language messages.Language) ergo.Report {
-	arguments := RoutesRefusedArguments{}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project's route declarations were refused."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1031", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
-}
-
-// Causes is every error RoutesRefused holds, then the causes of every failure it holds.
-func (failure RoutesRefused) Causes() []error {
-	return nil
-}
-
 func (StatusDirectiveMalformed) ErrorCode() ergo.Code { return "NC-1032" }
 
 // StatusDirectiveMalformedArguments holds the arguments StatusDirectiveMalformed's message names, in the order the message first names them.
@@ -823,33 +607,6 @@ func (failure StatusDirectiveMalformed) Report(language messages.Language) ergo.
 
 // Causes is every error StatusDirectiveMalformed holds, then the causes of every failure it holds.
 func (failure StatusDirectiveMalformed) Causes() []error {
-	return nil
-}
-
-func (FieldNameReserved) ErrorCode() ergo.Code { return "NC-1033" }
-
-// FieldNameReservedArguments holds the arguments FieldNameReserved's message names, in the order the message first names them.
-type FieldNameReservedArguments struct {
-	Field string `json:"Field"`
-}
-
-// ReportArguments marks FieldNameReservedArguments as the arguments of a report.
-func (FieldNameReservedArguments) ReportArguments() {}
-
-// Report is FieldNameReserved's code, its message in language and the arguments the message names.
-func (failure FieldNameReserved) Report(language messages.Language) ergo.Report {
-	arguments := FieldNameReservedArguments{Field: string(failure.Field)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The JSON name \""}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "\" is taken by the tag and code every answer starts with."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1033", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Field}}}), Arguments: arguments}
-}
-
-// Causes is every error FieldNameReserved holds, then the causes of every failure it holds.
-func (failure FieldNameReserved) Causes() []error {
 	return nil
 }
 
@@ -999,34 +756,6 @@ func (failure ReceiverUnsupported) Causes() []error {
 	return nil
 }
 
-func (EndpointNameRepeated) ErrorCode() ergo.Code { return "NC-1050" }
-
-// EndpointNameRepeatedArguments holds the arguments EndpointNameRepeated's message names, in the order the message first names them.
-type EndpointNameRepeatedArguments struct {
-	Name  string `json:"Name"`
-	First string `json:"First"`
-}
-
-// ReportArguments marks EndpointNameRepeatedArguments as the arguments of a report.
-func (EndpointNameRepeatedArguments) ReportArguments() {}
-
-// Report is EndpointNameRepeated's code, its message in language and the arguments the message names.
-func (failure EndpointNameRepeated) Report(language messages.Language) ergo.Report {
-	arguments := EndpointNameRepeatedArguments{Name: string(failure.Name), First: string(failure.First)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The endpoint name "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is already taken in this package, at "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1050", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Name}, messageformat.TextValue{Text: arguments.First}}}), Arguments: arguments}
-}
-
-// Causes is every error EndpointNameRepeated holds, then the causes of every failure it holds.
-func (failure EndpointNameRepeated) Causes() []error {
-	return nil
-}
-
 func (GeneratedNameTaken) ErrorCode() ergo.Code { return "NC-1051" }
 
 // GeneratedNameTakenArguments holds the arguments GeneratedNameTaken's message names, in the order the message first names them.
@@ -1081,28 +810,29 @@ func (failure DirectiveUnknown) Causes() []error {
 	return nil
 }
 
-func (RuntimeRefused) ErrorCode() ergo.Code { return "NC-1057" }
+func (RouteDirectiveRepeated) ErrorCode() ergo.Code { return "NC-1064" }
 
-// RuntimeRefusedArguments holds the arguments RuntimeRefused's message names, in the order the message first names them.
-type RuntimeRefusedArguments struct {
+// RouteDirectiveRepeatedArguments holds the arguments RouteDirectiveRepeated's message names, in the order the message first names them.
+type RouteDirectiveRepeatedArguments struct {
+	Handler string `json:"Handler"`
 }
 
-// ReportArguments marks RuntimeRefusedArguments as the arguments of a report.
-func (RuntimeRefusedArguments) ReportArguments() {}
+// ReportArguments marks RouteDirectiveRepeatedArguments as the arguments of a report.
+func (RouteDirectiveRepeatedArguments) ReportArguments() {}
 
-// Report is RuntimeRefused's code, its message in language and the arguments the message names.
-func (failure RuntimeRefused) Report(language messages.Language) ergo.Report {
-	arguments := RuntimeRefusedArguments{}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The runtime's shared failures were refused."}}}
+// Report is RouteDirectiveRepeated's code, its message in language and the arguments the message names.
+func (failure RouteDirectiveRepeated) Report(language messages.Language) ergo.Report {
+	arguments := RouteDirectiveRepeatedArguments{Handler: string(failure.Handler)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The handler "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " has more than one //nocontract:route line; a handler serves one route."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:
 	case nil:
 	}
-	return ergo.Report{Code: "NC-1057", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+	return ergo.Report{Code: "NC-1064", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Handler}}}), Arguments: arguments}
 }
 
-// Causes is every error RuntimeRefused holds, then the causes of every failure it holds.
-func (failure RuntimeRefused) Causes() []error {
+// Causes is every error RouteDirectiveRepeated holds, then the causes of every failure it holds.
+func (failure RouteDirectiveRepeated) Causes() []error {
 	return nil
 }

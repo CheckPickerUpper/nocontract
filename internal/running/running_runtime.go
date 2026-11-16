@@ -9,8 +9,9 @@ import (
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
 
-	"github.com/CheckPickerUpper/nocontract/go/reading"
+	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
+	"github.com/CheckPickerUpper/nocontract/go/writing"
 	"github.com/CheckPickerUpper/nocontract/messages"
 )
 
@@ -21,7 +22,7 @@ func RunRuntime(request Request) Outcome {
 	switch parsed := parseVerb(request.Arguments, flag.NewFlagSet("runtime-answers", flag.ContinueOnError)).(type) {
 	case verbRead:
 		return mo.Fold(runtimeDirectory(request.Context), func(directory string) Outcome {
-			return generatedRuntime(request.Context, directory, parsed.finish)
+			return generatedRuntime(directory, parsed.finish)
 		}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
 	case verbRefused:
 		return UsageRefused{Problem: parsed.problem, Usage: runtimeUsage}
@@ -58,24 +59,12 @@ func runtimeDirectory(ctx context.Context) mo.Result[string] {
 	}, mo.Err[string])
 }
 
-// generatedRuntime reads the runtime package's shared failures, renders its generated file and
-// hands it to finish.
-func generatedRuntime(ctx context.Context, directory string, finish finisher) Outcome {
+// generatedRuntime renders the runtime package's generated file from the one declaration of
+// nocontract's own failures, and hands it to finish. Nothing of the runtime is read, so a runtime
+// whose generated file is missing or stale is written again.
+func generatedRuntime(directory string, finish finisher) Outcome {
 	path := filepath.Join(directory, serverplan.FileName)
-	existing := mo.Fold(mo.TupleToResult(os.ReadFile(path)), func(content []byte) map[string][]byte { return map[string][]byte{path: content} },
-		// A file that cannot be read is written again; nothing of it is read as a stub.
-		func(error) map[string][]byte { return map[string][]byte{} })
-	return mo.Fold(loadPackages(ctx, directory, []string{}, existing), func(loaded []*packages.Package) Outcome {
-		if problems := loadProblems(loaded, []string{serverplan.NoContractPath}); len(problems) > 0 {
-			return PackagesNotLoaded{Errors: problems}
-		}
-		switch read := reading.ReadRuntime(loaded).(type) {
-		case reading.RuntimeRead:
-			return mo.Fold(goFiles([]serverplan.Package{read.Package}), finish, func(cause error) Outcome { return FileNotWritten{Path: path, Cause: cause} })
-		case reading.RuntimeRefused:
-			return DeclarationsRefused{Refusals: read.Refusals}
-		case nil:
-		}
-		return DeclarationsRefused{Refusals: []reading.Refusal{}}
-	}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
+	return mo.Fold(writing.RenderRuntime(description.SharedFailures()), func(content []byte) Outcome {
+		return finish([]generatedFile{{path: path, content: mo.Some(content)}})
+	}, func(cause error) Outcome { return FileNotWritten{Path: path, Cause: cause} })
 }

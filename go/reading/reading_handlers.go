@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"maps"
 	"slices"
 	"strings"
 	"unicode"
@@ -14,16 +13,17 @@ import (
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
 
+	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 )
 
-// routeEntry is one route read whole: the package and handler declaring it, its endpoint, the
-// route its generated code serves, and how its outcome is answered.
+// routeEntry is one route read whole: the package and handler declaring it, its endpoint as the
+// API declares it, the route its generated code serves, and how its outcome is answered.
 type routeEntry struct {
 	loaded   *packages.Package
 	position token.Pos
-	endpoint description.Endpoint
+	endpoint assembling.DeclaredEndpoint
 	route    serverplan.Route
 	outcome  serverplan.OutcomeAnswer
 }
@@ -35,8 +35,8 @@ type handlerDeclaration struct {
 	doc      *ast.CommentGroup
 }
 
-// handlersOf is every function of the project's own files carrying a //nocontract:route line.
-func handlersOf(index projectIndex) []handlerDeclaration {
+// routeHandlers is every function of the project's own files carrying a //nocontract:route line.
+func routeHandlers(index projectIndex) []handlerDeclaration {
 	handlers := []handlerDeclaration{}
 	for _, own := range index.own {
 		for _, declaration := range own.file.Decls {
@@ -46,7 +46,7 @@ func handlersOf(index projectIndex) []handlerDeclaration {
 			}
 			doc := mo.Fold(mo.EmptyableToOption(function.Doc), func(written *ast.CommentGroup) *ast.CommentGroup { return written },
 				func(error) *ast.CommentGroup { return emptyComment() })
-			switch linesOf(doc, routeKind{}).(type) {
+			switch writtenLines(doc, routeKind{}).(type) {
 			case oneLine, repeatedLines:
 				handlers = append(handlers, handlerDeclaration{loaded: own.loaded, function: function, doc: doc})
 			case noLine, nil:
@@ -59,7 +59,7 @@ func handlersOf(index projectIndex) []handlerDeclaration {
 // readRoutes reads every route the project declares.
 func readRoutes(index projectIndex, guards guardTable) []reading[routeEntry] {
 	routes := []reading[routeEntry]{}
-	for _, handler := range handlersOf(index) {
+	for _, handler := range routeHandlers(index) {
 		routes = append(routes, readRoute(index, guards, handler))
 	}
 	return routes
@@ -105,9 +105,9 @@ type handlerTypes struct {
 func (handlerTypes) isSignatureReading()                {}
 func (HandlerSignatureUnsupported) isSignatureReading() {}
 
-// signatureOf is the input and outcome of a func(context.Context, Input) Outcome, or why the
+// readSignature is the input and outcome of a func(context.Context, Input) Outcome, or why the
 // handler is not one.
-func signatureOf(function *ast.FuncDecl, signature *types.Signature) signatureReading {
+func readSignature(function *ast.FuncDecl, signature *types.Signature) signatureReading {
 	refused := func(flaw SignatureFlaw) signatureReading {
 		return HandlerSignatureUnsupported{Handler: function.Name.Name, Flaw: flaw}
 	}
@@ -149,7 +149,7 @@ func readHandlerTypes(index projectIndex, handler handlerDeclaration) reading[ha
 	if !isSignature {
 		return notRead[handlerTypes](index.refused(position, HandlerSignatureUnsupported{Handler: handler.function.Name.Name, Flaw: NotAFunction{}}))
 	}
-	switch read := signatureOf(handler.function, signature).(type) {
+	switch read := readSignature(handler.function, signature).(type) {
 	case handlerTypes:
 		return servedHandler(index, handler.loaded, read, position)
 	case HandlerSignatureUnsupported:
@@ -177,16 +177,12 @@ func servedHandler(index projectIndex, loaded *packages.Package, handler handler
 // readRoute reads one handler's route whole: its line, signature, guard, input and outcome.
 func readRoute(index projectIndex, guards guardTable, handler handlerDeclaration) reading[routeEntry] {
 	position := handler.function.Name.Pos()
-	declared := paired(paired(readRouteDirective(index, handler), readHandlerTypes(index, handler)), readRouteGuard(index, guards, linesOf(handler.doc, guardKind{})))
+	declared := paired(paired(readRouteDirective(index, handler), readHandlerTypes(index, handler)), readRouteGuard(index, guards, writtenLines(handler.doc, guardKind{})))
 	return alongside(andThen(declared, func(read pair[pair[routeLine, handlerTypes], routeGuard]) reading[routeEntry] {
 		route, signature, guard := read.first.first, read.first.second, read.second
-		input := readInput(index, handler.loaded, signature.input, route.method, position)
-		parts := paired(paired(pathParameters(index, route.path, position), input), readOutcome(index, handler.loaded, signature.outcome, position))
-		return andThen(parts, func(parts pair[pair[[]string, inputShape], outcomeShape]) reading[routeEntry] {
-			outcome := parts.second
-			return mapped(matchPathParameters(index, parts.first.first, parts.first.second, position), func(input inputShape) routeEntry {
-				return entryOf(index, handler, routeParts{route: route, handler: signature, guard: guard, input: input, outcome: outcome})
-			})
+		parts := paired(readInput(index, handler.loaded, signature.input, position), readOutcome(index, handler.loaded, signature.outcome, position))
+		return mapped(parts, func(parts pair[inputShape, outcomeShape]) routeEntry {
+			return readEntry(index, handler, routeParts{route: route, handler: signature, guard: guard, input: parts.first, outcome: parts.second})
 		})
 	}), packageRead(handler.loaded.PkgPath))
 }
@@ -200,20 +196,20 @@ type routeParts struct {
 	outcome outcomeShape
 }
 
-// entryOf is a route read whole, as its endpoint, served route and outcome answer.
-func entryOf(index projectIndex, handler handlerDeclaration, parts routeParts) routeEntry {
+// readEntry is a route read whole, as its endpoint, served route and outcome answer.
+func readEntry(index projectIndex, handler handlerDeclaration, parts routeParts) routeEntry {
 	name := endpointName(handler.function.Name.Name)
 	answered := answeredBy(parts.outcome.plans)
 	return routeEntry{
 		loaded: handler.loaded, position: handler.function.Name.Pos(),
-		endpoint: description.Endpoint{
-			Name: name, Method: parts.route.method, Path: parts.route.path, Params: fieldsOfParameters(parts.input.params),
-			Query: fieldsOfParameters(parts.input.query), Body: parts.input.body, Successes: answered.successes,
-			Failures: slices.Concat(answered.failures, refusalsOf(index, parts.input, parts.guard)),
+		endpoint: assembling.DeclaredEndpoint{
+			Name: name, Method: parts.route.method, Path: parts.route.path, Params: parameterFields(parts.input.params),
+			Query: parameterFields(parts.input.query), Body: parts.input.body, Successes: answered.successes,
+			Failures: slices.Concat(answered.failures, parts.guard.members), Position: index.placed(handler.function.Name.Pos()),
 		},
 		route: serverplan.Route{
 			Name: name, Method: parts.route.method, Path: parts.route.path, Handler: parts.handler.handler, Guard: parts.guard.plan,
-			Input: parts.input.name, Outcome: parts.outcome.name, Params: plansOf(parts.input.params), Query: plansOf(parts.input.query),
+			Input: parts.input.name, Outcome: parts.outcome.name, Params: parameterPlans(parts.input.params), Query: parameterPlans(parts.input.query),
 			Body: bodyRead(parts.input.body),
 		},
 		outcome: serverplan.OutcomeAnswer{Outcome: parts.outcome.name, Members: parts.outcome.plans},
@@ -222,15 +218,15 @@ func entryOf(index projectIndex, handler handlerDeclaration, parts routeParts) r
 
 // readRouteDirective reads a handler's one //nocontract:route line.
 func readRouteDirective(index projectIndex, handler handlerDeclaration) reading[routeLine] {
-	switch lines := linesOf(handler.doc, routeKind{}).(type) {
+	switch lines := writtenLines(handler.doc, routeKind{}).(type) {
 	case oneLine:
 		return mo.Fold(readRouteLine(lines.line.argument), func(route routeLine) reading[routeLine] {
 			return readAs(route, nothingFound())
 		}, func(error) reading[routeLine] {
-			return notRead[routeLine](refusedAt(index.position(lines.line.position), RouteDirectiveMalformed{Text: lines.line.argument}))
+			return notRead[routeLine](index.refused(lines.line.position, RouteDirectiveMalformed{Text: lines.line.argument}))
 		})
 	case repeatedLines:
-		return notRead[routeLine](refusedAt(index.position(lines.second.position), RouteDirectiveMalformed{Text: "a handler declares exactly one route"}))
+		return notRead[routeLine](index.refused(lines.second.position, RouteDirectiveRepeated{Handler: handler.function.Name.Name}))
 	case noLine, nil:
 	}
 	return notRead[routeLine](nothingFound())
@@ -268,18 +264,6 @@ func answeredBy(members []serverplan.Member) answered {
 	return sorted
 }
 
-// refusalsOf is every member that can answer a route outside its handler: its guard's refusals,
-// RequestRefused when its input reads any part of the request, and AnswerNotWritten.
-func refusalsOf(index projectIndex, read inputShape, guard routeGuard) []string {
-	refusals := slices.Clone(guard.members)
-	switch read.request.(type) {
-	case requestRead:
-		refusals = append(refusals, index.shared.requestRefused)
-	case requestUnread, nil:
-	}
-	return append(refusals, index.shared.answerNotWritten)
-}
-
 // reachableName is the Go name the route's generated code in package from refers to a type by,
 // refusing an unexported type of another package, which that code cannot name.
 func reachableName(index projectIndex, object *types.TypeName, from string, position token.Pos) reading[serverplan.GoName] {
@@ -300,54 +284,14 @@ func goName(declared declaredType) serverplan.GoName {
 	return serverplan.GoName{Package: declared.loaded.PkgPath, Name: declared.object.Name()}
 }
 
-// pathParameters is every {name} segment of a path, refusing the segments Effect has no form for.
-func pathParameters(index projectIndex, path string, position token.Pos) reading[[]string] {
-	segments := []string{}
-	for segment := range strings.SplitSeq(path, "/") {
-		if inner, isParameter := strings.CutPrefix(segment, "{"); isParameter {
-			segments = append(segments, inner)
-		}
-	}
-	return collected(segments, func(inner string) reading[string] {
-		name := strings.TrimSuffix(inner, "}")
-		if name == "$" || strings.HasSuffix(name, "...") {
-			return notRead[string](index.refused(position, PathWildcardUnsupported{Segment: "{" + inner}))
-		}
-		return readAs(name, nothingFound())
-	})
-}
-
-// matchPathParameters binds each segment of the path to the input field that reads it, refusing a
-// segment no field reads and a field reading a segment the path does not have. The input's path
-// fields come back in the order the path names them.
-func matchPathParameters(index projectIndex, segments []string, input inputShape, position token.Pos) reading[inputShape] {
-	unbound := map[string]parameter{}
-	for _, param := range input.params {
-		unbound[param.field.Name] = param
-	}
-	bound := collected(segments, func(segment string) reading[parameter] {
-		param, reads := unbound[segment]
-		if !reads {
-			return notRead[parameter](index.refused(position, PathParameterUndeclared{Parameter: segment}))
-		}
-		delete(unbound, segment)
-		return readAs(param, nothingFound())
-	})
-	unused := collected(slices.Sorted(maps.Keys(unbound)), func(name string) reading[string] {
-		return notRead[string](index.refused(position, PathFieldUnused{Parameter: name}))
-	})
-	return mapped(paired(bound, unused), func(read pair[[]parameter, []string]) inputShape {
-		return inputShape{name: input.name, params: read.first, query: input.query, body: input.body, request: input.request}
-	})
-}
-
 // parameter is one path or query field: its JSON field and how the generated code reads it.
 type parameter struct {
 	field description.Field
 	plan  serverplan.Param
 }
 
-func fieldsOfParameters(params []parameter) []description.Field {
+// parameterFields is each parameter's JSON field.
+func parameterFields(params []parameter) []description.Field {
 	fields := []description.Field{}
 	for _, param := range params {
 		fields = append(fields, param.field)
@@ -355,7 +299,8 @@ func fieldsOfParameters(params []parameter) []description.Field {
 	return fields
 }
 
-func plansOf(params []parameter) []serverplan.Param {
+// parameterPlans is how the generated code reads each parameter.
+func parameterPlans(params []parameter) []serverplan.Param {
 	plans := []serverplan.Param{}
 	for _, param := range params {
 		plans = append(plans, param.plan)
@@ -363,33 +308,13 @@ func plansOf(params []parameter) []serverplan.Param {
 	return plans
 }
 
-// inputShape is a route's input type, what it reads from its request, and whether it reads any of
-// it.
+// inputShape is a route's input type and what it reads from its request.
 type inputShape struct {
-	name    serverplan.GoName
-	params  []parameter
-	query   []parameter
-	body    description.Body
-	request requestUse
+	name   serverplan.GoName
+	params []parameter
+	query  []parameter
+	body   description.Body
 }
-
-// requestUse is whether a route's input reads any part of its request, which it can then refuse.
-//
-//sumtype:decl
-type requestUse interface{ isRequestUse() }
-
-// requestRead is an input reading a path segment, a query parameter or the body.
-//
-//ergo:not-an-error
-type requestRead struct{}
-
-// requestUnread is an input reading nothing from the request.
-//
-//ergo:not-an-error
-type requestUnread struct{}
-
-func (requestRead) isRequestUse()   {}
-func (requestUnread) isRequestUse() {}
 
 // inputField is where one input field is read from, decided by one function.
 //
@@ -438,8 +363,8 @@ func (tag fieldTag) value(key string) mo.Option[string] {
 	}, func(error) mo.Option[string] { return mo.None[string]() })
 }
 
-// placeOfInputField is where the generated code reads an input field from.
-func placeOfInputField(field indexedField) inputField {
+// inputFieldPlace is where the generated code reads an input field from.
+func inputFieldPlace(field indexedField) inputField {
 	switch {
 	case field.variable.Embedded():
 		return embeddedInputField{}
@@ -480,7 +405,9 @@ func (pathRead) isPlacedField()      {}
 func (queryRead) isPlacedField()     {}
 func (bodyFieldRead) isPlacedField() {}
 
-func readInput(index projectIndex, loaded *packages.Package, input types.Type, method description.Method, position token.Pos) reading[inputShape] {
+// readInput reads a route's input: a named struct each of whose fields is read from one part of
+// the request.
+func readInput(index projectIndex, loaded *packages.Package, input types.Type, position token.Pos) reading[inputShape] {
 	named, isNamed := types.Unalias(input).(*types.Named)
 	if !isNamed {
 		return notRead[inputShape](index.refused(position, InputNotStruct{Input: types.TypeString(input, nil)}))
@@ -490,26 +417,21 @@ func readInput(index projectIndex, loaded *packages.Package, input types.Type, m
 		return notRead[inputShape](index.refused(position, InputNotStruct{Input: types.TypeString(input, nil)}))
 	}
 	return alongside(andThen(reachableName(index, named.Obj(), loaded.PkgPath, position), func(name serverplan.GoName) reading[inputShape] {
-		placed := collected(fieldsOf(fields), func(field indexedField) reading[placedField] { return readPlacedField(index, loaded, field, method) })
-		return mapped(placed, func(placed []placedField) inputShape { return shapeOf(name, placed) })
+		placed := collected(indexedFields(fields), func(field indexedField) reading[placedField] { return readPlacedField(index, loaded, field) })
+		return mapped(placed, func(placed []placedField) inputShape { return sortedInput(name, placed) })
 	}), packageRead(packagePath(named.Obj())))
 }
 
 // readPlacedField reads one input field where it is placed.
-func readPlacedField(index projectIndex, loaded *packages.Package, field indexedField, method description.Method) reading[placedField] {
+func readPlacedField(index projectIndex, loaded *packages.Package, field indexedField) reading[placedField] {
 	position := field.variable.Pos()
-	switch place := placeOfInputField(field).(type) {
+	switch place := inputFieldPlace(field).(type) {
 	case pathField:
 		return mapped(readParameter(index, loaded, field.variable, place.name), func(read parameter) placedField { return pathRead{read: read} })
 	case queryField:
 		return mapped(readParameter(index, loaded, field.variable, place.name), func(read parameter) placedField { return queryRead{read: read} })
 	case bodyField:
-		switch method.Body().(type) {
-		case description.BodyCarried:
-			return mapped(schemaOf(index, field.variable.Type(), position, []typeKey{}), func(schema description.Schema) placedField { return bodyFieldRead{schema: schema} })
-		case description.BodyAbsent, nil:
-		}
-		return notRead[placedField](index.refused(position, BodyOnGet{}))
+		return mapped(readSchema(index, field.variable.Type(), position, []typeKey{}), func(schema description.Schema) placedField { return bodyFieldRead{schema: schema} })
 	case embeddedInputField:
 		return notRead[placedField](index.refused(position, EmbeddedFieldUnsupported{Field: field.variable.Name()}))
 	case unplacedField, nil:
@@ -517,11 +439,10 @@ func readPlacedField(index projectIndex, loaded *packages.Package, field indexed
 	return notRead[placedField](index.refused(position, InputFieldUnread{Field: field.variable.Name()}))
 }
 
-// shapeOf is an input's fields, sorted by where each is read.
-func shapeOf(name serverplan.GoName, placed []placedField) inputShape {
-	shape := inputShape{name: name, params: []parameter{}, query: []parameter{}, body: description.NoBody{}, request: requestUnread{}}
+// sortedInput is an input's fields, sorted by where each is read.
+func sortedInput(name serverplan.GoName, placed []placedField) inputShape {
+	shape := inputShape{name: name, params: []parameter{}, query: []parameter{}, body: description.NoBody{}}
 	for _, field := range placed {
-		shape.request = requestRead{}
 		switch read := field.(type) {
 		case pathRead:
 			shape.params = append(shape.params, read.read)
@@ -549,7 +470,7 @@ func readParameter(index projectIndex, loaded *packages.Package, field *types.Va
 		})
 	}
 	return andThen(goType, func(goType serverplan.ParamType) reading[parameter] {
-		return andThen(schemaOf(index, field.Type(), field.Pos(), []typeKey{}), func(schema description.Schema) reading[parameter] {
+		return andThen(readSchema(index, field.Type(), field.Pos(), []typeKey{}), func(schema description.Schema) reading[parameter] {
 			return mo.Fold(textKind(basic, schema), func(kind serverplan.TextKind) reading[parameter] {
 				return readAs(parameter{
 					field: description.Field{Name: name, Schema: schema},

@@ -122,8 +122,8 @@ func (noLine) isDirectiveLines()        {}
 func (oneLine) isDirectiveLines()       {}
 func (repeatedLines) isDirectiveLines() {}
 
-// linesOf is how many times comment writes the directive of kind.
-func linesOf(comment *ast.CommentGroup, kind directiveKind) directiveLines {
+// writtenLines is how many times comment writes the directive of kind.
+func writtenLines(comment *ast.CommentGroup, kind directiveKind) directiveLines {
 	kept := []directive{}
 	for _, line := range directiveLinesIn(comment) {
 		switch read := line.(type) {

@@ -11,7 +11,7 @@ export type Money = typeof Money.Type
 
 export class RequestRefused extends Schema.TaggedError<RequestRefused>()("RequestRefused", {
   code: Schema.Literal("NC-1001"),
-  part: Schema.Literals(["body", "path", "query"]),
+  part: Schema.Literals(["path", "query", "body"]),
   name: Schema.String,
   reason: Schema.String,
 }, { httpApiStatus: 400 }) {}

@@ -43,7 +43,7 @@ type guardDeclaration struct {
 func readGuards(index projectIndex) guardTable {
 	marked := []guardDeclaration{}
 	for _, each := range index.ownTypes {
-		switch line := linesOf(each.comment, guardKind{}).(type) {
+		switch line := writtenLines(each.comment, guardKind{}).(type) {
 		case oneLine, repeatedLines:
 			marked = append(marked, guardDeclaration{declared: each, line: line})
 		case noLine, nil:
@@ -72,7 +72,7 @@ type namedGuard struct {
 // the guard are not refused again for it.
 func readGuardDeclaration(index projectIndex, guards map[string]guardEntry, marked guardDeclaration) reading[namedGuard] {
 	malformed := func(line directive) reading[namedGuard] {
-		return notRead[namedGuard](refusedAt(index.position(line.position), GuardDirectiveMalformed{Text: line.argument}))
+		return notRead[namedGuard](index.refused(line.position, GuardDirectiveMalformed{Text: line.argument}))
 	}
 	switch lines := marked.line.(type) {
 	case oneLine:
@@ -93,7 +93,7 @@ func readGuardDeclaration(index projectIndex, guards map[string]guardEntry, mark
 // readGuardRefusal reads a guard's sealed refusal, refusing each member that succeeds: a refusal
 // holds only failures.
 func readGuardRefusal(index projectIndex, declared declaredType) reading[[]sealedMember] {
-	return andThen(readSealed(index, keyOf(declared.object), declared.spec.Pos()), func(sealed sealedRead) reading[[]sealedMember] {
+	return andThen(readSealed(index, typeKeyFor(declared.object), declared.spec.Pos()), func(sealed sealedRead) reading[[]sealedMember] {
 		refused := collected(sealed.successes, func(member succeededMember) reading[succeededMember] {
 			return notRead[succeededMember](index.refused(member.object.Pos(), GuardMemberSucceeds{Member: member.object.Name(), Status: member.status.Code()}))
 		})
@@ -115,14 +115,14 @@ func readRouteGuard(index projectIndex, guards guardTable, lines directiveLines)
 	case oneLine:
 		return readNamedRouteGuard(index, guards, read.line)
 	case repeatedLines:
-		return notRead[routeGuard](refusedAt(index.position(read.second.position), GuardDirectiveMalformed{Text: read.second.argument}))
+		return notRead[routeGuard](index.refused(read.second.position, GuardDirectiveMalformed{Text: read.second.argument}))
 	case noLine, nil:
 	}
 	return readAs(routeGuard{plan: serverplan.Unguarded{}, members: []string{}}, nothingFound())
 }
 
 func readNamedRouteGuard(index projectIndex, guards guardTable, line directive) reading[routeGuard] {
-	malformed := notRead[routeGuard](refusedAt(index.position(line.position), GuardDirectiveMalformed{Text: line.argument}))
+	malformed := notRead[routeGuard](index.refused(line.position, GuardDirectiveMalformed{Text: line.argument}))
 	name, argument, hasArgument := strings.Cut(line.argument, " ")
 	if !hasArgument || strings.Contains(strings.TrimSpace(argument), " ") {
 		return malformed
@@ -130,7 +130,7 @@ func readNamedRouteGuard(index projectIndex, guards guardTable, line directive) 
 	return mo.Fold(guardName(name), func(name string) reading[routeGuard] {
 		guard, declared := guards.guards[name]
 		if !declared {
-			return notRead[routeGuard](refusedAt(index.position(line.position), GuardUndeclared{Guard: name}))
+			return notRead[routeGuard](index.refused(line.position, GuardUndeclared{Guard: name}))
 		}
 		return mo.Fold(guard.members, func(members []sealedMember) reading[routeGuard] {
 			names := []string{}

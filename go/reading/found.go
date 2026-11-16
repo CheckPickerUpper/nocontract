@@ -1,18 +1,18 @@
 package reading
 
 import (
-	"go/token"
 	"slices"
 
 	"github.com/samber/mo"
 
+	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
 )
 
 // found is what a reading step found beside its value, each in the order found: the declarations
 // it refused, the members and named structs it read, and the packages whose declarations it read.
 type found struct {
-	refusals []Refusal
+	refusals []assembling.Refusal
 	members  []foundMember
 	structs  []foundStruct
 	packages []string
@@ -21,20 +21,20 @@ type found struct {
 // foundMember is a member read whole, with the declaration it was read from.
 type foundMember struct {
 	key      typeKey
-	position token.Position
+	position assembling.Position
 	member   description.Member
 }
 
 // foundStruct is a named struct read whole, with the declaration it was read from.
 type foundStruct struct {
 	key      typeKey
-	position token.Position
+	position assembling.Position
 	named    description.NamedStruct
 }
 
 // nothingFound is a step that found nothing beside its value.
 func nothingFound() found {
-	return found{refusals: []Refusal{}, members: []foundMember{}, structs: []foundStruct{}, packages: []string{}}
+	return found{refusals: []assembling.Refusal{}, members: []foundMember{}, structs: []foundStruct{}, packages: []string{}}
 }
 
 // with is everything found and everything other found, in that order.
@@ -48,23 +48,23 @@ func (finding found) with(other found) found {
 }
 
 // refusedAt is a step that refused one declaration.
-func refusedAt(position token.Position, problem Problem) found {
-	return found{refusals: []Refusal{{Position: position, Problem: problem}}, members: []foundMember{}, structs: []foundStruct{}, packages: []string{}}
+func refusedAt(position assembling.Position, problem Problem) found {
+	return found{refusals: []assembling.Refusal{{Position: position, Problem: problem}}, members: []foundMember{}, structs: []foundStruct{}, packages: []string{}}
 }
 
 // packageRead is a step that read one package's declarations.
 func packageRead(path string) found {
-	return found{refusals: []Refusal{}, members: []foundMember{}, structs: []foundStruct{}, packages: []string{path}}
+	return found{refusals: []assembling.Refusal{}, members: []foundMember{}, structs: []foundStruct{}, packages: []string{path}}
 }
 
 // memberRead is a step that read one member whole.
 func memberRead(member foundMember) found {
-	return found{refusals: []Refusal{}, members: []foundMember{member}, structs: []foundStruct{}, packages: []string{}}
+	return found{refusals: []assembling.Refusal{}, members: []foundMember{member}, structs: []foundStruct{}, packages: []string{}}
 }
 
 // structRead is a step that read one named struct whole.
 func structRead(named foundStruct) found {
-	return found{refusals: []Refusal{}, members: []foundMember{}, structs: []foundStruct{named}, packages: []string{}}
+	return found{refusals: []assembling.Refusal{}, members: []foundMember{}, structs: []foundStruct{named}, packages: []string{}}
 }
 
 // reading is a step's value, absent when the step refused what it read, and what it found.

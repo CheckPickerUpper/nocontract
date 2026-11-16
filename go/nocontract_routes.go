@@ -7,6 +7,44 @@ import (
 	mo "github.com/samber/mo"
 )
 
+// SharedFailure is a failure nocontract answers on a route's behalf, outside its handler.
+//
+//sumtype:decl
+type SharedFailure interface{ isSharedFailure() }
+
+// RequestRefused is a request whose path segment, query parameter or body the route's input could not read. Every route that reads its request can answer it, before its handler runs.
+//
+//ergo:code NC-1001
+//ergo:message The request's {Part} {Name} could not be read: {Reason}
+type RequestRefused struct {
+	Part   RequestRefusedPart `json:"part"`
+	Name   string             `json:"name"`
+	Reason string             `json:"reason"`
+}
+
+// RequestRefusedPart is which of its values a RequestRefused's part field holds.
+type RequestRefusedPart string
+
+// The values a RequestRefused's part field holds.
+const (
+	RequestRefusedPartPath  RequestRefusedPart = "path"
+	RequestRefusedPartQuery RequestRefusedPart = "query"
+	RequestRefusedPartBody  RequestRefusedPart = "body"
+)
+
+func (RequestRefused) isSharedFailure() {}
+
+// AnswerNotWritten is a route whose outcome could not be written as JSON, or that answered no outcome at all. Every route can answer it.
+//
+//ergo:code NC-1002
+//ergo:message The route could not write its answer: {Reason}
+type AnswerNotWritten struct {
+	Answer string `json:"answer"`
+	Reason string `json:"reason"`
+}
+
+func (AnswerNotWritten) isSharedFailure() {}
+
 // NocontractAnswerSharedFailure answers each failure nocontract answers on a route's behalf
 // with its status, tag and code.
 func NocontractAnswerSharedFailure(outcome SharedFailure) Answer {
