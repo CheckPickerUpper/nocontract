@@ -205,32 +205,6 @@ func (failure FileNotWritten) Causes() []error {
 	return causes
 }
 
-func (PackagesMissing) ErrorCode() ergo.Code { return "NC-1040" }
-
-// PackagesMissingArguments holds the arguments PackagesMissing's message names, in the order the message first names them.
-type PackagesMissingArguments struct {
-}
-
-// ReportArguments marks PackagesMissingArguments as the arguments of a report.
-func (PackagesMissingArguments) ReportArguments() {}
-
-// Report is PackagesMissing's code, its message in language and the arguments the message names.
-func (failure PackagesMissing) Report(language messages.Language) ergo.Report {
-	arguments := PackagesMissingArguments{}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no packages."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1040", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
-}
-
-// Causes is every error PackagesMissing holds, then the causes of every failure it holds.
-func (failure PackagesMissing) Causes() []error {
-	return nil
-}
-
 func (NoCommand) ErrorCode() ergo.Code { return "NC-1042" }
 
 // NoCommandArguments holds the arguments NoCommand's message names, in the order the message first names them.
@@ -254,85 +228,6 @@ func (failure NoCommand) Report(language messages.Language) ergo.Report {
 
 // Causes is every error NoCommand holds, then the causes of every failure it holds.
 func (failure NoCommand) Causes() []error {
-	return nil
-}
-
-func (TypeScriptMissing) ErrorCode() ergo.Code { return "NC-1053" }
-
-// TypeScriptMissingArguments holds the arguments TypeScriptMissing's message names, in the order the message first names them.
-type TypeScriptMissingArguments struct {
-}
-
-// ReportArguments marks TypeScriptMissingArguments as the arguments of a report.
-func (TypeScriptMissingArguments) ReportArguments() {}
-
-// Report is TypeScriptMissing's code, its message in language and the arguments the message names.
-func (failure TypeScriptMissing) Report(language messages.Language) ergo.Report {
-	arguments := TypeScriptMissingArguments{}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no typescript file."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1053", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
-}
-
-// Causes is every error TypeScriptMissing holds, then the causes of every failure it holds.
-func (failure TypeScriptMissing) Causes() []error {
-	return nil
-}
-
-func (APINameMissing) ErrorCode() ergo.Code { return "NC-1054" }
-
-// APINameMissingArguments holds the arguments APINameMissing's message names, in the order the message first names them.
-type APINameMissingArguments struct {
-}
-
-// ReportArguments marks APINameMissingArguments as the arguments of a report.
-func (APINameMissingArguments) ReportArguments() {}
-
-// Report is APINameMissing's code, its message in language and the arguments the message names.
-func (failure APINameMissing) Report(language messages.Language) ergo.Report {
-	arguments := APINameMissingArguments{}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no api."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1054", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
-}
-
-// Causes is every error APINameMissing holds, then the causes of every failure it holds.
-func (failure APINameMissing) Causes() []error {
-	return nil
-}
-
-func (LanguageUnknown) ErrorCode() ergo.Code { return "NC-1055" }
-
-// LanguageUnknownArguments holds the arguments LanguageUnknown's message names, in the order the message first names them.
-type LanguageUnknownArguments struct {
-	Language string `json:"Language"`
-}
-
-// ReportArguments marks LanguageUnknownArguments as the arguments of a report.
-func (LanguageUnknownArguments) ReportArguments() {}
-
-// Report is LanguageUnknown's code, its message in language and the arguments the message names.
-func (failure LanguageUnknown) Report(language messages.Language) ergo.Report {
-	arguments := LanguageUnknownArguments{Language: string(failure.Language)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names the language \""}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "\"; NoContract reads go."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1055", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Language}}}), Arguments: arguments}
-}
-
-// Causes is every error LanguageUnknown holds, then the causes of every failure it holds.
-func (failure LanguageUnknown) Causes() []error {
 	return nil
 }
 
@@ -445,80 +340,29 @@ func (failure FlagsUnread) Causes() []error {
 	return causes
 }
 
-func (OpenAPIFileMissing) ErrorCode() ergo.Code { return "NC-1065" }
+func (ProjectFileRefused) ErrorCode() ergo.Code { return "NC-1089" }
 
-// OpenAPIFileMissingArguments holds the arguments OpenAPIFileMissing's message names, in the order the message first names them.
-type OpenAPIFileMissingArguments struct {
+// ProjectFileRefusedArguments holds the arguments ProjectFileRefused's message names, in the order the message first names them.
+type ProjectFileRefusedArguments struct {
+	Path string `json:"Path"`
 }
 
-// ReportArguments marks OpenAPIFileMissingArguments as the arguments of a report.
-func (OpenAPIFileMissingArguments) ReportArguments() {}
+// ReportArguments marks ProjectFileRefusedArguments as the arguments of a report.
+func (ProjectFileRefusedArguments) ReportArguments() {}
 
-// Report is OpenAPIFileMissing's code, its message in language and the arguments the message names.
-func (failure OpenAPIFileMissing) Report(language messages.Language) ergo.Report {
-	arguments := OpenAPIFileMissingArguments{}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no openapi file."}}}
+// Report is ProjectFileRefused's code, its message in language and the arguments the message names.
+func (failure ProjectFileRefused) Report(language messages.Language) ergo.Report {
+	arguments := ProjectFileRefusedArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " describes no project:"}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:
 	case nil:
 	}
-	return ergo.Report{Code: "NC-1065", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+	return ergo.Report{Code: "NC-1089", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
 }
 
-// Causes is every error OpenAPIFileMissing holds, then the causes of every failure it holds.
-func (failure OpenAPIFileMissing) Causes() []error {
-	return nil
-}
-
-func (OpenAPIVersionMissing) ErrorCode() ergo.Code { return "NC-1066" }
-
-// OpenAPIVersionMissingArguments holds the arguments OpenAPIVersionMissing's message names, in the order the message first names them.
-type OpenAPIVersionMissingArguments struct {
-}
-
-// ReportArguments marks OpenAPIVersionMissingArguments as the arguments of a report.
-func (OpenAPIVersionMissingArguments) ReportArguments() {}
-
-// Report is OpenAPIVersionMissing's code, its message in language and the arguments the message names.
-func (failure OpenAPIVersionMissing) Report(language messages.Language) ergo.Report {
-	arguments := OpenAPIVersionMissingArguments{}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no openapi version."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1066", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
-}
-
-// Causes is every error OpenAPIVersionMissing holds, then the causes of every failure it holds.
-func (failure OpenAPIVersionMissing) Causes() []error {
-	return nil
-}
-
-func (ServerFolderMissing) ErrorCode() ergo.Code { return "NC-1068" }
-
-// ServerFolderMissingArguments holds the arguments ServerFolderMissing's message names, in the order the message first names them.
-type ServerFolderMissingArguments struct {
-}
-
-// ReportArguments marks ServerFolderMissingArguments as the arguments of a report.
-func (ServerFolderMissingArguments) ReportArguments() {}
-
-// Report is ServerFolderMissing's code, its message in language and the arguments the message names.
-func (failure ServerFolderMissing) Report(language messages.Language) ergo.Report {
-	arguments := ServerFolderMissingArguments{}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no server folder."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1068", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
-}
-
-// Causes is every error ServerFolderMissing holds, then the causes of every failure it holds.
-func (failure ServerFolderMissing) Causes() []error {
+// Causes is every error ProjectFileRefused holds, then the causes of every failure it holds.
+func (failure ProjectFileRefused) Causes() []error {
 	return nil
 }

@@ -28,7 +28,7 @@ type Declared struct {
 
 // NamedAPI is the API's name and where it is given.
 type NamedAPI struct {
-	Name     string
+	Name     description.APIName
 	Position Position
 }
 
@@ -329,7 +329,7 @@ func repeatedNames(declared Declared, shared []description.SharedFailure) []Refu
 	for _, failure := range shared {
 		claims = append(claims, nameClaim{name: failure.Name, takenBy: "one of nocontract's own failures", position: declared.API.Position})
 	}
-	claims = append(claims, nameClaim{name: declared.API.Name, takenBy: "the API's name", position: declared.API.Position})
+	claims = append(claims, nameClaim{name: declared.API.Name.Text(), takenBy: "the API's name", position: declared.API.Position})
 	for _, group := range declared.Groups {
 		claims = append(claims, nameClaim{name: description.GroupClassName(group.Name), takenBy: group.Position.String(), position: group.Position})
 	}

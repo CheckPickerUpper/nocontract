@@ -46,10 +46,10 @@ func Render(api description.API) []byte {
 		fmt.Fprintf(file, "\nexport class %s extends HttpApiGroup.make(%s).add(\n%s\n) {}\n", className, quoted(group.Name), strings.Join(endpoints, ",\n"))
 	}
 	if len(groupClasses) > 0 {
-		fmt.Fprintf(file, "\nexport class %s extends HttpApi.make(%s).add(%s) {}\n", api.Name, quoted(api.Name), strings.Join(groupClasses, ", "))
+		fmt.Fprintf(file, "\nexport class %s extends HttpApi.make(%s).add(%s) {}\n", api.Name.Text(), quoted(api.Name.Text()), strings.Join(groupClasses, ", "))
 		return []byte(file.String())
 	}
-	fmt.Fprintf(file, "\nexport class %s extends HttpApi.make(%s) {}\n", api.Name, quoted(api.Name))
+	fmt.Fprintf(file, "\nexport class %s extends HttpApi.make(%s) {}\n", api.Name.Text(), quoted(api.Name.Text()))
 	return []byte(file.String())
 }
 

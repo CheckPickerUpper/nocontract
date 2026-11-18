@@ -183,7 +183,9 @@ Every route behind a guard lists the guard's refusals among its failures in the 
 A `nocontract.json` beside `go.mod` names the backend's language, the packages holding routes,
 the TypeScript file to write, the name of the API class, the OpenAPI 3.1 file to write with the
 version of the API it declares, and the folder of the server package to write. Each path is
-relative to `nocontract.json`, and every field is required:
+relative to `nocontract.json`. Every key is required, written once, and not empty; no other key
+is read. The API's name is the TypeScript class the client declares, so it is an identifier and
+no reserved word. Each wrong place in the file is refused with its line and column:
 
 ```json
 {

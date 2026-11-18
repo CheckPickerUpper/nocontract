@@ -13,14 +13,6 @@ import (
 	"github.com/CheckPickerUpper/nocontract/go/writing"
 )
 
-// projectPaths is where a project's own files are, each absolute: its project file, the TypeScript
-// file it names, and the OpenAPI file it names with the version that file declares.
-type projectPaths struct {
-	projectFile string
-	typeScript  string
-	openAPI     OpenAPIFile
-}
-
 // servedFiles is each package's generated Go file, the server file, then the test that fails while
 // any generated file is stale, or why one could not be rendered.
 func servedFiles(api description.API, plan serverplan.Plan, projectFile string) outcome.Result[[]generatedFile] {

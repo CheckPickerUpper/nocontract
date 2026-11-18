@@ -35,7 +35,7 @@ func Render(api description.API, version string) outcome.Result[[]byte] {
 	}
 	written := document{
 		OpenAPI:    documentVersion,
-		Info:       info{Title: api.Name, Version: version},
+		Info:       info{Title: api.Name.Text(), Version: version},
 		Tags:       tags,
 		Paths:      paths(api),
 		Components: components{Schemas: componentSchemas(api)},

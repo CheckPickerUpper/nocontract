@@ -12,6 +12,20 @@ import (
 	"github.com/CheckPickerUpper/nocontract/openapi"
 )
 
+// apiName is text read as the name of the API's class.
+func apiName(t *testing.T, text string) description.APIName {
+	t.Helper()
+	switch read := description.ParseAPIName(text).(type) {
+	case description.APINameRead:
+		return read.Name
+	case description.APINameNotIdentifier:
+		t.Fatalf("%q cannot name the API's class: %#v", text, read.Flaw)
+	case nil:
+	}
+	t.Fatalf("%q was read as no API name", text)
+	return description.APIName{}
+}
+
 // answered is the answer a member with status number gives, failing with code when it is a
 // failure status.
 func answered(t *testing.T, number int, code ergo.Code) description.Answer {
@@ -48,7 +62,7 @@ func itemAPI(t *testing.T) description.API {
 	shopClosed := description.Member{Name: "ShopClosed", Answer: answered(t, 404, "IT-1002"), Fields: []description.Field{field("reopens", description.Instant{})}}
 	requestRefused := description.Member{Name: "RequestRefused", Answer: answered(t, 400, "NC-1001"), Fields: []description.Field{field("reason", description.Text{})}}
 	return description.API{
-		Name: "ItemApi",
+		Name: apiName(t, "ItemApi"),
 		Groups: []description.Group{{Name: "items", Endpoints: []description.Endpoint{
 			{
 				Name: "readItem", Method: description.Get{},

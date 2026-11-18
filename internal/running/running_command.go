@@ -6,7 +6,6 @@ package running
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"go/token"
@@ -30,6 +29,7 @@ import (
 	"github.com/CheckPickerUpper/nocontract/go/reading"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 	"github.com/CheckPickerUpper/nocontract/go/writing"
+	"github.com/CheckPickerUpper/nocontract/internal/projectfile"
 	"github.com/CheckPickerUpper/nocontract/messages"
 	"github.com/CheckPickerUpper/nocontract/openapi"
 )
@@ -41,65 +41,6 @@ const DefaultProjectFile = "nocontract.json"
 type Request struct {
 	Arguments []string
 	Context   context.Context
-}
-
-// writtenProject is a project file as it is written: the language its backend is written in, the
-// package patterns holding its routes, the TypeScript file to write, relative to the project file,
-// the name of the Effect API, the OpenAPI file to write, and the folder of the server package to
-// write.
-type writtenProject struct {
-	Language   string         `json:"language"`
-	Packages   []string       `json:"packages"`
-	TypeScript string         `json:"typescript"`
-	API        string         `json:"api"`
-	OpenAPI    writtenOpenAPI `json:"openapi"`
-	Server     string         `json:"server"`
-}
-
-// writtenOpenAPI is a project file's OpenAPI file as it is written: its path, relative to the
-// project file, and the version of the API the document declares.
-type writtenOpenAPI struct {
-	File    string `json:"file"`
-	Version string `json:"version"`
-}
-
-// Project is a project file read: its backend, the package patterns holding its routes, the
-// TypeScript file to write, the name of the Effect API, the OpenAPI file to write and the folder of
-// the server package to write. Each path is relative to the project file.
-type Project struct {
-	Backend    Backend
-	Packages   []string
-	TypeScript string
-	API        string
-	OpenAPI    OpenAPIFile
-	Server     string
-}
-
-// OpenAPIFile is the OpenAPI document a project writes: its path and the version of the API it
-// declares.
-type OpenAPIFile struct {
-	File    string
-	Version string
-}
-
-// Backend is the language a project's backend is written in.
-//
-//sumtype:decl
-type Backend interface{ isBackend() }
-
-// GoBackend is a backend written in Go.
-//
-//ergo:not-an-error
-type GoBackend struct{}
-
-func (GoBackend) isBackend() {}
-
-// parseBackend is the language a project file's "language" names.
-func parseBackend(language string) mo.Option[Backend] {
-	if language == "go" {
-		return mo.Some[Backend](GoBackend{})
-	}
-	return mo.None[Backend]()
 }
 
 // Outcome is what one run ended as.
@@ -177,7 +118,18 @@ func (UnknownCommand) isUsageProblem() {}
 func (ExtraArguments) isUsageProblem() {}
 func (FlagsUnread) isUsageProblem()    {}
 
-// ProjectUnreadable is a project file that could not be read or holds no usable project, with why.
+// ProjectFileRefused is a project file read whose content describes no project, with each place it
+// is wrong, in file order.
+//
+//ergo:code NC-1089
+//ergo:message The project file {Path} describes no project:
+type ProjectFileRefused struct {
+	Path     string
+	Refusals []assembling.Refusal
+}
+
+// ProjectUnreadable is a project file whose path could not be resolved or that could not be read,
+// with the operating system's error.
 //
 //ergo:code NC-1037
 //ergo:message The project file {Path} could not be used.
@@ -207,6 +159,7 @@ func (FilesStale) isOutcome()          {}
 func (DeclarationsRefused) isOutcome() {}
 func (UsageRefused) isOutcome()        {}
 func (ProjectUnreadable) isOutcome()   {}
+func (ProjectFileRefused) isOutcome()  {}
 func (PackagesNotLoaded) isOutcome()   {}
 func (FileNotWritten) isOutcome()      {}
 
@@ -227,6 +180,9 @@ func (UsageRefused) ExitCode() int { return 2 }
 
 // ExitCode is 2: the run could not start.
 func (ProjectUnreadable) ExitCode() int { return 2 }
+
+// ExitCode is 2: the run could not start.
+func (ProjectFileRefused) ExitCode() int { return 2 }
 
 // ExitCode is 2: the run could not read the routes.
 func (PackagesNotLoaded) ExitCode() int { return 2 }
@@ -259,8 +215,17 @@ func (stale FilesStale) Lines() []string {
 
 // Lines is the failure, then each refusal with where it is written, its code and its message.
 func (refused DeclarationsRefused) Lines() []string {
-	lines := described(refused)
-	for _, refusal := range refused.Refusals {
+	return placedRefusals(described(refused), refused.Refusals)
+}
+
+// Lines is the failure, then each place the project file is wrong, its code and its message.
+func (refused ProjectFileRefused) Lines() []string {
+	return placedRefusals(described(refused), refused.Refusals)
+}
+
+// placedRefusals is lines, then each refusal with where it is written, its code and its message.
+func placedRefusals(lines []string, refusals []assembling.Refusal) []string {
+	for _, refusal := range refusals {
 		// described's first line is always the code and message; the rest are causes.
 		problem := described(refusal.Problem)
 		lines = append(append(lines, refusal.Position.String()+": "+problem[0]), problem[1:]...)
@@ -419,35 +384,32 @@ type generatedFile struct {
 
 // generated reads the project, renders its files and hands them to finish.
 func generated(ctx context.Context, projectFile string, finish func([]generatedFile) Outcome) Outcome {
-	return mo.Fold(readProject(projectFile), func(project Project) Outcome {
-		switch project.Backend.(type) {
-		case GoBackend:
-			return generatedGo(ctx, projectFile, project, finish)
-		case nil:
+	return projectfile.Read(projectFile, func(project projectfile.Project) Outcome {
+		// Go is the only backend NoContract reads.
+		switch project.Backend().(type) {
+		case projectfile.GoBackend, nil:
 		}
-		return ProjectUnreadable{Path: projectFile, Cause: LanguageUnknown{Language: ""}}
-	}, func(cause error) Outcome { return ProjectUnreadable{Path: projectFile, Cause: cause} })
+		return generatedGo(ctx, project, finish)
+	}, func(cause error) Outcome {
+		return ProjectUnreadable{Path: projectFile, Cause: cause}
+	}, func(refusals []assembling.Refusal) Outcome {
+		return ProjectFileRefused{Path: projectFile, Refusals: refusals}
+	})
 }
 
 // generatedGo reads a Go backend's routes, renders its files and hands them to finish.
-func generatedGo(ctx context.Context, projectFile string, project Project, finish func([]generatedFile) Outcome) Outcome {
-	directory := filepath.Dir(projectFile)
+func generatedGo(ctx context.Context, project projectfile.Project, finish func([]generatedFile) Outcome) Outcome {
+	directory := project.Directory()
 	existing := existingGenerated(directory)
-	return outcome.Fold(loadPackages(ctx, directory, project.Packages, existing), func(loaded []*packages.Package) Outcome {
-		// The API's name is given in the project file, which is where a name it repeats is refused.
-		named := assembling.NamedAPI{Name: project.API, Position: assembling.Position{File: projectFile, Line: 1, Column: 1}}
-		read := reading.ReadRoutes(reading.Request{Packages: loaded, API: named, Server: filepath.Join(directory, project.Server)})
+	return outcome.Fold(loadPackages(ctx, directory, project.Packages(), existing), func(loaded []*packages.Package) Outcome {
+		read := reading.ReadRoutes(reading.Request{Packages: loaded, API: project.API(), Server: project.ServerFolder()})
 		if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
 			return PackagesNotLoaded{Errors: problems}
 		}
 		switch assembled := assembling.Assemble(assembling.Request{Declared: read.Declared, Refused: read.Refused}).(type) {
 		case assembling.APIAssembled:
-			paths := projectPaths{
-				projectFile: projectFile, typeScript: filepath.Join(directory, project.TypeScript),
-				openAPI: OpenAPIFile{File: filepath.Join(directory, project.OpenAPI.File), Version: project.OpenAPI.Version},
-			}
-			return outcome.Fold(renderedFiles(assembled.API, read.Plan, paths, existing), func(files []generatedFile) Outcome {
-				return judgedServing(ctx, directory, project, files, finish)
+			return outcome.Fold(renderedFiles(assembled.API, read.Plan, project, existing), func(files []generatedFile) Outcome {
+				return judgedServing(ctx, project, files, finish)
 			}, func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
 		case assembling.APIRefused:
 			return DeclarationsRefused{Refusals: assembled.Refusals}
@@ -459,11 +421,11 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 
 // renderedFiles is the TypeScript file, the OpenAPI file, each package's Go file, the server file,
 // the test of them all, and every generated Go file this run no longer writes, which must go.
-func renderedFiles(api description.API, plan serverplan.Plan, paths projectPaths, existing map[string][]byte) outcome.Result[[]generatedFile] {
-	return outcome.Fold(servedFiles(api, plan, paths.projectFile), func(served []generatedFile) outcome.Result[[]generatedFile] {
-		return outcome.Fold(openapi.Render(api, paths.openAPI.Version), func(document []byte) outcome.Result[[]generatedFile] {
+func renderedFiles(api description.API, plan serverplan.Plan, project projectfile.Project, existing map[string][]byte) outcome.Result[[]generatedFile] {
+	return outcome.Fold(servedFiles(api, plan, project.File()), func(served []generatedFile) outcome.Result[[]generatedFile] {
+		return outcome.Fold(openapi.Render(api, project.OpenAPI().Version()), func(document []byte) outcome.Result[[]generatedFile] {
 			// Every existing generated file goes unless this run writes it again.
-			contents := map[string]mo.Option[[]byte]{paths.typeScript: mo.Some(effect.Render(api)), paths.openAPI.File: mo.Some(document)}
+			contents := map[string]mo.Option[[]byte]{project.TypeScriptFile(): mo.Some(effect.Render(api)), project.OpenAPI().File(): mo.Some(document)}
 			for path := range existing {
 				contents[path] = mo.None[[]byte]()
 			}
@@ -490,101 +452,6 @@ func goFiles(served []serverplan.Package) outcome.Result[[]generatedFile] {
 		}, outcome.Err[[]generatedFile])
 	}
 	return files
-}
-
-// PackagesMissing is a project file naming no package patterns.
-//
-//ergo:code NC-1040
-//ergo:message The project file names no packages.
-type PackagesMissing struct{}
-
-// Error is the failure's message in the source language.
-func (missing PackagesMissing) Error() string { return missing.Report(messages.Match("")).Message }
-
-// TypeScriptMissing is a project file naming no TypeScript file to write.
-//
-//ergo:code NC-1053
-//ergo:message The project file names no typescript file.
-type TypeScriptMissing struct{}
-
-// Error is the failure's message in the source language.
-func (missing TypeScriptMissing) Error() string { return missing.Report(messages.Match("")).Message }
-
-// OpenAPIFileMissing is a project file naming no OpenAPI file to write.
-//
-//ergo:code NC-1065
-//ergo:message The project file names no openapi file.
-type OpenAPIFileMissing struct{}
-
-// Error is the failure's message in the source language.
-func (missing OpenAPIFileMissing) Error() string { return missing.Report(messages.Match("")).Message }
-
-// OpenAPIVersionMissing is a project file naming no version for the API its OpenAPI file declares.
-//
-//ergo:code NC-1066
-//ergo:message The project file names no openapi version.
-type OpenAPIVersionMissing struct{}
-
-// Error is the failure's message in the source language.
-func (missing OpenAPIVersionMissing) Error() string {
-	return missing.Report(messages.Match("")).Message
-}
-
-// ServerFolderMissing is a project file naming no folder for the server package NoContract writes.
-//
-//ergo:code NC-1068
-//ergo:message The project file names no server folder.
-type ServerFolderMissing struct{}
-
-// Error is the failure's message in the source language.
-func (missing ServerFolderMissing) Error() string { return missing.Report(messages.Match("")).Message }
-
-// APINameMissing is a project file naming no API class.
-//
-//ergo:code NC-1054
-//ergo:message The project file names no api.
-type APINameMissing struct{}
-
-// Error is the failure's message in the source language.
-func (missing APINameMissing) Error() string { return missing.Report(messages.Match("")).Message }
-
-// LanguageUnknown is a project file naming a language NoContract reads no backend in.
-//
-//ergo:code NC-1055
-//ergo:message The project file names the language "{Language}"; NoContract reads go.
-type LanguageUnknown struct{ Language string }
-
-// Error is the failure's message in the source language.
-func (unknown LanguageUnknown) Error() string { return unknown.Report(messages.Match("")).Message }
-
-func readProject(projectFile string) mo.Result[Project] {
-	return mo.Fold(mo.TupleToResult(os.ReadFile(projectFile)), func(content []byte) mo.Result[Project] {
-		written := writtenProject{Language: "", Packages: []string{}, TypeScript: "", API: "", OpenAPI: writtenOpenAPI{File: "", Version: ""}, Server: ""}
-		decoder := json.NewDecoder(bytes.NewReader(content))
-		decoder.DisallowUnknownFields()
-		return mo.Fold(mo.EmptyableToOption(decoder.Decode(&written)), mo.Err[Project], func(error) mo.Result[Project] {
-			switch {
-			case len(written.Packages) == 0:
-				return mo.Err[Project](PackagesMissing{})
-			case written.TypeScript == "":
-				return mo.Err[Project](TypeScriptMissing{})
-			case written.API == "":
-				return mo.Err[Project](APINameMissing{})
-			case written.OpenAPI.File == "":
-				return mo.Err[Project](OpenAPIFileMissing{})
-			case written.OpenAPI.Version == "":
-				return mo.Err[Project](OpenAPIVersionMissing{})
-			case written.Server == "":
-				return mo.Err[Project](ServerFolderMissing{})
-			}
-			return mo.Fold(parseBackend(written.Language), func(backend Backend) mo.Result[Project] {
-				openAPI := OpenAPIFile{File: written.OpenAPI.File, Version: written.OpenAPI.Version}
-				return mo.Ok(Project{
-					Backend: backend, Packages: written.Packages, TypeScript: written.TypeScript, API: written.API, OpenAPI: openAPI, Server: written.Server,
-				})
-			}, func(error) mo.Result[Project] { return mo.Err[Project](LanguageUnknown{Language: written.Language}) })
-		})
-	}, mo.Err[Project])
 }
 
 // existingGenerated is every generated Go file under directory, by path, with its content.
@@ -638,7 +505,7 @@ func loadPackages(ctx context.Context, directory string, patterns []string, exis
 // generated API or makes a handler of its own. The project's packages are loaded again with their
 // tests and with each Go file generate writes as it writes it, so the API they serve is the one
 // these files declare.
-func judgedServing(ctx context.Context, directory string, project Project, files []generatedFile, finish func([]generatedFile) Outcome) Outcome {
+func judgedServing(ctx context.Context, project projectfile.Project, files []generatedFile, finish func([]generatedFile) Outcome) Outcome {
 	overlay := map[string][]byte{}
 	for _, file := range files {
 		if filepath.Ext(file.path) == ".go" {
@@ -647,14 +514,14 @@ func judgedServing(ctx context.Context, directory string, project Project, files
 	}
 	config := &packages.Config{
 		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
-		Context: ctx, Logf: func(string, ...any) {}, Dir: directory, Env: os.Environ(), BuildFlags: []string{}, Fset: token.NewFileSet(),
+		Context: ctx, Logf: func(string, ...any) {}, Dir: project.Directory(), Env: os.Environ(), BuildFlags: []string{}, Fset: token.NewFileSet(),
 		ParseFile: nil, Tests: true, Overlay: overlay,
 	}
-	return outcome.Fold(outcome.TupleToResult(packages.Load(config, project.Packages...)), func(loaded []*packages.Package) Outcome {
+	return outcome.Fold(outcome.TupleToResult(packages.Load(config, project.Packages()...)), func(loaded []*packages.Package) Outcome {
 		if problems := builtProblems(loaded); len(problems) > 0 {
 			return PackagesNotLoaded{Errors: problems}
 		}
-		if refusals := reading.JudgeServing(reading.ServingRequest{Packages: loaded, Server: filepath.Join(directory, project.Server)}); len(refusals) > 0 {
+		if refusals := reading.JudgeServing(reading.ServingRequest{Packages: loaded, Server: project.ServerFolder()}); len(refusals) > 0 {
 			return DeclarationsRefused{Refusals: refusals}
 		}
 		return finish(files)

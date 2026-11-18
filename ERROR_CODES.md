@@ -445,7 +445,8 @@ Message: `The command could not run: {Problem}.`
 
 ## NC-1037 ProjectUnreadable
 
-ProjectUnreadable is a project file that could not be read or holds no usable project, with why.
+ProjectUnreadable is a project file whose path could not be resolved or that could not be read,
+with the operating system's error.
 
 Declared in `internal/running/running_command.go`.
 
@@ -480,14 +481,6 @@ Message: `The file {Path} could not be written.`
 | --- | --- |
 | `Path` | `string` |
 | `Cause` | `error` |
-
-## NC-1040 PackagesMissing
-
-PackagesMissing is a project file naming no package patterns.
-
-Declared in `internal/running/running_command.go`.
-
-Message: `The project file names no packages.`
 
 ## NC-1042 NoCommand
 
@@ -622,27 +615,11 @@ Message: `{Number} is no HTTP status a member answers with.`
 | --- | --- |
 | `Number` | `int` |
 
-## NC-1053 TypeScriptMissing
-
-TypeScriptMissing is a project file naming no TypeScript file to write.
-
-Declared in `internal/running/running_command.go`.
-
-Message: `The project file names no typescript file.`
-
-## NC-1054 APINameMissing
-
-APINameMissing is a project file naming no API class.
-
-Declared in `internal/running/running_command.go`.
-
-Message: `The project file names no api.`
-
 ## NC-1055 LanguageUnknown
 
 LanguageUnknown is a project file naming a language NoContract reads no backend in.
 
-Declared in `internal/running/running_command.go`.
+Declared in `internal/projectfile/project_file_problems.go`.
 
 Message: `The project file names the language "{Language}"; NoContract reads go.`
 
@@ -746,22 +723,6 @@ Message: `The handler {Handler} has more than one //nocontract:route line; a han
 | --- | --- |
 | `Handler` | `string` |
 
-## NC-1065 OpenAPIFileMissing
-
-OpenAPIFileMissing is a project file naming no OpenAPI file to write.
-
-Declared in `internal/running/running_command.go`.
-
-Message: `The project file names no openapi file.`
-
-## NC-1066 OpenAPIVersionMissing
-
-OpenAPIVersionMissing is a project file naming no version for the API its OpenAPI file declares.
-
-Declared in `internal/running/running_command.go`.
-
-Message: `The project file names no openapi version.`
-
 ## NC-1067 MemberUndeclared
 
 MemberUndeclared is a member a route answers with that no declaration describes.
@@ -774,14 +735,6 @@ Message: `The route {Endpoint} answers with {Member}, which no declaration descr
 | --- | --- |
 | `Endpoint` | `string` |
 | `Member` | `string` |
-
-## NC-1068 ServerFolderMissing
-
-ServerFolderMissing is a project file naming no folder for the server package NoContract writes.
-
-Declared in `internal/running/running_command.go`.
-
-Message: `The project file names no server folder.`
 
 ## NC-1069 RouteNotFound
 
@@ -931,3 +884,118 @@ Message: `An http.Server is made at its zero value, which serves http.DefaultSer
 | Field | Type |
 | --- | --- |
 | `Way` | `reading.ZeroServerWay` |
+
+## NC-1081 APINameNotIdentifier
+
+APINameNotIdentifier is a text that cannot name the API's class, and why.
+
+Declared in `description/api_name_parsing.go`.
+
+Message: `{Text} cannot name the API's class in TypeScript: {Flaw, select, IdentifierEmpty {it is empty} CharacterCannotStart {its first character cannot start an identifier} CharacterCannotContinue {a later character cannot be part of an identifier} IdentifierReserved {it is a reserved word, or a type's name a class cannot take}}.`
+
+| Field | Type |
+| --- | --- |
+| `Text` | `string` |
+| `Flaw` | `description.IdentifierFlaw` |
+
+## NC-1082 ProjectNotJSON
+
+ProjectNotJSON is a project file that is not one JSON value, and why, at the place reading stopped.
+
+Declared in `internal/projectfile/project_file_problems.go`.
+
+Message: `The project file is not JSON: {Reason}.`
+
+| Field | Type |
+| --- | --- |
+| `Reason` | `string` |
+
+## NC-1083 ProjectNotObject
+
+ProjectNotObject is a project file holding a JSON value that is not an object, as it is written.
+
+Declared in `internal/projectfile/project_file_problems.go`.
+
+Message: `The project file holds {Written}, where it must hold an object.`
+
+| Field | Type |
+| --- | --- |
+| `Written` | `string` |
+
+## NC-1084 KeyMissing
+
+KeyMissing is an object of the project file without a key it must have, at the object.
+
+Declared in `internal/projectfile/project_file_problems.go`.
+
+Message: `The project file has no {Key}.`
+
+| Field | Type |
+| --- | --- |
+| `Key` | `string` |
+
+## NC-1085 ValueWrongType
+
+ValueWrongType is a key whose value is not the JSON type the key holds, as it is written.
+
+Declared in `internal/projectfile/project_file_problems.go`.
+
+Message: `{Key} is {Written}, where it must be {Want, select, JSONText {a string} JSONObject {an object} JSONArray {an array}}.`
+
+| Field | Type |
+| --- | --- |
+| `Key` | `string` |
+| `Written` | `string` |
+| `Want` | `projectfile.JSONType` |
+
+## NC-1086 ValueEmpty
+
+ValueEmpty is a key whose value is an empty string or array, as it is written.
+
+Declared in `internal/projectfile/project_file_problems.go`.
+
+Message: `{Key} is {Written}, which names nothing.`
+
+| Field | Type |
+| --- | --- |
+| `Key` | `string` |
+| `Written` | `string` |
+
+## NC-1087 KeyUnknown
+
+KeyUnknown is a key no project file holds.
+
+Declared in `internal/projectfile/project_file_problems.go`.
+
+Message: `{Key} is not a key a project file holds.`
+
+| Field | Type |
+| --- | --- |
+| `Key` | `string` |
+
+## NC-1088 KeyRepeated
+
+KeyRepeated is a key written again in one object, and where it is first written.
+
+Declared in `internal/projectfile/project_file_problems.go`.
+
+Message: `{Key} is written more than once.`
+
+| Field | Type |
+| --- | --- |
+| `Key` | `string` |
+| `First` | `assembling.Position` |
+
+## NC-1089 ProjectFileRefused
+
+ProjectFileRefused is a project file read whose content describes no project, with each place it
+is wrong, in file order.
+
+Declared in `internal/running/running_command.go`.
+
+Message: `The project file {Path} describes no project:`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Refusals` | `[]assembling.Refusal` |

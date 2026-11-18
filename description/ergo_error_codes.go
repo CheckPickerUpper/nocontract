@@ -34,3 +34,43 @@ func (failure StatusUnanswerable) Report(language messages.Language) ergo.Report
 func (failure StatusUnanswerable) Causes() []error {
 	return nil
 }
+
+func (APINameNotIdentifier) ErrorCode() ergo.Code { return "NC-1081" }
+
+// APINameNotIdentifierArguments holds the arguments APINameNotIdentifier's message names, in the order the message first names them.
+type APINameNotIdentifierArguments struct {
+	Text string `json:"Text"`
+	Flaw string `json:"Flaw"`
+}
+
+// ReportArguments marks APINameNotIdentifierArguments as the arguments of a report.
+func (APINameNotIdentifierArguments) ReportArguments() {}
+
+// Report is APINameNotIdentifier's code, its message in language and the arguments the message names.
+func (failure APINameNotIdentifier) Report(language messages.Language) ergo.Report {
+	argumentFlaw := ""
+	switch failure.Flaw.(type) {
+	case IdentifierEmpty:
+		argumentFlaw = "IdentifierEmpty"
+	case CharacterCannotStart:
+		argumentFlaw = "CharacterCannotStart"
+	case CharacterCannotContinue:
+		argumentFlaw = "CharacterCannotContinue"
+	case IdentifierReserved:
+		argumentFlaw = "IdentifierReserved"
+	case nil:
+	}
+	arguments := APINameNotIdentifierArguments{Text: string(failure.Text), Flaw: argumentFlaw}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " cannot name the API's class in TypeScript: "}, messageformat.Select{Index: 1, Forms: []messageformat.SelectForm{{Member: "IdentifierEmpty", Parts: []messageformat.Part{messageformat.Literal{Text: "it is empty"}}}, {Member: "CharacterCannotStart", Parts: []messageformat.Part{messageformat.Literal{Text: "its first character cannot start an identifier"}}}, {Member: "CharacterCannotContinue", Parts: []messageformat.Part{messageformat.Literal{Text: "a later character cannot be part of an identifier"}}}, {Member: "IdentifierReserved", Parts: []messageformat.Part{messageformat.Literal{Text: "it is a reserved word, or a type's name a class cannot take"}}}}}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1081", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Text}, messageformat.ChoiceMember{Name: arguments.Flaw}}}), Arguments: arguments}
+}
+
+// Causes is every error APINameNotIdentifier holds, then the causes of every failure it holds.
+func (failure APINameNotIdentifier) Causes() []error {
+	return nil
+}
