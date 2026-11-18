@@ -506,3 +506,31 @@ func (failure BodyNotReceived) Report(language messages.Language) ergo.Report {
 func (failure BodyNotReceived) Causes() []error {
 	return nil
 }
+
+func (BodyKeyOutside) ErrorCode() ergo.Code { return "NC-1126" }
+
+// BodyKeyOutsideArguments holds the arguments BodyKeyOutside's message names, in the order the message first names them.
+type BodyKeyOutsideArguments struct {
+	Path string `json:"Path"`
+	Read string `json:"Read"`
+}
+
+// ReportArguments marks BodyKeyOutsideArguments as the arguments of a report.
+func (BodyKeyOutsideArguments) ReportArguments() {}
+
+// Report is BodyKeyOutside's code, its message in language and the arguments the message names.
+func (failure BodyKeyOutside) Report(language messages.Language) ergo.Report {
+	arguments := BodyKeyOutsideArguments{Path: string(failure.Path), Read: string(failure.Read)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is under the key \""}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "\", which is not one of the keys it accepts."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1126", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Read}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyKeyOutside holds, then the causes of every failure it holds.
+func (failure BodyKeyOutside) Causes() []error {
+	return nil
+}

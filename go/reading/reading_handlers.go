@@ -504,13 +504,12 @@ func sortedInput(name serverplan.GoName, placed []placedField) inputShape {
 // readParameter reads a path or query field, whose text the generated code parses by its type.
 func readParameter(index projectIndex, loaded *packages.Package, field *types.Var, name description.FieldName) reading[parameter] {
 	unsupported := notRead[parameter](index.refused(field.Pos(), ParameterTypeUnsupported{Field: field.Name(), Type: types.TypeString(field.Type(), nil)}))
-	basic, isBasic := field.Type().Underlying().(*types.Basic)
-	if !isBasic {
+	if _, isBasic := field.Type().Underlying().(*types.Basic); !isBasic {
 		return unsupported
 	}
 	return andThen(writableType(index, types.Unalias(field.Type()), loaded.PkgPath, field.Pos()), func(goType types.Type) reading[parameter] {
 		return andThen(readSchema(index, field.Type(), field.Pos(), []typeKey{}), func(schema description.Schema) reading[parameter] {
-			return mo.Fold(textKind(basic, schema), func(kind serverplan.TextKind) reading[parameter] {
+			return mo.Fold(textKind(schema), func(kind serverplan.TextKind) reading[parameter] {
 				return readAs(parameter{
 					field:    description.Field{Name: name, Schema: schema},
 					plan:     serverplan.Param{Name: name.Text(), GoField: field.Name(), Text: kind, GoType: goType},
@@ -522,17 +521,17 @@ func readParameter(index projectIndex, loaded *packages.Package, field *types.Va
 }
 
 // textKind is how the generated code parses a parameter's text into its schema.
-func textKind(basic *types.Basic, schema description.Schema) mo.Option[serverplan.TextKind] {
+func textKind(schema description.Schema) mo.Option[serverplan.TextKind] {
 	switch typed := schema.(type) {
 	case description.Literals:
-		return mo.Some[serverplan.TextKind](serverplan.TextLiteral{Values: typed.Values})
+		return mo.Some[serverplan.TextKind](serverplan.TextLiteral{Literals: typed})
 	case description.Text:
 		return mo.Some[serverplan.TextKind](serverplan.TextAsIs{})
 	case description.Truth:
 		return mo.Some[serverplan.TextKind](serverplan.TextTruth{})
 	case description.Integer:
-		return mo.Some[serverplan.TextKind](serverplan.TextWhole{Sign: wholeSign(basic)})
-	case description.Finite, description.Instant, description.List, description.Dictionary, description.Nullable,
+		return mo.Some[serverplan.TextKind](serverplan.TextWhole{Width: typed.Width})
+	case description.Finite, description.Instant, description.List, description.FixedList, description.Dictionary, description.Nullable,
 		description.StructRef, description.InlineStruct, nil:
 	}
 	return mo.None[serverplan.TextKind]()

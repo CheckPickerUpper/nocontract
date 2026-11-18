@@ -97,10 +97,10 @@ func sharedFailureText(failure description.SharedFailure) mo.Result[string] {
 			case description.Text:
 				fields = append(fields, fmt.Sprintf("\t%s []string `json:%q`\n", goField, name))
 			case description.Integer, description.Finite, description.Truth, description.Instant, description.Literals, description.List,
-				description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
+				description.FixedList, description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
 				return mo.Err[string](SharedFieldUnsupported{Failure: failure.Name, Field: name})
 			}
-		case description.Integer, description.Finite, description.Truth, description.Instant, description.Dictionary,
+		case description.Integer, description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary,
 			description.Nullable, description.StructRef, description.InlineStruct, nil:
 			return mo.Err[string](SharedFieldUnsupported{Failure: failure.Name, Field: name})
 		}

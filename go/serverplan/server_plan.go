@@ -324,43 +324,26 @@ type TextKind interface{ isTextKind() }
 //ergo:not-an-error
 type TextAsIs struct{}
 
-// TextWhole is text read as a whole number that fits the field's integer type, whose sign is Sign.
+// TextWhole is text read as a whole number of the width the description gives the field's integer
+// type.
 //
 //ergo:not-an-error
-type TextWhole struct{ Sign WholeSign }
+type TextWhole struct{ Width description.IntegerWidth }
 
 // TextTruth is text read as a boolean.
 //
 //ergo:not-an-error
 type TextTruth struct{}
 
-// TextLiteral is text that must be one of Values.
+// TextLiteral is text that must be one of the literals the description gives the field.
 //
 //ergo:not-an-error
-type TextLiteral struct{ Values []string }
+type TextLiteral struct{ Literals description.Literals }
 
 func (TextAsIs) isTextKind()    {}
 func (TextWhole) isTextKind()   {}
 func (TextTruth) isTextKind()   {}
 func (TextLiteral) isTextKind() {}
-
-// WholeSign is whether a field's integer type holds whole numbers below zero.
-//
-//sumtype:decl
-type WholeSign interface{ isWholeSign() }
-
-// SignedWhole is an integer type holding whole numbers below zero, such as int.
-//
-//ergo:not-an-error
-type SignedWhole struct{}
-
-// UnsignedWhole is an integer type holding only whole numbers at or above zero, such as uint8.
-//
-//ergo:not-an-error
-type UnsignedWhole struct{}
-
-func (SignedWhole) isWholeSign()   {}
-func (UnsignedWhole) isWholeSign() {}
 
 // BodyFieldName is the name of the input field a route reads the JSON body into.
 const BodyFieldName = "Body"
@@ -390,7 +373,8 @@ type BodyValue struct {
 	Shape  BodyShape
 }
 
-// BodyShape is how the generated code reads one JSON value of a body.
+// BodyShape is how the generated code reads one JSON value of a body. Every constraint a shape
+// enforces is the value the description declares for it.
 //
 //sumtype:decl
 type BodyShape interface{ isBodyShape() }
@@ -400,10 +384,10 @@ type BodyShape interface{ isBodyShape() }
 //ergo:not-an-error
 type TextShape struct{}
 
-// WholeShape is a whole number read to fit the field's integer type, whose sign is Sign.
+// WholeShape is a whole number of Width, read as the field's integer type.
 //
 //ergo:not-an-error
-type WholeShape struct{ Sign WholeSign }
+type WholeShape struct{ Width description.IntegerWidth }
 
 // NumberShape is a number read to fit the field's floating-point type.
 //
@@ -420,17 +404,18 @@ type TruthShape struct{}
 //ergo:not-an-error
 type InstantShape struct{}
 
-// LiteralShape is a string that must be one of Values.
+// LiteralShape is a string that must be one of Literals.
 //
 //ergo:not-an-error
-type LiteralShape struct{ Values []string }
+type LiteralShape struct{ Literals description.Literals }
 
 // ListShape is an array read as a slice, each item as Item.
 //
 //ergo:not-an-error
 type ListShape struct{ Item BodyValue }
 
-// ArrayShape is an array of exactly Length items read as a Go array, each item as Item.
+// ArrayShape is an array of exactly Length items read as a Go array, each item as Item. Length is
+// the description's FixedList length.
 //
 //ergo:not-an-error
 type ArrayShape struct {
@@ -438,10 +423,15 @@ type ArrayShape struct {
 	Item   BodyValue
 }
 
-// DictionaryShape is an object read as a map, each value as Value.
+// DictionaryShape is an object read as a map: each key one Key takes, read as KeyType, and each
+// value read as Value.
 //
 //ergo:not-an-error
-type DictionaryShape struct{ Value BodyValue }
+type DictionaryShape struct {
+	Key     description.DictionaryKey
+	KeyType types.Type
+	Value   BodyValue
+}
 
 // NullableShape is null read as an empty mo.Option, and any other value as Inner.
 //

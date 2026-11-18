@@ -11,16 +11,17 @@ export type Money = typeof Money.Type
 
 export const Item = Schema.Struct({
   sku: Schema.String,
-  quantity: Schema.Int,
+  quantity: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 })),
 })
 export type Item = typeof Item.Type
 
 export const Order = Schema.Struct({
   items: Schema.Array(Item),
   gift_note: Schema.NullOr(Schema.String),
-  deliver_between: Schema.Array(Schema.DateTimeUtcFromString),
+  deliver_between: Schema.Array(Schema.DateTimeUtcFromString).check(Schema.isBetweenLength(2, 2)),
   wrapped: Schema.Boolean,
   tips: Schema.Record(Schema.String, Schema.Finite),
+  courier_notes: Schema.Record(Schema.Literals(["drone", "post"]), Schema.optionalKey(Schema.String)),
 })
 export type Order = typeof Order.Type
 

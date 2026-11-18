@@ -162,7 +162,7 @@ func schemaText(schema description.Schema, indent string) string {
 	case description.Text:
 		return "Schema.String"
 	case description.Integer:
-		return "Schema.Int"
+		return widthText(typed.Width)
 	case description.Finite:
 		return "Schema.Finite"
 	case description.Truth:
@@ -170,17 +170,18 @@ func schemaText(schema description.Schema, indent string) string {
 	case description.Instant:
 		return "Schema.DateTimeUtcFromString"
 	case description.Literals:
-		values := []string{}
-		for _, value := range typed.Values {
-			values = append(values, quoted(value))
-		}
-		if len(values) == 1 {
-			return "Schema.Literal(" + values[0] + ")"
-		}
-		return "Schema.Literals([" + strings.Join(values, ", ") + "])"
+		return literalsText(typed)
 	case description.List:
 		return "Schema.Array(" + schemaText(typed.Item, indent) + ")"
+	case description.FixedList:
+		return fmt.Sprintf("Schema.Array(%s).check(Schema.isBetweenLength(%d, %d))", schemaText(typed.Item, indent), typed.Length, typed.Length)
 	case description.Dictionary:
+		switch key := typed.Key.(type) {
+		case description.Literals:
+			// A map holds any of its keys, so each one may be absent.
+			return "Schema.Record(" + literalsText(key) + ", Schema.optionalKey(" + schemaText(typed.Value, indent) + "))"
+		case description.Text, nil:
+		}
 		return "Schema.Record(Schema.String, " + schemaText(typed.Value, indent) + ")"
 	case description.Nullable:
 		return "Schema.NullOr(" + schemaText(typed.Inner, indent) + ")"
@@ -188,6 +189,31 @@ func schemaText(schema description.Schema, indent string) string {
 		return typed.Name
 	case description.InlineStruct:
 		return "Schema.Struct(" + fieldsText(typed.Fields, indent) + ")"
+	case nil:
+	}
+	return "Schema.Never"
+}
+
+// literalsText is the schema of a string holding one of literals.
+func literalsText(literals description.Literals) string {
+	values := []string{}
+	for _, value := range literals.Values {
+		values = append(values, quoted(value))
+	}
+	if len(values) == 1 {
+		return "Schema.Literal(" + values[0] + ")"
+	}
+	return "Schema.Literals([" + strings.Join(values, ", ") + "])"
+}
+
+// widthText is the schema of a whole number of width: checked from its least to its most value up
+// to 32 bits, which a JavaScript number holds exactly. A 64-bit width is any whole number.
+func widthText(width description.IntegerWidth) string {
+	switch typed := width.(type) {
+	case description.Signed8, description.Signed16, description.Signed32, description.Unsigned8, description.Unsigned16, description.Unsigned32:
+		return fmt.Sprintf("Schema.Int.check(Schema.isBetween({ minimum: %s, maximum: %s }))", typed.Least(), typed.Most())
+	case description.Signed64, description.Unsigned64:
+		return "Schema.Int"
 	case nil:
 	}
 	return "Schema.Never"

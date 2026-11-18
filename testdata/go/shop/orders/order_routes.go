@@ -14,14 +14,25 @@ type Item struct {
 	Quantity uint8  `json:"quantity"`
 }
 
+// Courier is who delivers an order.
+type Courier string
+
+// The couriers who deliver orders.
+const (
+	CourierDrone Courier = "drone"
+	CourierPost  Courier = "post"
+)
+
 // Order is what a shopper orders: its items, the note on a gift, the first and the last time it may
-// be delivered, whether it is wrapped, and the tip in each currency.
+// be delivered, whether it is wrapped, the tip in each currency, and a note for each courier who
+// may deliver it.
 type Order struct {
 	Items          []Item             `json:"items"`
 	GiftNote       mo.Option[string]  `json:"gift_note"`
 	DeliverBetween [2]time.Time       `json:"deliver_between"`
 	Wrapped        bool               `json:"wrapped"`
 	Tips           map[string]float64 `json:"tips"`
+	CourierNotes   map[Courier]string `json:"courier_notes"`
 }
 
 // PlaceInput names the shopper and carries the order.

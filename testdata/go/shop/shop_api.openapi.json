@@ -25,7 +25,10 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer"
+              "type": "integer",
+              "format": "int64",
+              "minimum": -9223372036854775808,
+              "maximum": 9223372036854775807
             }
           },
           {
@@ -121,7 +124,10 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer"
+              "type": "integer",
+              "format": "int64",
+              "minimum": -9223372036854775808,
+              "maximum": 9223372036854775807
             }
           }
         ],
@@ -181,7 +187,10 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer"
+              "type": "integer",
+              "format": "int64",
+              "minimum": -9223372036854775808,
+              "maximum": 9223372036854775807
             }
           }
         ],
@@ -360,7 +369,9 @@
         "type": "object",
         "properties": {
           "quantity": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
           },
           "sku": {
             "type": "string"
@@ -409,7 +420,10 @@
         "type": "object",
         "properties": {
           "cents": {
-            "type": "integer"
+            "type": "integer",
+            "format": "int64",
+            "minimum": -9223372036854775808,
+            "maximum": 9223372036854775807
           },
           "currency": {
             "type": "string",
@@ -454,12 +468,26 @@
       "Order": {
         "type": "object",
         "properties": {
+          "courier_notes": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "drone",
+                "post"
+              ]
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
           "deliver_between": {
             "type": "array",
             "items": {
               "type": "string",
               "format": "date-time"
-            }
+            },
+            "minItems": 2,
+            "maxItems": 2
           },
           "gift_note": {
             "anyOf": [
@@ -492,7 +520,8 @@
           "gift_note",
           "deliver_between",
           "wrapped",
-          "tips"
+          "tips",
+          "courier_notes"
         ],
         "additionalProperties": false
       },
@@ -600,7 +629,10 @@
             ]
           },
           "shopper_id": {
-            "type": "integer"
+            "type": "integer",
+            "format": "int64",
+            "minimum": -9223372036854775808,
+            "maximum": 9223372036854775807
           }
         },
         "required": [

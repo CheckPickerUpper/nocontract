@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"go/token"
+	"go/types"
 	"io"
 	"io/fs"
 	"maps"
@@ -401,9 +402,9 @@ func generated(ctx context.Context, projectFile string, finish func([]generatedF
 func generatedGo(ctx context.Context, project projectfile.Project, finish func([]generatedFile) Outcome) Outcome {
 	directory := project.Directory()
 	existing := existingGenerated(directory)
-	return outcome.Fold(loadPackages(ctx, directory, project.Packages(), existing), func(loaded []*packages.Package) Outcome {
-		read := reading.ReadRoutes(reading.Request{Packages: loaded, API: project.API(), Server: project.ServerFolder()})
-		if problems := loadProblems(loaded, read.Packages); len(problems) > 0 {
+	return outcome.Fold(loadPackages(ctx, directory, project.Packages(), existing), func(loaded loadedProject) Outcome {
+		read := reading.ReadRoutes(reading.Request{Packages: loaded.packages, Sizes: loaded.sizes, API: project.API(), Server: project.ServerFolder()})
+		if problems := loadProblems(loaded.packages, read.Packages); len(problems) > 0 {
 			return PackagesNotLoaded{Errors: problems}
 		}
 		switch routes := read.Routes.(type) {
@@ -423,6 +424,13 @@ func generatedGo(ctx context.Context, project projectfile.Project, finish func([
 		}
 		return DeclarationsRefused{Refusals: []assembling.Refusal{}}
 	}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
+}
+
+// loadedProject is the project's packages and nocontract's, and the sizes of Go's basic types the
+// load type-checked them with.
+type loadedProject struct {
+	packages []*packages.Package
+	sizes    types.Sizes
 }
 
 // renderedFiles is the TypeScript file, the OpenAPI file, each package's Go file, the server file,
@@ -493,18 +501,28 @@ func existingGenerated(directory string) map[string][]byte {
 const setAsideFile = "//go:build ignore\n\npackage ignored\n"
 
 // loadPackages loads the project's packages and nocontract's, each with its syntax and types, with
-// every existing generated file left out of the build.
-func loadPackages(ctx context.Context, directory string, patterns []string, existing map[string][]byte) outcome.Result[[]*packages.Package] {
+// every existing generated file left out of the build, and the sizes the load type-checked them
+// with, which every package holds and are read from nocontract's.
+func loadPackages(ctx context.Context, directory string, patterns []string, existing map[string][]byte) outcome.Result[loadedProject] {
 	overlay := map[string][]byte{}
 	for path := range existing {
 		overlay[path] = []byte(setAsideFile)
 	}
 	config := &packages.Config{
-		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports,
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports |
+			packages.NeedTypesSizes,
 		Context: ctx, Logf: func(string, ...any) {}, Dir: directory, Env: os.Environ(), BuildFlags: []string{}, Fset: token.NewFileSet(),
 		ParseFile: nil, Tests: false, Overlay: overlay,
 	}
-	return outcome.TupleToResult(packages.Load(config, append(patterns, serverplan.NoContractPath)...))
+	return outcome.Fold(outcome.TupleToResult(packages.Load(config, append(patterns, serverplan.NoContractPath)...)),
+		func(loaded []*packages.Package) outcome.Result[loadedProject] {
+			for _, each := range loaded {
+				if each.PkgPath == serverplan.NoContractPath {
+					return outcome.Ok(loadedProject{packages: loaded, sizes: each.TypesSizes})
+				}
+			}
+			return outcome.Err[loadedProject](RuntimeNotFound{})
+		}, outcome.Err[loadedProject])
 }
 
 // judgedServing hands the files to finish when no file the project wrote serves anything but the

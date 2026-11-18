@@ -1381,3 +1381,18 @@ Message: `The body could not be read: {Reason}.`
 | Field | Type |
 | --- | --- |
 | `Reason` | `string` |
+
+## NC-1126 BodyKeyOutside
+
+BodyKeyOutside is an entry of a dictionary under a key that is none of the keys its field takes:
+the entry, its key, and the keys the field takes.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} is under the key "{Read}", which is not one of the keys it accepts.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Read` | `string` |
+| `Keys` | `[]string` |

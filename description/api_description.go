@@ -337,10 +337,10 @@ type Schema interface{ isSchema() }
 //ergo:not-an-error
 type Text struct{}
 
-// Integer is a JSON whole number.
+// Integer is a JSON whole number of Width.
 //
 //ergo:not-an-error
-type Integer struct{}
+type Integer struct{ Width IntegerWidth }
 
 // Finite is a JSON finite number.
 //
@@ -362,15 +362,35 @@ type Instant struct{}
 //ergo:not-an-error
 type Literals struct{ Values []string }
 
-// List is a JSON array of Item.
+// List is a JSON array of Item, of any length.
 //
 //ergo:not-an-error
 type List struct{ Item Schema }
 
-// Dictionary is a JSON object whose keys are strings and whose values are Value.
+// FixedList is a JSON array of exactly Length items, each Item.
 //
 //ergo:not-an-error
-type Dictionary struct{ Value Schema }
+type FixedList struct {
+	Item   Schema
+	Length int64
+}
+
+// Dictionary is a JSON object whose keys are Key and whose values are Value. It holds any of its
+// keys, each at most once.
+//
+//ergo:not-an-error
+type Dictionary struct {
+	Key   DictionaryKey
+	Value Schema
+}
+
+// DictionaryKey is the keys a dictionary takes: any text, or one of a set of literals.
+//
+//sumtype:decl
+type DictionaryKey interface{ isDictionaryKey() }
+
+func (Text) isDictionaryKey()     {}
+func (Literals) isDictionaryKey() {}
 
 // Nullable is Inner or null.
 //
@@ -394,6 +414,7 @@ func (Truth) isSchema()        {}
 func (Instant) isSchema()      {}
 func (Literals) isSchema()     {}
 func (List) isSchema()         {}
+func (FixedList) isSchema()    {}
 func (Dictionary) isSchema()   {}
 func (Nullable) isSchema()     {}
 func (StructRef) isSchema()    {}

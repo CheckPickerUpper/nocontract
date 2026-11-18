@@ -68,9 +68,9 @@ func fieldMaker(t *testing.T) func(name string, schema description.Schema) descr
 func itemAPI(t *testing.T) description.API {
 	t.Helper()
 	field := fieldMaker(t)
-	itemID := field("item_id", description.Integer{})
+	itemID := field("item_id", description.Integer{Width: description.Unsigned64{}})
 	itemRead := description.Member{Name: "ItemRead", Answer: answered(t, 200, ""), Fields: []description.Field{field("item", description.StructRef{Name: "Item"})}}
-	itemAdded := description.Member{Name: "ItemAdded", Answer: answered(t, 201, ""), Fields: []description.Field{field("id", description.Integer{})}}
+	itemAdded := description.Member{Name: "ItemAdded", Answer: answered(t, 201, ""), Fields: []description.Field{field("id", description.Integer{Width: description.Signed64{}})}}
 	itemRemoved := description.Member{Name: "ItemRemoved", Answer: answered(t, 200, ""), Fields: []description.Field{}}
 	itemMissing := description.Member{Name: "ItemMissing", Answer: answered(t, 404, "IT-1001"), Fields: []description.Field{itemID}}
 	shopClosed := description.Member{Name: "ShopClosed", Answer: answered(t, 404, "IT-1002"), Fields: []description.Field{field("reopens", description.Instant{})}}
@@ -104,17 +104,19 @@ func itemAPI(t *testing.T) description.API {
 		Structs: []description.NamedStruct{
 			{Name: "Item", Fields: []description.Field{
 				field("name", description.Text{}),
-				field("count", description.Integer{}),
+				field("count", description.Integer{Width: description.Signed32{}}),
 				field("weight", description.Finite{}),
 				field("sold", description.Truth{}),
 				field("added", description.Instant{}),
 				field("size", description.Literals{Values: []string{"small", "large"}}),
 				field("labels", description.List{Item: description.Text{}}),
-				field("prices", description.Dictionary{Value: description.Finite{}}),
+				field("corners", description.FixedList{Item: description.Finite{}, Length: 4}),
+				field("prices", description.Dictionary{Key: description.Text{}, Value: description.Finite{}}),
+				field("stock", description.Dictionary{Key: description.Literals{Values: []string{"north", "south"}}, Value: description.Integer{Width: description.Unsigned32{}}}),
 				field("discount", description.Nullable{Inner: description.StructRef{Name: "Price"}}),
-				field("box", description.InlineStruct{Fields: []description.Field{field("width", description.Integer{})}}),
+				field("box", description.InlineStruct{Fields: []description.Field{field("width", description.Integer{Width: description.Unsigned16{}})}}),
 			}},
-			{Name: "Price", Fields: []description.Field{field("cents", description.Integer{})}},
+			{Name: "Price", Fields: []description.Field{field("cents", description.Integer{Width: description.Signed8{}})}},
 		},
 	}
 }

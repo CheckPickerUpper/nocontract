@@ -9,6 +9,7 @@ import (
 
 	"github.com/CheckPickerUpper/outcome"
 
+	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 )
 
@@ -90,7 +91,7 @@ func (readers *bodyReaders) reader(value serverplan.BodyValue, place string, nam
 	case serverplan.TextShape:
 		return instantiated("BodyText")
 	case serverplan.WholeShape:
-		return instantiated("Body" + wholeReader(shape.Sign))
+		return instantiated("Body" + wholeReader(shape.Width))
 	case serverplan.NumberShape:
 		return instantiated("BodyNumber")
 	case serverplan.TruthShape:
@@ -98,11 +99,7 @@ func (readers *bodyReaders) reader(value serverplan.BodyValue, place string, nam
 	case serverplan.InstantShape:
 		return names.runtime("BodyInstant")
 	case serverplan.LiteralShape:
-		values := []string{}
-		for _, each := range shape.Values {
-			values = append(values, strconv.Quote(each))
-		}
-		return instantiated("BodyLiteral") + "(" + strings.Join(values, ", ") + ")"
+		return instantiated("BodyLiteral") + "(" + strings.Join(quotedLiterals(shape.Literals), ", ") + ")"
 	case serverplan.ListShape:
 		return instantiated("BodyList") + "(" + readers.reader(shape.Item, place+"Item", names) + ")"
 	case serverplan.ArrayShape:
@@ -110,7 +107,7 @@ func (readers *bodyReaders) reader(value serverplan.BodyValue, place string, nam
 		return fmt.Sprintf("%s(%d, %s, func(items []%s) %s { return %s(items) })", instantiated("BodyArray"), shape.Length,
 			readers.reader(shape.Item, place+"Item", names), item, goType, goType)
 	case serverplan.DictionaryShape:
-		return instantiated("BodyDictionary") + "(" + readers.reader(shape.Value, place+"Value", names) + ")"
+		return instantiated("BodyDictionary") + "(" + keyReader(shape, names) + ", " + readers.reader(shape.Value, place+"Value", names) + ")"
 	case serverplan.NullableShape:
 		return names.runtime("BodyNullable") + "[" + readers.written(shape.Inner, place, names) + "](" + readers.reader(shape.Inner, place, names) + ")"
 	case serverplan.StructShape:
@@ -118,6 +115,18 @@ func (readers *bodyReaders) reader(value serverplan.BodyValue, place string, nam
 	case nil:
 	}
 	return ""
+}
+
+// keyReader is the expression reading each key of the dictionary shape reads, a function of a
+// nocontract.BodyMember: any text, or one of the key's literals.
+func keyReader(shape serverplan.DictionaryShape, names *imports) string {
+	keyType := names.goType(shape.KeyType)
+	switch key := shape.Key.(type) {
+	case description.Literals:
+		return names.runtime("BodyLiteralKey") + "[" + keyType + "](" + strings.Join(quotedLiterals(key), ", ") + ")"
+	case description.Text, nil:
+	}
+	return names.runtime("BodyTextKey") + "[" + keyType + "]"
 }
 
 // structRead is the reader of a struct of goType holding fields, written once for each struct type:

@@ -168,26 +168,33 @@ func readCall(kind serverplan.TextKind, goType, text string, names *imports) str
 	reader, arguments := "Textual", []string{text}
 	switch read := kind.(type) {
 	case serverplan.TextWhole:
-		reader = wholeReader(read.Sign)
+		reader = wholeReader(read.Width)
 	case serverplan.TextTruth:
 		reader = "Truth"
 	case serverplan.TextLiteral:
 		reader = "Literal"
-		for _, value := range read.Values {
-			arguments = append(arguments, strconv.Quote(value))
-		}
+		arguments = append(arguments, quotedLiterals(read.Literals)...)
 	case serverplan.TextAsIs, nil:
 	}
 	return names.runtime(reader) + "[" + goType + "](" + strings.Join(arguments, ", ") + ")"
 }
 
-// wholeReader is the name of the runtime's reader of a parameter's whole number of sign; the reader
-// of a body's is named the same after Body.
-func wholeReader(sign serverplan.WholeSign) string {
-	switch sign.(type) {
-	case serverplan.UnsignedWhole:
+// quotedLiterals is each of literals as a Go string literal.
+func quotedLiterals(literals description.Literals) []string {
+	quoted := []string{}
+	for _, value := range literals.Values {
+		quoted = append(quoted, strconv.Quote(value))
+	}
+	return quoted
+}
+
+// wholeReader is the name of the runtime's reader of a parameter's whole number of width, by the
+// width's sign; the reader of a body's is named the same after Body.
+func wholeReader(width description.IntegerWidth) string {
+	switch width.(type) {
+	case description.Unsigned8, description.Unsigned16, description.Unsigned32, description.Unsigned64:
 		return "Unsigned"
-	case serverplan.SignedWhole, nil:
+	case description.Signed8, description.Signed16, description.Signed32, description.Signed64, nil:
 	}
 	return "Signed"
 }

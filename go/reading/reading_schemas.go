@@ -178,14 +178,17 @@ func readValue(index projectIndex, written, as types.Type, position token.Pos, o
 		})
 	case *types.Array:
 		return mapped(readValue(index, typed.Elem(), typed.Elem(), position, open), func(item valueRead) valueRead {
-			return valueAs(description.List{Item: item.schema}, as, serverplan.ArrayShape{Length: typed.Len(), Item: item.body})
+			fixed := description.FixedList{Item: item.schema, Length: typed.Len()}
+			return valueAs(fixed, as, serverplan.ArrayShape{Length: fixed.Length, Item: item.body})
 		})
 	case *types.Map:
 		if key, isBasic := typed.Key().Underlying().(*types.Basic); !isBasic || key.Kind() != types.String {
 			return unsupported(index, position, written, MapKeyNotText{})
 		}
+		key := dictionaryKey(typed.Key())
 		return mapped(readValue(index, typed.Elem(), typed.Elem(), position, open), func(value valueRead) valueRead {
-			return valueAs(description.Dictionary{Value: value.schema}, as, serverplan.DictionaryShape{Value: value.body})
+			return valueAs(description.Dictionary{Key: key, Value: value.schema}, as,
+				serverplan.DictionaryShape{Key: key, KeyType: types.Unalias(typed.Key()), Value: value.body})
 		})
 	case *types.Struct:
 		return mapped(structFields(index, typed, open), func(fields []fieldWritten) valueRead {
@@ -200,30 +203,81 @@ func readValue(index projectIndex, written, as types.Type, position token.Pos, o
 	return unsupported(index, position, written, ShapelessField{})
 }
 
+// basicValue is the JSON shape encoding/json writes a value of a basic type as, and how a body
+// reads it into as. An integer's width is its type's own, int, uint and uintptr's the one the
+// project's packages were type-checked with.
 func basicValue(index projectIndex, basic *types.Basic, as types.Type, position token.Pos) reading[valueRead] {
-	switch {
-	case basic.Info()&types.IsString != 0:
+	whole := func(width description.IntegerWidth) reading[valueRead] {
+		return readAs(valueAs(description.Integer{Width: width}, as, serverplan.WholeShape{Width: width}), nothingFound())
+	}
+	switch basic.Kind() {
+	case types.String:
 		return readAs(valueAs(description.Text{}, as, serverplan.TextShape{}), nothingFound())
-	case basic.Info()&types.IsBoolean != 0:
+	case types.Bool:
 		return readAs(valueAs(description.Truth{}, as, serverplan.TruthShape{}), nothingFound())
-	case basic.Info()&types.IsInteger != 0:
-		return readAs(valueAs(description.Integer{}, as, serverplan.WholeShape{Sign: wholeSign(basic)}), nothingFound())
-	case basic.Info()&types.IsFloat != 0:
+	case types.Int8:
+		return whole(description.Signed8{})
+	case types.Int16:
+		return whole(description.Signed16{})
+	case types.Int32:
+		return whole(description.Signed32{})
+	case types.Int64:
+		return whole(description.Signed64{})
+	case types.Int:
+		return whole(signedWidth(index.request.Sizes.Sizeof(basic)))
+	case types.Uint8:
+		return whole(description.Unsigned8{})
+	case types.Uint16:
+		return whole(description.Unsigned16{})
+	case types.Uint32:
+		return whole(description.Unsigned32{})
+	case types.Uint64:
+		return whole(description.Unsigned64{})
+	case types.Uint, types.Uintptr:
+		return whole(unsignedWidth(index.request.Sizes.Sizeof(basic)))
+	case types.Float32, types.Float64:
 		return readAs(valueAs(description.Finite{}, as, serverplan.NumberShape{}), nothingFound())
+	case types.Invalid, types.Complex64, types.Complex128, types.UnsafePointer, types.UntypedBool, types.UntypedInt, types.UntypedRune,
+		types.UntypedFloat, types.UntypedComplex, types.UntypedString, types.UntypedNil:
 	}
 	return unsupported(index, position, basic, ShapelessField{})
 }
 
-// wholeSign is whether basic's integer type holds whole numbers below zero.
-func wholeSign(basic *types.Basic) serverplan.WholeSign {
-	switch basic.Kind() {
-	case types.Uint, types.Uintptr, types.Uint8, types.Uint16, types.Uint32, types.Uint64:
-		return serverplan.UnsignedWhole{}
-	case types.Int, types.Int8, types.Int16, types.Int32, types.Int64, types.UntypedInt, types.UntypedRune, types.Invalid, types.Bool,
-		types.Float32, types.Float64, types.Complex64, types.Complex128, types.String, types.UnsafePointer, types.UntypedBool, types.UntypedFloat,
-		types.UntypedComplex, types.UntypedString, types.UntypedNil:
+// signedWidth is the width of a signed integer of bytes, which Go sizes at 1, 2, 4 or 8.
+func signedWidth(bytes int64) description.IntegerWidth {
+	switch bytes {
+	case 1:
+		return description.Signed8{}
+	case 2:
+		return description.Signed16{}
+	case 4:
+		return description.Signed32{}
 	}
-	return serverplan.SignedWhole{}
+	return description.Signed64{}
+}
+
+// unsignedWidth is the width of an unsigned integer of bytes, which Go sizes at 1, 2, 4 or 8.
+func unsignedWidth(bytes int64) description.IntegerWidth {
+	switch bytes {
+	case 1:
+		return description.Unsigned8{}
+	case 2:
+		return description.Unsigned16{}
+	case 4:
+		return description.Unsigned32{}
+	}
+	return description.Unsigned64{}
+}
+
+// dictionaryKey is the keys a map whose key type is key takes: the literals of a named string type
+// that declares constants, as a value of that type takes, or any text.
+func dictionaryKey(key types.Type) description.DictionaryKey {
+	if named, isNamed := types.Unalias(key).(*types.Named); isNamed {
+		if values := stringConstants(named); len(values) > 0 {
+			return description.Literals{Values: values}
+		}
+	}
+	return description.Text{}
 }
 
 func namedValue(index projectIndex, named *types.Named, as types.Type, position token.Pos, open []typeKey) reading[valueRead] {
@@ -242,7 +296,8 @@ func namedValue(index projectIndex, named *types.Named, as types.Type, position 
 	}
 	if basic, isBasic := named.Underlying().(*types.Basic); isBasic && basic.Info()&types.IsString != 0 {
 		if values := stringConstants(named); len(values) > 0 {
-			return readAs(valueAs(description.Literals{Values: values}, as, serverplan.LiteralShape{Values: values}), nothingFound())
+			literals := description.Literals{Values: values}
+			return readAs(valueAs(literals, as, serverplan.LiteralShape{Literals: literals}), nothingFound())
 		}
 	}
 	return readValue(index, named.Underlying(), as, position, open)

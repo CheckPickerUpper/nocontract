@@ -23,10 +23,12 @@ import (
 )
 
 // Request is what the generator reads: the loaded packages, the project's own and nocontract's,
-// each with its syntax, the API's name and where it is given, and the absolute path of the folder
-// the server package is written into.
+// each with its syntax, the sizes Go type-checked them with, which give int, uint and uintptr their
+// width, the API's name and where it is given, and the absolute path of the folder the server
+// package is written into.
 type Request struct {
 	Packages []*packages.Package
+	Sizes    types.Sizes
 	API      assembling.NamedAPI
 	Server   string
 }

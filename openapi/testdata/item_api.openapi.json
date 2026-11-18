@@ -72,7 +72,9 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer"
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
             }
           }
         ],
@@ -110,7 +112,9 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer"
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
             }
           },
           {
@@ -188,7 +192,9 @@
             "type": "object",
             "properties": {
               "width": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
               }
             },
             "required": [
@@ -196,8 +202,19 @@
             ],
             "additionalProperties": false
           },
+          "corners": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
           "count": {
-            "type": "integer"
+            "type": "integer",
+            "format": "int32",
+            "minimum": -2147483648,
+            "maximum": 2147483647
           },
           "discount": {
             "anyOf": [
@@ -234,6 +251,20 @@
           "sold": {
             "type": "boolean"
           },
+          "stock": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "north",
+                "south"
+              ]
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            }
+          },
           "weight": {
             "type": "number"
           }
@@ -246,7 +277,9 @@
           "added",
           "size",
           "labels",
+          "corners",
           "prices",
+          "stock",
           "discount",
           "box"
         ],
@@ -262,7 +295,10 @@
             ]
           },
           "id": {
-            "type": "integer"
+            "type": "integer",
+            "format": "int64",
+            "minimum": -9223372036854775808,
+            "maximum": 9223372036854775807
           }
         },
         "required": [
@@ -287,7 +323,9 @@
             ]
           },
           "item_id": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 18446744073709551615
           }
         },
         "required": [
@@ -335,7 +373,9 @@
         "type": "object",
         "properties": {
           "cents": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": -128,
+            "maximum": 127
           }
         },
         "required": [

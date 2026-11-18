@@ -193,7 +193,7 @@ func fieldSchema(shape description.Schema) schema {
 	case description.Text:
 		return typeSchema{Type: "string"}
 	case description.Integer:
-		return typeSchema{Type: "integer"}
+		return widthSchema(typed.Width)
 	case description.Finite:
 		return typeSchema{Type: "number"}
 	case description.Truth:
@@ -204,7 +204,16 @@ func fieldSchema(shape description.Schema) schema {
 		return enumSchema{Type: "string", Enum: append([]string{}, typed.Values...)}
 	case description.List:
 		return arraySchema{Type: "array", Items: fieldSchema(typed.Item)}
+	case description.FixedList:
+		return fixedArraySchema{Type: "array", Items: fieldSchema(typed.Item), MinItems: typed.Length, MaxItems: typed.Length}
 	case description.Dictionary:
+		switch key := typed.Key.(type) {
+		case description.Literals:
+			return keyedDictionarySchema{
+				Type: "object", PropertyNames: propertyNames{Enum: append([]string{}, key.Values...)}, AdditionalProperties: fieldSchema(typed.Value),
+			}
+		case description.Text, nil:
+		}
 		return dictionarySchema{Type: "object", AdditionalProperties: fieldSchema(typed.Value)}
 	case description.Nullable:
 		return anyOfSchema{AnyOf: []schema{fieldSchema(typed.Inner), typeSchema{Type: "null"}}}
@@ -216,3 +225,21 @@ func fieldSchema(shape description.Schema) schema {
 	}
 	return neverSchema{Not: struct{}{}}
 }
+
+// widthSchema is a whole number of width: from its least to its most value, with the format OpenAPI
+// names it by when it is exactly 32 or 64 signed bits.
+func widthSchema(width description.IntegerWidth) schema {
+	switch typed := width.(type) {
+	case description.Signed32:
+		return formattedIntegerSchema{Type: "integer", Format: "int32", Minimum: exactly(typed.Least()), Maximum: exactly(typed.Most())}
+	case description.Signed64:
+		return formattedIntegerSchema{Type: "integer", Format: "int64", Minimum: exactly(typed.Least()), Maximum: exactly(typed.Most())}
+	case description.Signed8, description.Signed16, description.Unsigned8, description.Unsigned16, description.Unsigned32, description.Unsigned64:
+		return integerSchema{Type: "integer", Minimum: exactly(typed.Least()), Maximum: exactly(typed.Most())}
+	case nil:
+	}
+	return neverSchema{Not: struct{}{}}
+}
+
+// exactly is a whole number's decimal text as a JSON number holding every one of its digits.
+func exactly(decimal string) json.Number { return json.Number(decimal) }

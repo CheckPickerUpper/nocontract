@@ -66,17 +66,20 @@ type nocontractBodyOrderMembers struct {
 	DeliverBetween mo.Option[[2]time.Time]
 	Wrapped        mo.Option[bool]
 	Tips           mo.Option[map[string]float64]
+	CourierNotes   mo.Option[map[Courier]string]
 }
 
 // nocontractBodyOrder reads a JSON object holding each field of the struct it returns once.
 func nocontractBodyOrder(value nocontract.BodyValue) nocontract.BodyReading[Order] {
-	return nocontract.Next(nocontract.BodyObject(value, nocontractBodyOrderMembers{Items: mo.None[[]Item](), GiftNote: mo.None[mo.Option[string]](), DeliverBetween: mo.None[[2]time.Time](), Wrapped: mo.None[bool](), Tips: mo.None[map[string]float64]()}, nocontractBodyOrderMember), func(members nocontractBodyOrderMembers) nocontract.BodyReading[Order] {
+	return nocontract.Next(nocontract.BodyObject(value, nocontractBodyOrderMembers{Items: mo.None[[]Item](), GiftNote: mo.None[mo.Option[string]](), DeliverBetween: mo.None[[2]time.Time](), Wrapped: mo.None[bool](), Tips: mo.None[map[string]float64](), CourierNotes: mo.None[map[Courier]string]()}, nocontractBodyOrderMember), func(members nocontractBodyOrderMembers) nocontract.BodyReading[Order] {
 		return nocontract.Next(nocontract.Present(value, "items", members.Items), func(readItems []Item) nocontract.BodyReading[Order] {
 			return nocontract.Next(nocontract.Present(value, "gift_note", members.GiftNote), func(readGiftNote mo.Option[string]) nocontract.BodyReading[Order] {
 				return nocontract.Next(nocontract.Present(value, "deliver_between", members.DeliverBetween), func(readDeliverBetween [2]time.Time) nocontract.BodyReading[Order] {
 					return nocontract.Next(nocontract.Present(value, "wrapped", members.Wrapped), func(readWrapped bool) nocontract.BodyReading[Order] {
 						return nocontract.Next(nocontract.Present(value, "tips", members.Tips), func(readTips map[string]float64) nocontract.BodyReading[Order] {
-							return nocontract.Read[Order]{Value: Order{Items: readItems, GiftNote: readGiftNote, DeliverBetween: readDeliverBetween, Wrapped: readWrapped, Tips: readTips}}
+							return nocontract.Next(nocontract.Present(value, "courier_notes", members.CourierNotes), func(readCourierNotes map[Courier]string) nocontract.BodyReading[Order] {
+								return nocontract.Read[Order]{Value: Order{Items: readItems, GiftNote: readGiftNote, DeliverBetween: readDeliverBetween, Wrapped: readWrapped, Tips: readTips, CourierNotes: readCourierNotes}}
+							})
 						})
 					})
 				})
@@ -90,23 +93,27 @@ func nocontractBodyOrderMember(members nocontractBodyOrderMembers, member nocont
 	switch member.Name {
 	case "items":
 		return nocontract.Once(member, members.Items, nocontract.BodyList[[]Item](nocontractBodyItem), func(read []Item) nocontractBodyOrderMembers {
-			return nocontractBodyOrderMembers{Items: mo.Some(read), GiftNote: members.GiftNote, DeliverBetween: members.DeliverBetween, Wrapped: members.Wrapped, Tips: members.Tips}
+			return nocontractBodyOrderMembers{Items: mo.Some(read), GiftNote: members.GiftNote, DeliverBetween: members.DeliverBetween, Wrapped: members.Wrapped, Tips: members.Tips, CourierNotes: members.CourierNotes}
 		})
 	case "gift_note":
 		return nocontract.Once(member, members.GiftNote, nocontract.BodyNullable[string](nocontract.BodyText[string]), func(read mo.Option[string]) nocontractBodyOrderMembers {
-			return nocontractBodyOrderMembers{Items: members.Items, GiftNote: mo.Some(read), DeliverBetween: members.DeliverBetween, Wrapped: members.Wrapped, Tips: members.Tips}
+			return nocontractBodyOrderMembers{Items: members.Items, GiftNote: mo.Some(read), DeliverBetween: members.DeliverBetween, Wrapped: members.Wrapped, Tips: members.Tips, CourierNotes: members.CourierNotes}
 		})
 	case "deliver_between":
 		return nocontract.Once(member, members.DeliverBetween, nocontract.BodyArray[[2]time.Time](2, nocontract.BodyInstant, func(items []time.Time) [2]time.Time { return [2]time.Time(items) }), func(read [2]time.Time) nocontractBodyOrderMembers {
-			return nocontractBodyOrderMembers{Items: members.Items, GiftNote: members.GiftNote, DeliverBetween: mo.Some(read), Wrapped: members.Wrapped, Tips: members.Tips}
+			return nocontractBodyOrderMembers{Items: members.Items, GiftNote: members.GiftNote, DeliverBetween: mo.Some(read), Wrapped: members.Wrapped, Tips: members.Tips, CourierNotes: members.CourierNotes}
 		})
 	case "wrapped":
 		return nocontract.Once(member, members.Wrapped, nocontract.BodyTruth[bool], func(read bool) nocontractBodyOrderMembers {
-			return nocontractBodyOrderMembers{Items: members.Items, GiftNote: members.GiftNote, DeliverBetween: members.DeliverBetween, Wrapped: mo.Some(read), Tips: members.Tips}
+			return nocontractBodyOrderMembers{Items: members.Items, GiftNote: members.GiftNote, DeliverBetween: members.DeliverBetween, Wrapped: mo.Some(read), Tips: members.Tips, CourierNotes: members.CourierNotes}
 		})
 	case "tips":
-		return nocontract.Once(member, members.Tips, nocontract.BodyDictionary[map[string]float64](nocontract.BodyNumber[float64]), func(read map[string]float64) nocontractBodyOrderMembers {
-			return nocontractBodyOrderMembers{Items: members.Items, GiftNote: members.GiftNote, DeliverBetween: members.DeliverBetween, Wrapped: members.Wrapped, Tips: mo.Some(read)}
+		return nocontract.Once(member, members.Tips, nocontract.BodyDictionary[map[string]float64](nocontract.BodyTextKey[string], nocontract.BodyNumber[float64]), func(read map[string]float64) nocontractBodyOrderMembers {
+			return nocontractBodyOrderMembers{Items: members.Items, GiftNote: members.GiftNote, DeliverBetween: members.DeliverBetween, Wrapped: members.Wrapped, Tips: mo.Some(read), CourierNotes: members.CourierNotes}
+		})
+	case "courier_notes":
+		return nocontract.Once(member, members.CourierNotes, nocontract.BodyDictionary[map[Courier]string](nocontract.BodyLiteralKey[Courier]("drone", "post"), nocontract.BodyText[string]), func(read map[Courier]string) nocontractBodyOrderMembers {
+			return nocontractBodyOrderMembers{Items: members.Items, GiftNote: members.GiftNote, DeliverBetween: members.DeliverBetween, Wrapped: members.Wrapped, Tips: members.Tips, CourierNotes: mo.Some(read)}
 		})
 	}
 	return nocontract.Unknown[nocontractBodyOrderMembers](member)

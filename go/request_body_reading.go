@@ -82,6 +82,17 @@ type BodyLiteralOutside struct {
 	Values []string
 }
 
+// BodyKeyOutside is an entry of a dictionary under a key that is none of the keys its field takes:
+// the entry, its key, and the keys the field takes.
+//
+//ergo:code NC-1126
+//ergo:message {Path} is under the key "{Read}", which is not one of the keys it accepts.
+type BodyKeyOutside struct {
+	Path string
+	Read string
+	Keys []string
+}
+
 // BodyNumberNotWhole is a number a whole number field holds, written with a fraction or an exponent.
 //
 //ergo:code NC-1119
@@ -168,6 +179,9 @@ func (cause BodyValueMistyped) Error() string { return cause.Report(messages.Mat
 func (cause BodyLiteralOutside) Error() string { return cause.Report(messages.Match("")).Message }
 
 // Error is the failure's message in the source language.
+func (cause BodyKeyOutside) Error() string { return cause.Report(messages.Match("")).Message }
+
+// Error is the failure's message in the source language.
 func (cause BodyNumberNotWhole) Error() string { return cause.Report(messages.Match("")).Message }
 
 // Error is the failure's message in the source language.
@@ -196,6 +210,7 @@ func (BodyMemberRepeated) isBodyCause()    {}
 func (BodyMemberUnknown) isBodyCause()     {}
 func (BodyValueMistyped) isBodyCause()     {}
 func (BodyLiteralOutside) isBodyCause()    {}
+func (BodyKeyOutside) isBodyCause()        {}
 func (BodyNumberNotWhole) isBodyCause()    {}
 func (BodyNumberOutside) isBodyCause()     {}
 func (BodyInstantUnreadable) isBodyCause() {}
@@ -221,6 +236,8 @@ func bodyCausePath(cause BodyCause) string {
 	case BodyValueMistyped:
 		return found.Path
 	case BodyLiteralOutside:
+		return found.Path
+	case BodyKeyOutside:
 		return found.Path
 	case BodyNumberNotWhole:
 		return found.Path
@@ -493,17 +510,40 @@ func BodyArray[A, T any](length int, item func(BodyValue) BodyReading[T], fixed 
 	}
 }
 
-// BodyDictionary reads a JSON object as the map type M its field holds, each value by entry.
-func BodyDictionary[M ~map[K]V, K ~string, V any](entry func(BodyValue) BodyReading[V]) func(BodyValue) BodyReading[M] {
+// BodyTextKey reads the name of an entry of a JSON object as the text type K a dictionary field's
+// keys are: every name is a key.
+func BodyTextKey[K ~string](member BodyMember) BodyReading[K] {
+	return Read[K]{Value: K(member.Name)}
+}
+
+// BodyLiteralKey reads the name of an entry of a JSON object as the string type K a dictionary
+// field's keys are, when it is one of keys.
+func BodyLiteralKey[K ~string](keys ...K) func(BodyMember) BodyReading[K] {
+	return func(member BodyMember) BodyReading[K] {
+		if slices.Contains(keys, K(member.Name)) {
+			return Read[K]{Value: K(member.Name)}
+		}
+		accepted := []string{}
+		for _, each := range keys {
+			accepted = append(accepted, string(each))
+		}
+		return BodyRefused{Cause: BodyKeyOutside{Path: member.Value.path, Read: member.Name, Keys: accepted}}
+	}
+}
+
+// BodyDictionary reads a JSON object as the map type M its field holds, each entry's name by key
+// and its value by entry.
+func BodyDictionary[M ~map[K]V, K ~string, V any](key func(BodyMember) BodyReading[K], entry func(BodyValue) BodyReading[V]) func(BodyValue) BodyReading[M] {
 	return func(value BodyValue) BodyReading[M] {
 		return objectMembers(value, M{}, BodyValue.entry, func(entries M, member BodyMember) BodyReading[M] {
-			key := K(member.Name)
-			if _, isHeld := entries[key]; isHeld {
-				return BodyRefused{Cause: BodyMemberRepeated{Path: member.Value.path}}
-			}
-			return Next(entry(member.Value), func(read V) BodyReading[M] {
-				entries[key] = read
-				return Read[M]{Value: entries}
+			return Next(key(member), func(read K) BodyReading[M] {
+				if _, isHeld := entries[read]; isHeld {
+					return BodyRefused{Cause: BodyMemberRepeated{Path: member.Value.path}}
+				}
+				return Next(entry(member.Value), func(held V) BodyReading[M] {
+					entries[read] = held
+					return Read[M]{Value: entries}
+				})
 			})
 		})
 	}

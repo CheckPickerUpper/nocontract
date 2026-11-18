@@ -1,5 +1,7 @@
 package openapi
 
+import "encoding/json"
+
 // document is an OpenAPI 3.1 document as encoding/json writes it.
 type document struct {
 	OpenAPI    string                          `json:"openapi"`
@@ -107,6 +109,26 @@ type formatSchema struct {
 	Format string `json:"format"`
 }
 
+// integerSchema is a whole number from Minimum to Maximum, both included, written exactly.
+//
+//ergo:not-an-error
+type integerSchema struct {
+	Type    string      `json:"type"`
+	Minimum json.Number `json:"minimum"`
+	Maximum json.Number `json:"maximum"`
+}
+
+// formattedIntegerSchema is a whole number from Minimum to Maximum, both included, written exactly,
+// whose width is one OpenAPI names as Format.
+//
+//ergo:not-an-error
+type formattedIntegerSchema struct {
+	Type    string      `json:"type"`
+	Format  string      `json:"format"`
+	Minimum json.Number `json:"minimum"`
+	Maximum json.Number `json:"maximum"`
+}
+
 // enumSchema is a value of one JSON type holding one of Enum.
 //
 //ergo:not-an-error
@@ -123,12 +145,38 @@ type arraySchema struct {
 	Items schema `json:"items"`
 }
 
-// dictionarySchema is an object whose every value is AdditionalProperties.
+// fixedArraySchema is an array of Items holding exactly as many items as MinItems and MaxItems
+// both say.
+//
+//ergo:not-an-error
+type fixedArraySchema struct {
+	Type     string `json:"type"`
+	Items    schema `json:"items"`
+	MinItems int64  `json:"minItems"`
+	MaxItems int64  `json:"maxItems"`
+}
+
+// dictionarySchema is an object whose every value is AdditionalProperties, under any name.
 //
 //ergo:not-an-error
 type dictionarySchema struct {
 	Type                 string `json:"type"`
 	AdditionalProperties schema `json:"additionalProperties"`
+}
+
+// keyedDictionarySchema is an object whose every name is one of PropertyNames and whose every value
+// is AdditionalProperties.
+//
+//ergo:not-an-error
+type keyedDictionarySchema struct {
+	Type                 string        `json:"type"`
+	PropertyNames        propertyNames `json:"propertyNames"`
+	AdditionalProperties schema        `json:"additionalProperties"`
+}
+
+// propertyNames is the names an object may hold: each one of Enum.
+type propertyNames struct {
+	Enum []string `json:"enum"`
 }
 
 // objectSchema is an object holding exactly Properties, each of them Required.
@@ -169,13 +217,17 @@ type neverSchema struct {
 	Not struct{} `json:"not"`
 }
 
-func (referenceSchema) isSchema()  {}
-func (typeSchema) isSchema()       {}
-func (formatSchema) isSchema()     {}
-func (enumSchema) isSchema()       {}
-func (arraySchema) isSchema()      {}
-func (dictionarySchema) isSchema() {}
-func (objectSchema) isSchema()     {}
-func (anyOfSchema) isSchema()      {}
-func (oneOfSchema) isSchema()      {}
-func (neverSchema) isSchema()      {}
+func (referenceSchema) isSchema()        {}
+func (typeSchema) isSchema()             {}
+func (formatSchema) isSchema()           {}
+func (integerSchema) isSchema()          {}
+func (formattedIntegerSchema) isSchema() {}
+func (enumSchema) isSchema()             {}
+func (arraySchema) isSchema()            {}
+func (fixedArraySchema) isSchema()       {}
+func (dictionarySchema) isSchema()       {}
+func (keyedDictionarySchema) isSchema()  {}
+func (objectSchema) isSchema()           {}
+func (anyOfSchema) isSchema()            {}
+func (oneOfSchema) isSchema()            {}
+func (neverSchema) isSchema()            {}
