@@ -1,7 +1,6 @@
 package reading
 
 import (
-	"cmp"
 	"go/token"
 	"go/types"
 	"slices"
@@ -142,7 +141,7 @@ func sealedMemberCandidates(index projectIndex, outcome declaredType, contract *
 		}
 		keyed.Entry(index.declared, typeKeyFor(object)).ForEach(func(declared declaredType) { members = append(members, declared) })
 	}
-	slices.SortFunc(members, func(left, right declaredType) int { return cmp.Compare(left.object.Pos(), right.object.Pos()) })
+	slices.SortFunc(members, func(left, right declaredType) int { return index.sourceOrder(left.object.Pos(), right.object.Pos()) })
 	return memberCandidates{members: members, found: finding}
 }
 

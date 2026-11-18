@@ -51,7 +51,7 @@ func readGuards(index projectIndex) guardTable {
 		}
 	}
 	slices.SortFunc(marked, func(left, right guardDeclaration) int {
-		return cmp.Or(cmp.Compare(packagePath(left.declared.object), packagePath(right.declared.object)), cmp.Compare(left.declared.object.Pos(), right.declared.object.Pos()))
+		return cmp.Or(cmp.Compare(packagePath(left.declared.object), packagePath(right.declared.object)), index.sourceOrder(left.declared.object.Pos(), right.declared.object.Pos()))
 	})
 	guards, finding := map[string]guardEntry{}, nothingFound()
 	for _, each := range marked {

@@ -155,6 +155,13 @@ func (index projectIndex) position(pos token.Pos) token.Position {
 	return index.files.Position(pos)
 }
 
+// sourceOrder orders two positions as they are written: by file name, then by place in the file. A
+// token.Pos alone orders files by when the loader parsed them, which differs from run to run.
+func (index projectIndex) sourceOrder(left token.Pos, right token.Pos) int {
+	leftAt, rightAt := index.position(left), index.position(right)
+	return cmp.Or(cmp.Compare(leftAt.Filename, rightAt.Filename), cmp.Compare(leftAt.Offset, rightAt.Offset))
+}
+
 // placed is where pos is written, as every backend's refusals name a place.
 func (index projectIndex) placed(pos token.Pos) assembling.Position {
 	return placedAt(index.position(pos))
