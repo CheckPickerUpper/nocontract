@@ -460,6 +460,7 @@ func (RuntimeNotListed) ErrorCode() ergo.Code { return "NC-1130" }
 // RuntimeNotListedArguments holds the arguments RuntimeNotListed's message names, in the order the message first names them.
 type RuntimeNotListedArguments struct {
 	Directory string `json:"Directory"`
+	Listing   string `json:"Listing"`
 }
 
 // ReportArguments marks RuntimeNotListedArguments as the arguments of a report.
@@ -467,17 +468,155 @@ func (RuntimeNotListedArguments) ReportArguments() {}
 
 // Report is RuntimeNotListed's code, its message in language and the arguments the message names.
 func (failure RuntimeNotListed) Report(language messages.Language) ergo.Report {
-	arguments := RuntimeNotListedArguments{Directory: string(failure.Directory)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "Go listed no NoContract runtime package for the project in "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "; run go list ./... there to see why."}}}
+	argumentListing := ""
+	switch member := failure.Listing.(type) {
+	case GoListFailed:
+		argumentListing = member.Report(language).Message
+	case GoListStopped:
+		argumentListing = member.Report(language).Message
+	case GoListNotStarted:
+		argumentListing = member.Report(language).Message
+	case GoListSucceeded:
+		argumentListing = member.Report(language).Message
+	case nil:
+	}
+	arguments := RuntimeNotListedArguments{Directory: string(failure.Directory), Listing: argumentListing}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "Go listed no NoContract runtime package for the project in "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: ". "}, messageformat.Argument{Index: 1}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:
 	case nil:
 	}
-	return ergo.Report{Code: "NC-1130", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Directory}}}), Arguments: arguments}
+	return ergo.Report{Code: "NC-1130", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Directory}, messageformat.TextValue{Text: arguments.Listing}}}), Arguments: arguments}
 }
 
 // Causes is every error RuntimeNotListed holds, then the causes of every failure it holds.
 func (failure RuntimeNotListed) Causes() []error {
+	var causes []error
+	switch member := failure.Listing.(type) {
+	case GoListFailed:
+		causes = append(causes, member.Causes()...)
+	case GoListStopped:
+		causes = append(causes, member.Causes()...)
+	case GoListNotStarted:
+		causes = append(causes, member.Causes()...)
+	case GoListSucceeded:
+		causes = append(causes, member.Causes()...)
+	case nil:
+	}
+	return causes
+}
+
+func (GoListFailed) ErrorCode() ergo.Code { return "NC-1131" }
+
+// GoListFailedArguments holds the arguments GoListFailed's message names, in the order the message first names them.
+type GoListFailedArguments struct {
+	Status int    `json:"Status"`
+	Stderr string `json:"Stderr"`
+}
+
+// ReportArguments marks GoListFailedArguments as the arguments of a report.
+func (GoListFailedArguments) ReportArguments() {}
+
+// Report is GoListFailed's code, its message in language and the arguments the message names.
+func (failure GoListFailed) Report(language messages.Language) ergo.Report {
+	arguments := GoListFailedArguments{Status: int(failure.Status), Stderr: string(failure.Stderr)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "Run there, go list exits with status "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: ": "}, messageformat.Argument{Index: 1}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1131", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.SignedWhole{Value: int64(arguments.Status)}, messageformat.TextValue{Text: arguments.Stderr}}}), Arguments: arguments}
+}
+
+// Causes is every error GoListFailed holds, then the causes of every failure it holds.
+func (failure GoListFailed) Causes() []error {
+	return nil
+}
+
+func (GoListStopped) ErrorCode() ergo.Code { return "NC-1132" }
+
+// GoListStoppedArguments holds the arguments GoListStopped's message names, in the order the message first names them.
+type GoListStoppedArguments struct {
+}
+
+// ReportArguments marks GoListStoppedArguments as the arguments of a report.
+func (GoListStoppedArguments) ReportArguments() {}
+
+// Report is GoListStopped's code, its message in language and the arguments the message names.
+func (failure GoListStopped) Report(language messages.Language) ergo.Report {
+	arguments := GoListStoppedArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "Run there, go list was stopped before it exited."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1132", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error GoListStopped holds, then the causes of every failure it holds.
+func (failure GoListStopped) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}
+
+func (GoListNotStarted) ErrorCode() ergo.Code { return "NC-1133" }
+
+// GoListNotStartedArguments holds the arguments GoListNotStarted's message names, in the order the message first names them.
+type GoListNotStartedArguments struct {
+}
+
+// ReportArguments marks GoListNotStartedArguments as the arguments of a report.
+func (GoListNotStartedArguments) ReportArguments() {}
+
+// Report is GoListNotStarted's code, its message in language and the arguments the message names.
+func (failure GoListNotStarted) Report(language messages.Language) ergo.Report {
+	arguments := GoListNotStartedArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "Run there, go list could not be started."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1133", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error GoListNotStarted holds, then the causes of every failure it holds.
+func (failure GoListNotStarted) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}
+
+func (GoListSucceeded) ErrorCode() ergo.Code { return "NC-1134" }
+
+// GoListSucceededArguments holds the arguments GoListSucceeded's message names, in the order the message first names them.
+type GoListSucceededArguments struct {
+}
+
+// ReportArguments marks GoListSucceededArguments as the arguments of a report.
+func (GoListSucceededArguments) ReportArguments() {}
+
+// Report is GoListSucceeded's code, its message in language and the arguments the message names.
+func (failure GoListSucceeded) Report(language messages.Language) ergo.Report {
+	arguments := GoListSucceededArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "Run there, go list exits with status 0."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1134", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error GoListSucceeded holds, then the causes of every failure it holds.
+func (failure GoListSucceeded) Causes() []error {
 	return nil
 }

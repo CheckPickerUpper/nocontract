@@ -162,8 +162,9 @@ func wrongDirectiveRefusals() []string {
 }
 
 // A project whose go.mod requires an older release of a module than NoContract does needs its
-// go.mod updated, so go list lists nothing there, and check names the project's folder.
-func TestAProjectWhoseGoModNeedsUpdatingIsNamedByItsFolder(t *testing.T) {
+// go.mod updated, so go list lists nothing there, and check names the project's folder and holds
+// go list's own error.
+func TestAProjectWhoseGoModNeedsUpdatingIsNamedWithGoListsError(t *testing.T) {
 	t.Parallel()
 	directory := scratchproject.Ledger(t, filepath.Join("..", ".."))
 	checkout := scratchproject.PathOrStop(t, "finding the checkout", outcome.TupleToResult(filepath.Abs(filepath.Join("..", ".."))))
@@ -171,8 +172,18 @@ func TestAProjectWhoseGoModNeedsUpdatingIsNamedByItsFolder(t *testing.T) {
 		"\tgithub.com/fatih/structtag v1.1.0 // indirect\n)\n\nreplace github.com/CheckPickerUpper/nocontract => "+checkout+"\n"))
 	checked := runOn(t, "check", directory)
 	notLoaded, isNotLoaded := checked.(running.PackagesNotLoaded)
-	want := running.RuntimeNotListed{Directory: directory}
-	if !isNotLoaded || !slices.ContainsFunc(notLoaded.Errors, func(cause error) bool { return errors.Is(cause, want) }) {
-		t.Fatalf("check answered %#v; want %#v", checked, want)
+	if !isNotLoaded {
+		t.Fatalf("check answered %#v; want the project's packages not loaded", checked)
 	}
+	for _, cause := range notLoaded.Errors {
+		missing, isMissing := errors.AsType[running.RuntimeNotListed](cause)
+		if !isMissing || missing.Directory != directory {
+			continue
+		}
+		if failed, isFailed := missing.Listing.(running.GoListFailed); isFailed && failed.Status == 1 && strings.Contains(failed.Stderr, "updates to go.mod needed") {
+			return
+		}
+		t.Fatalf("go list answered %#v; want status 1 and an error saying go.mod needs updates", missing.Listing)
+	}
+	t.Fatalf("check answered %#v; want the runtime not listed in %s", checked, directory)
 }

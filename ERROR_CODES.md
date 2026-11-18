@@ -1441,14 +1441,70 @@ Message: `These files are where nocontract generate writes its own, and NoContra
 
 ## NC-1130 RuntimeNotListed
 
-RuntimeNotListed is a project for which Go listed no NoContract runtime package. When go list
-exits with an error, such as for a go.mod that needs updating, go/packages reading dependencies
-from export data drops that error and returns no package at all.
+RuntimeNotListed is a project load that listed no NoContract runtime package, with the patterns
+it listed and what go list answers when NoContract runs it again there. go/packages reads a
+project's dependencies from export data, and in that mode a go list that exits with an error,
+such as for a go.mod that needs updating, comes back as no package and no error.
 
-Declared in `internal/running/running_command.go`.
+Declared in `internal/running/running_runtime_not_listed.go`.
 
-Message: `Go listed no NoContract runtime package for the project in {Directory}; run go list ./... there to see why.`
+Message: `Go listed no NoContract runtime package for the project in {Directory}. {Listing}`
 
 | Field | Type |
 | --- | --- |
 | `Directory` | `string` |
+| `Patterns` | `[]string` |
+| `Listing` | `running.GoListAnswer` |
+
+## NC-1131 GoListFailed
+
+GoListFailed is a go list that exited with a status other than 0, and what it wrote to its
+standard error.
+
+Declared in `internal/running/running_runtime_not_listed.go`.
+
+Message: `Run there, go list exits with status {Status}: {Stderr}`
+
+| Field | Type |
+| --- | --- |
+| `Status` | `int` |
+| `Stderr` | `string` |
+
+## NC-1132 GoListStopped
+
+GoListStopped is a go list a signal stopped before it exited, with the wait error naming the
+signal and what it wrote to its standard error.
+
+Declared in `internal/running/running_runtime_not_listed.go`.
+
+Message: `Run there, go list was stopped before it exited.`
+
+| Field | Type |
+| --- | --- |
+| `Cause` | `error` |
+| `Stderr` | `string` |
+
+## NC-1133 GoListNotStarted
+
+GoListNotStarted is a go list the operating system could not start, with its error.
+
+Declared in `internal/running/running_runtime_not_listed.go`.
+
+Message: `Run there, go list could not be started.`
+
+| Field | Type |
+| --- | --- |
+| `Cause` | `error` |
+
+## NC-1134 GoListSucceeded
+
+GoListSucceeded is a go list that exited with status 0, and what it wrote to its standard
+error: what stopped the load no longer stops go list.
+
+Declared in `internal/running/running_runtime_not_listed.go`.
+
+Message: `Run there, go list exits with status 0.`
+
+| Field | Type |
+| --- | --- |
+| `Stderr` | `string` |
