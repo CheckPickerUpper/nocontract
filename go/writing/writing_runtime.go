@@ -50,14 +50,26 @@ func RenderRuntime(failures []description.SharedFailure) mo.Result[[]byte] {
 			})
 		}
 		name := serverplan.AnswerPrefix + serverplan.SharedFailureType
-		body := fmt.Sprintf("\n// %s is a failure nocontract answers itself, outside any handler.\n//\n//sumtype:decl\ntype %s interface{ is%s() }\n",
-			serverplan.SharedFailureType, serverplan.SharedFailureType, serverplan.SharedFailureType) +
+		body := taggedTypesText() +
+			fmt.Sprintf("\n// %s is a failure nocontract answers itself, outside any handler.\n//\n//sumtype:decl\ntype %s interface{ is%s() }\n",
+				serverplan.SharedFailureType, serverplan.SharedFailureType, serverplan.SharedFailureType) +
 			strings.Join(texts, "") +
 			fmt.Sprintf("\n// %s answers each failure nocontract answers itself\n// with its status, tag and code.", name) +
 			answerText(answerFunction{name: name, sealed: serverplan.SharedFailureType, members: members}, names)
 		file := description.GeneratedHeader + "\npackage " + serverplan.NoContractPackage + "\n\n" + names.declaration() + "\n" + body
 		return mo.TupleToResult(format.Source([]byte(file)))
 	}, mo.Err[[]byte])
+}
+
+// taggedTypesText is the JSON object each member is answered as: its tag, a failure's code, then the
+// member's own fields, which encoding/json writes into the same object.
+func taggedTypesText() string {
+	tag := fmt.Sprintf("json:%q", description.TagField().Text())
+	code := fmt.Sprintf("json:%q", description.CodeField().Text())
+	return fmt.Sprintf("\n// taggedSuccess is a success member's JSON object: its tag, then the member's own fields.\n"+
+		"type taggedSuccess[M any] struct {\n\tTag string `%s`\n\tFields M `json:\",embed\"`\n}\n"+
+		"\n// taggedFailure is a failure member's JSON object: its tag, its code, then the member's own fields.\n"+
+		"type taggedFailure[M any] struct {\n\tTag string `%s`\n\tCode string `%s`\n\tFields M `json:\",embed\"`\n}\n", tag, tag, code)
 }
 
 // sharedFailureText is one shared failure's type, carrying the code and message ErGo reads, the type

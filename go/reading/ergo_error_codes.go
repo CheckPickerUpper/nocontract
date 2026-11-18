@@ -1462,3 +1462,31 @@ func (failure FieldPlacedTwice) Report(language messages.Language) ergo.Report {
 func (failure FieldPlacedTwice) Causes() []error {
 	return nil
 }
+
+func (FieldUnexportedElsewhere) ErrorCode() ergo.Code { return "NC-1113" }
+
+// FieldUnexportedElsewhereArguments holds the arguments FieldUnexportedElsewhere's message names, in the order the message first names them.
+type FieldUnexportedElsewhereArguments struct {
+	Field   string `json:"Field"`
+	Package string `json:"Package"`
+}
+
+// ReportArguments marks FieldUnexportedElsewhereArguments as the arguments of a report.
+func (FieldUnexportedElsewhereArguments) ReportArguments() {}
+
+// Report is FieldUnexportedElsewhere's code, its message in language and the arguments the message names.
+func (failure FieldUnexportedElsewhere) Report(language messages.Language) ergo.Report {
+	arguments := FieldUnexportedElsewhereArguments{Field: string(failure.Field), Package: string(failure.Package)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is unexported and declared in "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", so the route's generated code cannot write the struct that holds it."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1113", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Field}, messageformat.TextValue{Text: arguments.Package}}}), Arguments: arguments}
+}
+
+// Causes is every error FieldUnexportedElsewhere holds, then the causes of every failure it holds.
+func (failure FieldUnexportedElsewhere) Causes() []error {
+	return nil
+}

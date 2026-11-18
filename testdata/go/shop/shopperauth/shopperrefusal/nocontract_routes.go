@@ -3,9 +3,7 @@
 package shopperrefusal
 
 import (
-	json "encoding/json"
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
-	mo "github.com/samber/mo"
 )
 
 // NocontractAnswerRefusal answers a refusal of the Shopper guard with its status, tag and code, in place of the route
@@ -13,7 +11,7 @@ import (
 func NocontractAnswerRefusal(outcome Refusal) nocontract.Answer {
 	switch member := outcome.(type) {
 	case NotSignedIn:
-		return nocontract.Failed(nocontract.Failure{Status: 401, Tag: "NotSignedIn", Code: "SH-1101", Fields: mo.TupleToResult(json.Marshal(member))})
+		return nocontract.Failed(nocontract.Failure{Status: 401, Tag: "NotSignedIn", Code: "SH-1101"}, member)
 	case nil:
 	}
 	return nocontract.NoOutcome()

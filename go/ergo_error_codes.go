@@ -64,33 +64,6 @@ func (failure AnswerNotWritten) Causes() []error {
 	return nil
 }
 
-func (FieldsNotObject) ErrorCode() ergo.Code { return "NC-1003" }
-
-// FieldsNotObjectArguments holds the arguments FieldsNotObject's message names, in the order the message first names them.
-type FieldsNotObjectArguments struct {
-	Tag string `json:"Tag"`
-}
-
-// ReportArguments marks FieldsNotObjectArguments as the arguments of a report.
-func (FieldsNotObjectArguments) ReportArguments() {}
-
-// Report is FieldsNotObject's code, its message in language and the arguments the message names.
-func (failure FieldsNotObject) Report(language messages.Language) ergo.Report {
-	arguments := FieldsNotObjectArguments{Tag: string(failure.Tag)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The answer "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is not written as a JSON object."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1003", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Tag}}}), Arguments: arguments}
-}
-
-// Causes is every error FieldsNotObject holds, then the causes of every failure it holds.
-func (failure FieldsNotObject) Causes() []error {
-	return nil
-}
-
 func (LiteralUnknown) ErrorCode() ergo.Code { return "NC-1043" }
 
 // LiteralUnknownArguments holds the arguments LiteralUnknown's message names, in the order the message first names them.

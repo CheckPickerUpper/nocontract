@@ -5,6 +5,7 @@
 package serverplan
 
 import (
+	"go/types"
 	"path/filepath"
 	"slices"
 	"unicode"
@@ -245,24 +246,6 @@ type GoName struct {
 	Name    string
 }
 
-// ParamType is the Go type a path or query field's read value converts to.
-//
-//sumtype:decl
-type ParamType interface{ isParamType() }
-
-// DeclaredParamType is a type a package declares, such as a named string.
-//
-//ergo:not-an-error
-type DeclaredParamType struct{ Name GoName }
-
-// PredeclaredParamType is a type Go declares, such as string or int64, written by its name.
-//
-//ergo:not-an-error
-type PredeclaredParamType struct{ Name string }
-
-func (DeclaredParamType) isParamType()    {}
-func (PredeclaredParamType) isParamType() {}
-
 // Handler is what answers a route: a function, or a method of a receiver the routes are served
 // with.
 //
@@ -322,12 +305,13 @@ type Route struct {
 }
 
 // Param is one input field read from a path segment or a query parameter: its name in the
-// request, its Go field, how its text is read and the Go type the read value converts to.
+// request, its Go field, how its text is read and the field's Go type, which the generated code
+// can name and its text is read as.
 type Param struct {
 	Name    string
 	GoField string
 	Text    TextKind
-	GoType  ParamType
+	GoType  types.Type
 }
 
 // TextKind is how a parameter's text is read.
@@ -340,15 +324,16 @@ type TextKind interface{ isTextKind() }
 //ergo:not-an-error
 type TextAsIs struct{}
 
-// TextSigned is text read as a whole number that fits Bits bits, 0 meaning an int's size.
+// TextSigned is text read as a whole number that fits the field's signed integer type.
 //
 //ergo:not-an-error
-type TextSigned struct{ Bits int }
+type TextSigned struct{}
 
-// TextUnsigned is text read as a whole number at or above zero that fits Bits bits.
+// TextUnsigned is text read as a whole number at or above zero that fits the field's unsigned
+// integer type.
 //
 //ergo:not-an-error
-type TextUnsigned struct{ Bits int }
+type TextUnsigned struct{}
 
 // TextTruth is text read as a boolean.
 //

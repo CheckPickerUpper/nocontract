@@ -477,13 +477,7 @@ func readParameter(index projectIndex, loaded *packages.Package, field *types.Va
 	if !isBasic {
 		return unsupported
 	}
-	goType := readAs[serverplan.ParamType](serverplan.PredeclaredParamType{Name: basic.Name()}, nothingFound())
-	if named, isNamed := types.Unalias(field.Type()).(*types.Named); isNamed {
-		goType = mapped(reachableName(index, named.Obj(), loaded.PkgPath, field.Pos()), func(name serverplan.GoName) serverplan.ParamType {
-			return serverplan.DeclaredParamType{Name: name}
-		})
-	}
-	return andThen(goType, func(goType serverplan.ParamType) reading[parameter] {
+	return andThen(writableType(index, types.Unalias(field.Type()), loaded.PkgPath, field.Pos()), func(goType types.Type) reading[parameter] {
 		return andThen(readSchema(index, field.Type(), field.Pos(), []typeKey{}), func(schema description.Schema) reading[parameter] {
 			return mo.Fold(textKind(basic, schema), func(kind serverplan.TextKind) reading[parameter] {
 				return readAs(parameter{
@@ -513,21 +507,15 @@ func textKind(basic *types.Basic, schema description.Schema) mo.Option[serverpla
 	return mo.None[serverplan.TextKind]()
 }
 
-// integerKind is how a whole number of basic's size is parsed: int and uint at the platform's
-// size, which strconv takes as 0 bits, and every other at the size Go gives it.
+// integerKind is whether a whole number of basic's type is parsed signed or unsigned; the runtime
+// parses it to fit the field's own type.
 func integerKind(basic *types.Basic) serverplan.TextKind {
-	bits := int(types.SizesFor("gc", "amd64").Sizeof(basic) * 8)
 	switch basic.Kind() {
-	case types.Int:
-		return serverplan.TextSigned{Bits: 0}
-	case types.Uint, types.Uintptr:
-		return serverplan.TextUnsigned{Bits: 0}
-	case types.Int8, types.Int16, types.Int32, types.Int64, types.UntypedInt, types.UntypedRune:
-		return serverplan.TextSigned{Bits: bits}
-	case types.Uint8, types.Uint16, types.Uint32, types.Uint64:
-		return serverplan.TextUnsigned{Bits: bits}
-	case types.Invalid, types.Bool, types.Float32, types.Float64, types.Complex64, types.Complex128, types.String, types.UnsafePointer,
-		types.UntypedBool, types.UntypedFloat, types.UntypedComplex, types.UntypedString, types.UntypedNil:
+	case types.Uint, types.Uintptr, types.Uint8, types.Uint16, types.Uint32, types.Uint64:
+		return serverplan.TextUnsigned{}
+	case types.Int, types.Int8, types.Int16, types.Int32, types.Int64, types.UntypedInt, types.UntypedRune, types.Invalid, types.Bool,
+		types.Float32, types.Float64, types.Complex64, types.Complex128, types.String, types.UnsafePointer, types.UntypedBool, types.UntypedFloat,
+		types.UntypedComplex, types.UntypedString, types.UntypedNil:
 	}
-	return serverplan.TextSigned{Bits: bits}
+	return serverplan.TextSigned{}
 }

@@ -29,19 +29,6 @@ Message: `The route could not write its answer: {Reason}`
 | `Answer` | `string` |
 | `Reason` | `string` |
 
-## NC-1003 FieldsNotObject
-
-FieldsNotObject is an answer whose JSON fields are not an object, so it has nowhere to hold its
-tag.
-
-Declared in `go/answers.go`.
-
-Message: `The answer {Tag} is not written as a JSON object.`
-
-| Field | Type |
-| --- | --- |
-| `Tag` | `string` |
-
 ## NC-1005 HandlerSignatureUnsupported
 
 HandlerSignatureUnsupported is a route handler that is not func(context.Context, Input) Outcome.
@@ -1223,3 +1210,17 @@ Message: `The input field {Field} is tagged both path:"{Path}" and query:"{Query
 | `Field` | `string` |
 | `Path` | `string` |
 | `Query` | `string` |
+
+## NC-1113 FieldUnexportedElsewhere
+
+FieldUnexportedElsewhere is an unexported field of a struct the route's generated code writes
+out, declared in another package: written there, the struct is another type.
+
+Declared in `go/reading/reading_writable_types.go`.
+
+Message: `The field {Field} is unexported and declared in {Package}, so the route's generated code cannot write the struct that holds it.`
+
+| Field | Type |
+| --- | --- |
+| `Field` | `string` |
+| `Package` | `string` |

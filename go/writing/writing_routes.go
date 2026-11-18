@@ -8,6 +8,7 @@ package writing
 import (
 	"fmt"
 	"go/format"
+	"go/types"
 	"maps"
 	"slices"
 	"strconv"
@@ -107,8 +108,9 @@ func routeText(route serverplan.Route, names *imports) string {
 	}
 	switch route.Body.(type) {
 	case serverplan.BodyFieldRead:
-		steps = append(steps, fmt.Sprintf("return %s(%s(request, func(decoder *json.Decoder) error { return decoder.Decode(&input.Body) }), func(struct{}) %s {\n",
-			names.runtime("Then"), names.runtime("Body"), names.runtime("Answer")))
+		decoder := names.qualified(serverplan.GoName{Package: "encoding/json", Name: "Decoder"})
+		steps = append(steps, fmt.Sprintf("return %s(%s(request, func(decoder *%s) error { return decoder.Decode(&input.Body) }), func(struct{}) %s {\n",
+			names.runtime("Then"), names.runtime("Body"), decoder, names.runtime("Answer")))
 	case serverplan.NoBodyRead, nil:
 	}
 	for _, step := range steps {
@@ -120,38 +122,31 @@ func routeText(route serverplan.Route, names *imports) string {
 	return text.String()
 }
 
-// paramStep opens the step that reads one parameter's text and sets its field.
+// paramStep opens the step that reads one parameter's text as its field's type and sets the field.
 func paramStep(param serverplan.Param, text string, names *imports) string {
-	read := readCall(param.Text, text, names)
-	return fmt.Sprintf("return %s(%s, func(read %s) %s {\ninput.%s = %s(read)\n", names.runtime("Then"), read.call, read.value, names.runtime("Answer"),
-		param.GoField, names.paramType(param.GoType))
+	goType := names.goType(param.GoType)
+	return fmt.Sprintf("return %s(%s, func(read %s) %s {\ninput.%s = read\n", names.runtime("Then"), readCall(param.Text, goType, text, names), goType,
+		names.runtime("Answer"), param.GoField)
 }
 
-// textRead is the nocontract call reading a parameter's text, and the Go type of the value it reads.
-type textRead struct {
-	call  string
-	value string
-}
-
-func readCall(kind serverplan.TextKind, text string, names *imports) textRead {
+// readCall is the nocontract call reading a parameter's text as goType.
+func readCall(kind serverplan.TextKind, goType, text string, names *imports) string {
+	reader, arguments := "Textual", []string{text}
 	switch read := kind.(type) {
-	case serverplan.TextAsIs:
-		return textRead{call: names.runtime("Textual") + "(" + text + ")", value: "string"}
 	case serverplan.TextSigned:
-		return textRead{call: fmt.Sprintf("%s(%s, %d)", names.runtime("Signed"), text, read.Bits), value: "int64"}
+		reader = "Signed"
 	case serverplan.TextUnsigned:
-		return textRead{call: fmt.Sprintf("%s(%s, %d)", names.runtime("Unsigned"), text, read.Bits), value: "uint64"}
+		reader = "Unsigned"
 	case serverplan.TextTruth:
-		return textRead{call: names.runtime("Truth") + "(" + text + ")", value: "bool"}
+		reader = "Truth"
 	case serverplan.TextLiteral:
-		values := []string{text}
+		reader = "Literal"
 		for _, value := range read.Values {
-			values = append(values, strconv.Quote(value))
+			arguments = append(arguments, strconv.Quote(value))
 		}
-		return textRead{call: names.runtime("Literal") + "(" + strings.Join(values, ", ") + ")", value: "string"}
-	case nil:
+	case serverplan.TextAsIs, nil:
 	}
-	return textRead{call: names.runtime("Textual") + "(" + text + ")", value: "string"}
+	return names.runtime(reader) + "[" + goType + "](" + strings.Join(arguments, ", ") + ")"
 }
 
 // outcomeFunction is the generated function that answers a route outcome's members.
@@ -178,14 +173,13 @@ func answerText(function answerFunction, names *imports) string {
 	text := &strings.Builder{}
 	fmt.Fprintf(text, "\nfunc %s(outcome %s) %s {\n\tswitch member := outcome.(type) {\n", function.name, function.sealed, names.runtime("Answer"))
 	for _, member := range function.members {
-		fields := "mo.TupleToResult(json.Marshal(member))"
 		switch answer := member.Answer.(type) {
 		case description.Fails:
-			fmt.Fprintf(text, "\tcase %s:\n\t\treturn %s(%s{Status: %d, Tag: %s, Code: %s, Fields: %s})\n", names.qualified(member.Go), names.runtime("Failed"),
-				names.runtime("Failure"), answer.Status.Code(), strconv.Quote(member.Go.Name), strconv.Quote(answer.Code.String()), fields)
+			fmt.Fprintf(text, "\tcase %s:\n\t\treturn %s(%s{Status: %d, Tag: %s, Code: %s}, member)\n", names.qualified(member.Go), names.runtime("Failed"),
+				names.runtime("Failure"), answer.Status.Code(), strconv.Quote(member.Go.Name), strconv.Quote(answer.Code.String()))
 		case description.Succeeds:
-			fmt.Fprintf(text, "\tcase %s:\n\t\treturn %s(%s{Status: %d, Tag: %s, Fields: %s})\n", names.qualified(member.Go), names.runtime("Succeeded"),
-				names.runtime("Success"), answer.Status.Code(), strconv.Quote(member.Go.Name), fields)
+			fmt.Fprintf(text, "\tcase %s:\n\t\treturn %s(%s{Status: %d, Tag: %s}, member)\n", names.qualified(member.Go), names.runtime("Succeeded"),
+				names.runtime("Success"), answer.Status.Code(), strconv.Quote(member.Go.Name))
 		case nil:
 		}
 	}
@@ -205,7 +199,7 @@ type imports struct {
 // routeFileImports are the packages a package's generated file imports by the names it uses:
 // net/http only when it serves routes.
 func routeFileImports(serves serverplan.Routing) [][2]string {
-	fixed := [][2]string{{"encoding/json", "json"}, {"github.com/samber/mo", "mo"}, {serverplan.NoContractPath, serverplan.NoContractPackage}}
+	fixed := [][2]string{{serverplan.NoContractPath, serverplan.NoContractPackage}}
 	switch serves.(type) {
 	case serverplan.ServesRoutes:
 		return append(fixed, [2]string{"net/http", "http"})
@@ -280,7 +274,7 @@ func (qualifiedBy) isReference() {}
 // localNames are the names the generated functions give their parameters and variables, which no
 // package alias may take.
 func localNames() []string {
-	return []string{"input", "read", "request", "writer", "outcome", "member", "receiver", "api", "layers", "http", "json", "mo", "slices", "nocontract"}
+	return []string{"input", "read", "request", "writer", "outcome", "member", "receiver", "api", "layers"}
 }
 
 // runtime is a declaration of nocontract's runtime as the generated file writes it.
@@ -288,16 +282,17 @@ func (names *imports) runtime(name string) string {
 	return names.qualified(serverplan.GoName{Package: serverplan.NoContractPath, Name: name})
 }
 
-// paramType is the type a parameter's read value converts to, as the generated file writes it.
-func (names *imports) paramType(goType serverplan.ParamType) string {
-	switch typed := goType.(type) {
-	case serverplan.DeclaredParamType:
-		return names.qualified(typed.Name)
-	case serverplan.PredeclaredParamType:
-		return typed.Name
-	case nil:
-	}
-	return ""
+// goType is a Go type as the generated file writes it, each package it names through that
+// package's alias.
+func (names *imports) goType(written types.Type) string {
+	return types.TypeString(written, func(named *types.Package) string {
+		switch reference := names.reference(named.Path()).(type) {
+		case qualifiedBy:
+			return reference.alias
+		case unqualified, nil:
+		}
+		return ""
+	})
 }
 
 // qualified is a Go name as the generated file writes it.
@@ -310,10 +305,14 @@ func (names *imports) qualified(name serverplan.GoName) string {
 	return name.Name
 }
 
+// declaration is the file's import declaration, or nothing when it imports no package.
 func (names *imports) declaration() string {
 	lines := []string{}
 	for _, path := range names.order {
 		lines = append(lines, "\t"+names.aliases[path]+" "+strconv.Quote(path))
+	}
+	if len(lines) == 0 {
+		return ""
 	}
 	return "import (\n" + strings.Join(lines, "\n") + "\n)\n"
 }

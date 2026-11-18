@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/samber/mo"
 )
 
 func written(t *testing.T, answer Answer) (int, string) {
@@ -16,6 +14,28 @@ func written(t *testing.T, answer Answer) (int, string) {
 	return recorder.Code, recorder.Body.String()
 }
 
+type queued struct {
+	Reference string `json:"reference"`
+}
+
+type emptied struct{}
+
+type missing struct {
+	ID int `json:"id"`
+}
+
+type fed struct {
+	Feed chan int `json:"feed"`
+}
+
+// custom writes itself with a method of its own, which the description of its fields does not
+// read, so it is answered with the fields alone.
+type custom struct {
+	ID int `json:"id"`
+}
+
+func (custom) MarshalJSON() ([]byte, error) { return []byte(`{"custom":true}`), nil }
+
 func TestAnAnswerIsOneObjectOfItsTagCodeAndFields(t *testing.T) {
 	t.Parallel()
 	for _, each := range []struct {
@@ -23,15 +43,16 @@ func TestAnAnswerIsOneObjectOfItsTagCodeAndFields(t *testing.T) {
 		status int
 		body   string
 	}{
-		{answer: Succeeded(Success{Status: http.StatusAccepted, Tag: "Queued", Fields: mo.Ok([]byte(`{"reference":"r1"}`))}), status: http.StatusAccepted, body: `{"_tag":"Queued","reference":"r1"}`},
-		{answer: Succeeded(Success{Status: http.StatusOK, Tag: "Empty", Fields: mo.Ok([]byte(`{}`))}), status: http.StatusOK, body: `{"_tag":"Empty"}`},
+		{answer: Succeeded(Success{Status: http.StatusAccepted, Tag: "Queued"}, queued{Reference: "r1"}), status: http.StatusAccepted, body: `{"_tag":"Queued","reference":"r1"}`},
+		{answer: Succeeded(Success{Status: http.StatusOK, Tag: "Empty"}, emptied{}), status: http.StatusOK, body: `{"_tag":"Empty"}`},
 		{
-			answer: Failed(Failure{Status: http.StatusNotFound, Tag: "Missing", Code: "AB-1001", Fields: mo.Ok([]byte(`{"id":7}`))}), status: http.StatusNotFound,
+			answer: Failed(Failure{Status: http.StatusNotFound, Tag: "Missing", Code: "AB-1001"}, missing{ID: 7}), status: http.StatusNotFound,
 			body: `{"_tag":"Missing","code":"AB-1001","id":7}`,
 		},
+		{answer: Succeeded(Success{Status: http.StatusOK, Tag: "Custom"}, custom{ID: 3}), status: http.StatusOK, body: `{"_tag":"Custom","id":3}`},
 		{
-			answer: Succeeded(Success{Status: http.StatusOK, Tag: "Listed", Fields: mo.Ok([]byte(`[1,2]`))}), status: http.StatusInternalServerError,
-			body: `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"Listed","reason":"The answer Listed is not written as a JSON object."}`,
+			answer: Succeeded(Success{Status: http.StatusOK, Tag: "Fed"}, fed{Feed: make(chan int)}), status: http.StatusInternalServerError,
+			body: `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"Fed","reason":"json: unsupported type: chan int"}`,
 		},
 		{answer: NoOutcome(), status: http.StatusInternalServerError, body: `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"","reason":"the route answered no outcome"}`},
 	} {

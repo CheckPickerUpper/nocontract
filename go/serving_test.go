@@ -5,15 +5,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/samber/mo"
-
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
 )
 
 // answeredWith is a route answering every request with tag, so a test can tell which route ran.
 func answeredWith(tag string) func(*http.Request) nocontract.Answer {
 	return func(*http.Request) nocontract.Answer {
-		return nocontract.Succeeded(nocontract.Success{Status: http.StatusOK, Tag: tag, Fields: mo.Ok([]byte(`{}`))})
+		return nocontract.Succeeded(nocontract.Success{Status: http.StatusOK, Tag: tag}, struct{}{})
 	}
 }
 

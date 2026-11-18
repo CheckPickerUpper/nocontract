@@ -2,10 +2,18 @@
 
 package nocontract
 
-import (
-	json "encoding/json"
-	mo "github.com/samber/mo"
-)
+// taggedSuccess is a success member's JSON object: its tag, then the member's own fields.
+type taggedSuccess[M any] struct {
+	Tag    string `json:"_tag"`
+	Fields M      `json:",embed"`
+}
+
+// taggedFailure is a failure member's JSON object: its tag, its code, then the member's own fields.
+type taggedFailure[M any] struct {
+	Tag    string `json:"_tag"`
+	Code   string `json:"code"`
+	Fields M      `json:",embed"`
+}
 
 // SharedFailure is a failure nocontract answers itself, outside any handler.
 //
@@ -72,13 +80,13 @@ func (MethodNotDeclared) isSharedFailure() {}
 func NocontractAnswerSharedFailure(outcome SharedFailure) Answer {
 	switch member := outcome.(type) {
 	case RequestRefused:
-		return Failed(Failure{Status: 400, Tag: "RequestRefused", Code: "NC-1001", Fields: mo.TupleToResult(json.Marshal(member))})
+		return Failed(Failure{Status: 400, Tag: "RequestRefused", Code: "NC-1001"}, member)
 	case AnswerNotWritten:
-		return Failed(Failure{Status: 500, Tag: "AnswerNotWritten", Code: "NC-1002", Fields: mo.TupleToResult(json.Marshal(member))})
+		return Failed(Failure{Status: 500, Tag: "AnswerNotWritten", Code: "NC-1002"}, member)
 	case RouteNotFound:
-		return Failed(Failure{Status: 404, Tag: "RouteNotFound", Code: "NC-1069", Fields: mo.TupleToResult(json.Marshal(member))})
+		return Failed(Failure{Status: 404, Tag: "RouteNotFound", Code: "NC-1069"}, member)
 	case MethodNotDeclared:
-		return Failed(Failure{Status: 405, Tag: "MethodNotDeclared", Code: "NC-1070", Fields: mo.TupleToResult(json.Marshal(member))})
+		return Failed(Failure{Status: 405, Tag: "MethodNotDeclared", Code: "NC-1070"}, member)
 	case nil:
 	}
 	return NoOutcome()

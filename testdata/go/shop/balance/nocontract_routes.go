@@ -5,17 +5,16 @@ package balance
 import (
 	json "encoding/json"
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
-	mo "github.com/samber/mo"
 	http "net/http"
 )
 
 // NocontractRouteReadBalance answers one request to GET /shoppers/{shopper_id}/balance. Only the generated server calls it.
 func NocontractRouteReadBalance(receiver Ledger, request *http.Request) nocontract.Answer {
 	var input ReadInput
-	return nocontract.Then(nocontract.Signed(nocontract.Path(request, "shopper_id"), 0), func(read int64) nocontract.Answer {
-		input.ShopperID = int(read)
-		return nocontract.Then(nocontract.Literal(nocontract.Query(request, "currency"), "CAD", "USD"), func(read string) nocontract.Answer {
-			input.Currency = Currency(read)
+	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(read int) nocontract.Answer {
+		input.ShopperID = read
+		return nocontract.Then(nocontract.Literal[Currency](nocontract.Query(request, "currency"), "CAD", "USD"), func(read Currency) nocontract.Answer {
+			input.Currency = read
 			return nocontractAnswerReadOutcome(receiver.ReadBalance(request.Context(), input))
 		})
 	})
@@ -24,11 +23,11 @@ func NocontractRouteReadBalance(receiver Ledger, request *http.Request) nocontra
 func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
 	switch member := outcome.(type) {
 	case BalanceRead:
-		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "BalanceRead", Fields: mo.TupleToResult(json.Marshal(member))})
+		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "BalanceRead"}, member)
 	case ShopperNotFound:
-		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001", Fields: mo.TupleToResult(json.Marshal(member))})
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member)
 	case BalanceNotOpened:
-		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "BalanceNotOpened", Code: "SH-1003", Fields: mo.TupleToResult(json.Marshal(member))})
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "BalanceNotOpened", Code: "SH-1003"}, member)
 	case nil:
 	}
 	return nocontract.NoOutcome()
@@ -37,8 +36,8 @@ func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
 // NocontractRouteTopUp answers one request to POST /shoppers/{shopper_id}/top-ups. Only the generated server calls it.
 func NocontractRouteTopUp(request *http.Request) nocontract.Answer {
 	var input TopUpInput
-	return nocontract.Then(nocontract.Signed(nocontract.Path(request, "shopper_id"), 0), func(read int64) nocontract.Answer {
-		input.ShopperID = int(read)
+	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(read int) nocontract.Answer {
+		input.ShopperID = read
 		return nocontract.Then(nocontract.Body(request, func(decoder *json.Decoder) error { return decoder.Decode(&input.Body) }), func(struct{}) nocontract.Answer {
 			return nocontractAnswerTopUpOutcome(TopUp(request.Context(), input))
 		})
@@ -48,11 +47,11 @@ func NocontractRouteTopUp(request *http.Request) nocontract.Answer {
 func nocontractAnswerTopUpOutcome(outcome TopUpOutcome) nocontract.Answer {
 	switch member := outcome.(type) {
 	case ShopperNotFound:
-		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001", Fields: mo.TupleToResult(json.Marshal(member))})
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member)
 	case TopUpQueued:
-		return nocontract.Succeeded(nocontract.Success{Status: 202, Tag: "TopUpQueued", Fields: mo.TupleToResult(json.Marshal(member))})
+		return nocontract.Succeeded(nocontract.Success{Status: 202, Tag: "TopUpQueued"}, member)
 	case TopUpRefused:
-		return nocontract.Failed(nocontract.Failure{Status: 409, Tag: "TopUpRefused", Code: "SH-1002", Fields: mo.TupleToResult(json.Marshal(member))})
+		return nocontract.Failed(nocontract.Failure{Status: 409, Tag: "TopUpRefused", Code: "SH-1002"}, member)
 	case nil:
 	}
 	return nocontract.NoOutcome()
