@@ -1208,3 +1208,18 @@ Message: `The field {Field} is written under the name {Name}, which the field {F
 | `Field` | `string` |
 | `Name` | `string` |
 | `First` | `string` |
+
+## NC-1112 FieldPlacedTwice
+
+FieldPlacedTwice is an input field tagged both path and query, which names two parts of the
+request where a field is read from one.
+
+Declared in `go/reading/refusals.go`.
+
+Message: `The input field {Field} is tagged both path:"{Path}" and query:"{Query}", but a field is read from one part of the request.`
+
+| Field | Type |
+| --- | --- |
+| `Field` | `string` |
+| `Path` | `string` |
+| `Query` | `string` |

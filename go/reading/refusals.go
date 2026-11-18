@@ -170,6 +170,17 @@ type InputNotStruct struct{ Input string }
 //ergo:message The input field {Field} has no path or query tag and is not named Body.
 type InputFieldUnread struct{ Field string }
 
+// FieldPlacedTwice is an input field tagged both path and query, which names two parts of the
+// request where a field is read from one.
+//
+//ergo:code NC-1112
+//ergo:message The input field {Field} is tagged both path:"{Path}" and query:"{Query}", but a field is read from one part of the request.
+type FieldPlacedTwice struct {
+	Field string
+	Path  string
+	Query string
+}
+
 // TypeNotReachable is an unexported type declared in a package other than the route's, which the
 // route's generated code cannot name.
 //
@@ -261,6 +272,7 @@ func (TypeUnsupported) isProblem()             {}
 func (RecursiveStruct) isProblem()             {}
 func (InputNotStruct) isProblem()              {}
 func (InputFieldUnread) isProblem()            {}
+func (FieldPlacedTwice) isProblem()            {}
 func (TypeNotReachable) isProblem()            {}
 func (StatusDirectiveMissing) isProblem()      {}
 func (ParameterTypeUnsupported) isProblem()    {}

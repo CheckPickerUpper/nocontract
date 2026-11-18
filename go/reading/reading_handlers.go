@@ -343,11 +343,17 @@ type embeddedInputField struct{}
 //ergo:not-an-error
 type unplacedField struct{}
 
+// twicePlacedField is a field tagged both path and query, which names two parts of the request.
+//
+//ergo:not-an-error
+type twicePlacedField struct{ path, query string }
+
 func (pathField) isInputField()          {}
 func (queryField) isInputField()         {}
 func (bodyField) isInputField()          {}
 func (embeddedInputField) isInputField() {}
 func (unplacedField) isInputField()      {}
+func (twicePlacedField) isInputField()   {}
 
 // inputFieldPlace is where the generated code reads an input field whose tags are tags from.
 func inputFieldPlace(field indexedField, tags fieldTags) inputField {
@@ -357,8 +363,13 @@ func inputFieldPlace(field indexedField, tags fieldTags) inputField {
 	case !field.variable.Exported():
 		return unplacedField{}
 	}
-	return outcome.FoldOption(tags.lookup("path"), func(path tagValue) inputField { return pathField{name: path.text} }, func() inputField {
-		return outcome.FoldOption(tags.lookup("query"), func(query tagValue) inputField { return queryField{name: query.text} }, func() inputField {
+	query := tags.lookup("query")
+	return outcome.FoldOption(tags.lookup("path"), func(path tagValue) inputField {
+		return outcome.FoldOption(query, func(query tagValue) inputField {
+			return twicePlacedField{path: path.text, query: query.text}
+		}, func() inputField { return pathField{name: path.text} })
+	}, func() inputField {
+		return outcome.FoldOption(query, func(query tagValue) inputField { return queryField{name: query.text} }, func() inputField {
 			if field.variable.Name() == "Body" {
 				return bodyField{}
 			}
@@ -435,6 +446,8 @@ func readPlacedFieldTagged(index projectIndex, loaded *packages.Package, field i
 		return mapped(readSchema(index, field.variable.Type(), position, []typeKey{}), func(schema description.Schema) placedField { return bodyFieldRead{schema: schema} })
 	case embeddedInputField:
 		return notRead[placedField](index.refused(position, EmbeddedFieldUnsupported{Field: field.variable.Name()}))
+	case twicePlacedField:
+		return notRead[placedField](index.refused(position, FieldPlacedTwice{Field: field.variable.Name(), Path: place.path, Query: place.query}))
 	case unplacedField, nil:
 	}
 	return notRead[placedField](index.refused(position, InputFieldUnread{Field: field.variable.Name()}))

@@ -71,7 +71,7 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 		"NC-1051", "NC-1051", "NC-1052", "NC-1056", "NC-1090", "NC-1091", "NC-1092", "NC-1093", "NC-1094", "NC-1095",
 		"NC-1096", "NC-1097", "NC-1096", "NC-1098", "NC-1099", "NC-1100", "NC-1101", "NC-1102", "NC-1103", "NC-1104",
 		"NC-1007", "NC-1014", "NC-1105", "NC-1106", "NC-1107",
-		"NC-1108", "NC-1108", "NC-1109", "NC-1110", "NC-1110", "NC-1111", "NC-1111",
+		"NC-1108", "NC-1108", "NC-1109", "NC-1110", "NC-1110", "NC-1111", "NC-1111", "NC-1112",
 	}
 	slices.Sort(want)
 	if !slices.Equal(codes, want) {
@@ -107,6 +107,7 @@ func misnamedFieldRefusals() []string {
 		`31:2: NC-1108 The field is given an empty name.`,
 		`33:2: NC-1111 The field Order is written under the name sort, which the field Sort already takes.`,
 		`34:2: NC-1110 The tag of the field Bare, query:page, is not written key:"value" with a space between pairs.`,
+		`35:2: NC-1112 The input field Both is tagged both path:"id" and query:"id", but a field is read from one part of the request.`,
 	}
 }
 

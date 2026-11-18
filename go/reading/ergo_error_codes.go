@@ -1433,3 +1433,32 @@ func (failure FieldNameRepeated) Report(language messages.Language) ergo.Report 
 func (failure FieldNameRepeated) Causes() []error {
 	return nil
 }
+
+func (FieldPlacedTwice) ErrorCode() ergo.Code { return "NC-1112" }
+
+// FieldPlacedTwiceArguments holds the arguments FieldPlacedTwice's message names, in the order the message first names them.
+type FieldPlacedTwiceArguments struct {
+	Field string `json:"Field"`
+	Path  string `json:"Path"`
+	Query string `json:"Query"`
+}
+
+// ReportArguments marks FieldPlacedTwiceArguments as the arguments of a report.
+func (FieldPlacedTwiceArguments) ReportArguments() {}
+
+// Report is FieldPlacedTwice's code, its message in language and the arguments the message names.
+func (failure FieldPlacedTwice) Report(language messages.Language) ergo.Report {
+	arguments := FieldPlacedTwiceArguments{Field: string(failure.Field), Path: string(failure.Path), Query: string(failure.Query)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The input field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is tagged both path:\""}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "\" and query:\""}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: "\", but a field is read from one part of the request."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1112", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Field}, messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Query}}}), Arguments: arguments}
+}
+
+// Causes is every error FieldPlacedTwice holds, then the causes of every failure it holds.
+func (failure FieldPlacedTwice) Causes() []error {
+	return nil
+}

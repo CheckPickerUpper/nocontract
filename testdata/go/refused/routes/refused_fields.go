@@ -32,6 +32,7 @@ type MisnamedInput struct {
 	Sort     string `query:"sort"`
 	Order    string `query:"sort"`
 	Bare     string `query:page`
+	Both     string `path:"id" query:"id"`
 }
 
 // ReadMisnamed answers with fields and reads parameters named wrong.
