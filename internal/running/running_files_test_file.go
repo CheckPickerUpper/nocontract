@@ -11,11 +11,12 @@ import (
 	"github.com/CheckPickerUpper/nocontract/go/writing"
 )
 
-// projectPaths is where a project's own files are: its project file and the TypeScript file it
-// names, both absolute.
+// projectPaths is where a project's own files are, each absolute: its project file, the TypeScript
+// file it names, and the OpenAPI file it names with the version that file declares.
 type projectPaths struct {
 	projectFile string
 	typeScript  string
+	openAPI     OpenAPIFile
 }
 
 // servedFiles is each package's generated Go file, then the test that fails while any generated

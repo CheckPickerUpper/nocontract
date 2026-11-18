@@ -1,7 +1,8 @@
 # NoContract
 
 Your frontend's API client, generated from your backend's handlers, with every error each route
-can return. There is no OpenAPI file, and no list of responses written by hand.
+can return. Nobody writes an OpenAPI file or a list of responses by hand: NoContract writes the
+OpenAPI file from the same handlers, for every other language's client and for documentation tools.
 
 ## The problem it solves
 
@@ -176,14 +177,16 @@ Every route behind a guard lists the guard's refusals among its failures in the 
 ## Generating
 
 A `nocontract.json` beside `go.mod` names the backend's language, the packages holding routes,
-the TypeScript file to write and the name of the API class:
+the TypeScript file to write, the name of the API class, and the OpenAPI 3.1 file to write with the
+version of the API it declares. Each file's path is relative to `nocontract.json`:
 
 ```json
 {
   "language": "go",
   "packages": ["./..."],
   "typescript": "../web/src/shop_api.generated.ts",
-  "api": "ShopApi"
+  "api": "ShopApi",
+  "openapi": { "file": "shop_api.openapi.json", "version": "1.0.0" }
 }
 ```
 
@@ -193,9 +196,14 @@ go tool nocontract check      # exits 1 when a file differs from what generate w
 ```
 
 `generate` writes `nocontract_routes.go` into each package that declares a route or a guard's
-refusal, and the TypeScript file. It also writes `nocontract_files_test.go` into the first of those
+refusal, the TypeScript file and the OpenAPI file. It also writes `nocontract_files_test.go` into the first of those
 packages, in folder order, so `go test ./...` fails while any generated file differs from what
 `generate` writes, listing each one. `check` runs the same comparison on its own.
+
+The OpenAPI file lists each route's path and query parameters, its body, and every member it
+answers with under that member's status. Each member is its own schema, whose `_tag` and, for a
+failure, `code` each allow one value. A whole number is `integer`, and a `time.Time` is a string
+of format `date-time`.
 
 ## Serving
 

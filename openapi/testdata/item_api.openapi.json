@@ -1,0 +1,394 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ItemApi",
+    "version": "2.1.0"
+  },
+  "tags": [
+    {
+      "name": "items"
+    }
+  ],
+  "paths": {
+    "/items": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "operationId": "items.addItem",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "item": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                },
+                "required": [
+                  "item"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemAdded"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestRefused"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{item_id}": {
+      "delete": {
+        "tags": [
+          "items"
+        ],
+        "operationId": "items.removeItem",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemRemoved"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemMissing"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "items"
+        ],
+        "operationId": "items.readItem",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "name",
+                "price"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestRefused"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ItemMissing"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ShopClosed"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Item": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "box": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "width"
+            ],
+            "additionalProperties": false
+          },
+          "count": {
+            "type": "integer"
+          },
+          "discount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Price"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "prices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "small",
+              "large"
+            ]
+          },
+          "sold": {
+            "type": "boolean"
+          },
+          "weight": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "count",
+          "weight",
+          "sold",
+          "added",
+          "size",
+          "labels",
+          "prices",
+          "discount",
+          "box"
+        ],
+        "additionalProperties": false
+      },
+      "ItemAdded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ItemAdded"
+            ]
+          },
+          "id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "_tag",
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "ItemMissing": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ItemMissing"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "IT-1001"
+            ]
+          },
+          "item_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "item_id"
+        ],
+        "additionalProperties": false
+      },
+      "ItemRead": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ItemRead"
+            ]
+          },
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          }
+        },
+        "required": [
+          "_tag",
+          "item"
+        ],
+        "additionalProperties": false
+      },
+      "ItemRemoved": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ItemRemoved"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "Price": {
+        "type": "object",
+        "properties": {
+          "cents": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cents"
+        ],
+        "additionalProperties": false
+      },
+      "RequestRefused": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RequestRefused"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "NC-1001"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "ShopClosed": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ShopClosed"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "IT-1002"
+            ]
+          },
+          "reopens": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "reopens"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

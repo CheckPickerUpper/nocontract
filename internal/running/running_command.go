@@ -30,6 +30,7 @@ import (
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 	"github.com/CheckPickerUpper/nocontract/go/writing"
 	"github.com/CheckPickerUpper/nocontract/messages"
+	"github.com/CheckPickerUpper/nocontract/openapi"
 )
 
 // DefaultProjectFile is the project file read when -project names none.
@@ -43,21 +44,38 @@ type Request struct {
 
 // writtenProject is a project file as it is written: the language its backend is written in, the
 // package patterns holding its routes, the TypeScript file to write, relative to the project file,
-// and the name of the Effect API.
+// the name of the Effect API, and the OpenAPI file to write.
 type writtenProject struct {
-	Language   string   `json:"language"`
-	Packages   []string `json:"packages"`
-	TypeScript string   `json:"typescript"`
-	API        string   `json:"api"`
+	Language   string         `json:"language"`
+	Packages   []string       `json:"packages"`
+	TypeScript string         `json:"typescript"`
+	API        string         `json:"api"`
+	OpenAPI    writtenOpenAPI `json:"openapi"`
+}
+
+// writtenOpenAPI is a project file's OpenAPI file as it is written: its path, relative to the
+// project file, and the version of the API the document declares.
+type writtenOpenAPI struct {
+	File    string `json:"file"`
+	Version string `json:"version"`
 }
 
 // Project is a project file read: its backend, the package patterns holding its routes, the
-// TypeScript file to write and the name of the Effect API.
+// TypeScript file to write, the name of the Effect API and the OpenAPI file to write. Each file's
+// path is relative to the project file.
 type Project struct {
 	Backend    Backend
 	Packages   []string
 	TypeScript string
 	API        string
+	OpenAPI    OpenAPIFile
+}
+
+// OpenAPIFile is the OpenAPI document a project writes: its path and the version of the API it
+// declares.
+type OpenAPIFile struct {
+	File    string
+	Version string
 }
 
 // Backend is the language a project's backend is written in.
@@ -420,7 +438,10 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 		}
 		switch assembled := assembling.Assemble(assembling.Request{Declared: read.Declared, Refused: read.Refused}).(type) {
 		case assembling.APIAssembled:
-			paths := projectPaths{projectFile: projectFile, typeScript: filepath.Join(directory, project.TypeScript)}
+			paths := projectPaths{
+				projectFile: projectFile, typeScript: filepath.Join(directory, project.TypeScript),
+				openAPI: OpenAPIFile{File: filepath.Join(directory, project.OpenAPI.File), Version: project.OpenAPI.Version},
+			}
 			return mo.Fold(renderedFiles(assembled.API, read.Plan, paths, existing), finish,
 				func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
 		case assembling.APIRefused:
@@ -431,23 +452,25 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 	}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
 }
 
-// renderedFiles is the TypeScript file, each package's Go file, the test of them all, and every
-// generated Go file this run no longer writes, which must go.
+// renderedFiles is the TypeScript file, the OpenAPI file, each package's Go file, the test of them
+// all, and every generated Go file this run no longer writes, which must go.
 func renderedFiles(api description.API, plan serverplan.Plan, paths projectPaths, existing map[string][]byte) mo.Result[[]generatedFile] {
 	return mo.Fold(servedFiles(plan.Packages, paths.projectFile), func(served []generatedFile) mo.Result[[]generatedFile] {
-		// Every existing generated file goes unless this run writes it again.
-		contents := map[string]mo.Option[[]byte]{paths.typeScript: mo.Some(effect.Render(api))}
-		for path := range existing {
-			contents[path] = mo.None[[]byte]()
-		}
-		for _, file := range served {
-			contents[file.path] = file.content
-		}
-		files := []generatedFile{}
-		for _, path := range slices.Sorted(maps.Keys(contents)) {
-			files = append(files, generatedFile{path: path, content: contents[path]})
-		}
-		return mo.Ok(files)
+		return mo.Fold(openapi.Render(api, paths.openAPI.Version), func(document []byte) mo.Result[[]generatedFile] {
+			// Every existing generated file goes unless this run writes it again.
+			contents := map[string]mo.Option[[]byte]{paths.typeScript: mo.Some(effect.Render(api)), paths.openAPI.File: mo.Some(document)}
+			for path := range existing {
+				contents[path] = mo.None[[]byte]()
+			}
+			for _, file := range served {
+				contents[file.path] = file.content
+			}
+			files := []generatedFile{}
+			for _, path := range slices.Sorted(maps.Keys(contents)) {
+				files = append(files, generatedFile{path: path, content: contents[path]})
+			}
+			return mo.Ok(files)
+		}, mo.Err[[]generatedFile])
 	}, mo.Err[[]generatedFile])
 }
 
@@ -482,6 +505,26 @@ type TypeScriptMissing struct{}
 // Error is the failure's message in the source language.
 func (missing TypeScriptMissing) Error() string { return missing.Report(messages.Match("")).Message }
 
+// OpenAPIFileMissing is a project file naming no OpenAPI file to write.
+//
+//ergo:code NC-1065
+//ergo:message The project file names no openapi file.
+type OpenAPIFileMissing struct{}
+
+// Error is the failure's message in the source language.
+func (missing OpenAPIFileMissing) Error() string { return missing.Report(messages.Match("")).Message }
+
+// OpenAPIVersionMissing is a project file naming no version for the API its OpenAPI file declares.
+//
+//ergo:code NC-1066
+//ergo:message The project file names no openapi version.
+type OpenAPIVersionMissing struct{}
+
+// Error is the failure's message in the source language.
+func (missing OpenAPIVersionMissing) Error() string {
+	return missing.Report(messages.Match("")).Message
+}
+
 // APINameMissing is a project file naming no API class.
 //
 //ergo:code NC-1054
@@ -502,7 +545,7 @@ func (unknown LanguageUnknown) Error() string { return unknown.Report(messages.M
 
 func readProject(projectFile string) mo.Result[Project] {
 	return mo.Fold(mo.TupleToResult(os.ReadFile(projectFile)), func(content []byte) mo.Result[Project] {
-		written := writtenProject{Language: "", Packages: []string{}, TypeScript: "", API: ""}
+		written := writtenProject{Language: "", Packages: []string{}, TypeScript: "", API: "", OpenAPI: writtenOpenAPI{File: "", Version: ""}}
 		decoder := json.NewDecoder(bytes.NewReader(content))
 		decoder.DisallowUnknownFields()
 		return mo.Fold(mo.EmptyableToOption(decoder.Decode(&written)), mo.Err[Project], func(error) mo.Result[Project] {
@@ -513,9 +556,14 @@ func readProject(projectFile string) mo.Result[Project] {
 				return mo.Err[Project](TypeScriptMissing{})
 			case written.API == "":
 				return mo.Err[Project](APINameMissing{})
+			case written.OpenAPI.File == "":
+				return mo.Err[Project](OpenAPIFileMissing{})
+			case written.OpenAPI.Version == "":
+				return mo.Err[Project](OpenAPIVersionMissing{})
 			}
 			return mo.Fold(parseBackend(written.Language), func(backend Backend) mo.Result[Project] {
-				return mo.Ok(Project{Backend: backend, Packages: written.Packages, TypeScript: written.TypeScript, API: written.API})
+				openAPI := OpenAPIFile{File: written.OpenAPI.File, Version: written.OpenAPI.Version}
+				return mo.Ok(Project{Backend: backend, Packages: written.Packages, TypeScript: written.TypeScript, API: written.API, OpenAPI: openAPI})
 			}, func(error) mo.Result[Project] { return mo.Err[Project](LanguageUnknown{Language: written.Language}) })
 		})
 	}, mo.Err[Project])

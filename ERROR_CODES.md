@@ -745,3 +745,19 @@ Message: `The handler {Handler} has more than one //nocontract:route line; a han
 | Field | Type |
 | --- | --- |
 | `Handler` | `string` |
+
+## NC-1065 OpenAPIFileMissing
+
+OpenAPIFileMissing is a project file naming no OpenAPI file to write.
+
+Declared in `internal/running/running_command.go`.
+
+Message: `The project file names no openapi file.`
+
+## NC-1066 OpenAPIVersionMissing
+
+OpenAPIVersionMissing is a project file naming no version for the API its OpenAPI file declares.
+
+Declared in `internal/running/running_command.go`.
+
+Message: `The project file names no openapi version.`

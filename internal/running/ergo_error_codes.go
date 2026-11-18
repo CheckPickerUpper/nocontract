@@ -444,3 +444,55 @@ func (failure FlagsUnread) Causes() []error {
 	}
 	return causes
 }
+
+func (OpenAPIFileMissing) ErrorCode() ergo.Code { return "NC-1065" }
+
+// OpenAPIFileMissingArguments holds the arguments OpenAPIFileMissing's message names, in the order the message first names them.
+type OpenAPIFileMissingArguments struct {
+}
+
+// ReportArguments marks OpenAPIFileMissingArguments as the arguments of a report.
+func (OpenAPIFileMissingArguments) ReportArguments() {}
+
+// Report is OpenAPIFileMissing's code, its message in language and the arguments the message names.
+func (failure OpenAPIFileMissing) Report(language messages.Language) ergo.Report {
+	arguments := OpenAPIFileMissingArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no openapi file."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1065", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error OpenAPIFileMissing holds, then the causes of every failure it holds.
+func (failure OpenAPIFileMissing) Causes() []error {
+	return nil
+}
+
+func (OpenAPIVersionMissing) ErrorCode() ergo.Code { return "NC-1066" }
+
+// OpenAPIVersionMissingArguments holds the arguments OpenAPIVersionMissing's message names, in the order the message first names them.
+type OpenAPIVersionMissingArguments struct {
+}
+
+// ReportArguments marks OpenAPIVersionMissingArguments as the arguments of a report.
+func (OpenAPIVersionMissingArguments) ReportArguments() {}
+
+// Report is OpenAPIVersionMissing's code, its message in language and the arguments the message names.
+func (failure OpenAPIVersionMissing) Report(language messages.Language) ergo.Report {
+	arguments := OpenAPIVersionMissingArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no openapi version."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1066", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error OpenAPIVersionMissing holds, then the causes of every failure it holds.
+func (failure OpenAPIVersionMissing) Causes() []error {
+	return nil
+}

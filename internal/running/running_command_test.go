@@ -2,9 +2,13 @@ package running_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+
+	ergo "github.com/CheckPickerUpper/ErGo"
+	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/internal/running"
 )
@@ -34,6 +38,40 @@ func TestTheRuntimesCommittedFileIsWhatGenerateWrites(t *testing.T) {
 	outcome := running.RunRuntime(running.Request{Arguments: []string{"check"}, Context: t.Context()})
 	if _, isCurrent := outcome.(running.FilesCurrent); !isCurrent {
 		t.Fatalf("check answered %v; want the runtime's file current", outcome.Lines())
+	}
+}
+
+// A project file that names no OpenAPI file, or no version for it, is refused before any package
+// is read, each with its own code.
+func TestAProjectFileMissingItsOpenAPIFileOrVersionIsRefused(t *testing.T) {
+	t.Parallel()
+	for _, each := range []struct {
+		name    string
+		openAPI string
+		want    ergo.Code
+	}{
+		{name: "no openapi object", openAPI: "", want: running.OpenAPIFileMissing{}.ErrorCode()},
+		{name: "no file", openAPI: `, "openapi": {"version": "1.0.0"}`, want: running.OpenAPIFileMissing{}.ErrorCode()},
+		{name: "no version", openAPI: `, "openapi": {"file": "shop_api.openapi.json"}`, want: running.OpenAPIVersionMissing{}.ErrorCode()},
+	} {
+		t.Run(each.name, func(t *testing.T) {
+			t.Parallel()
+			project := filepath.Join(t.TempDir(), "nocontract.json")
+			content := `{"language": "go", "packages": ["./..."], "typescript": "shop_api.generated.ts", "api": "ShopApi"` + each.openAPI + "}"
+			mo.EmptyableToOption(os.WriteFile(project, []byte(content), 0o644)).ForEach(func(cause error) { t.Fatalf("writing %s: %v", project, cause) })
+			outcome := running.Run(running.Request{Arguments: []string{"check", "-project", project}, Context: t.Context()})
+			unreadable, isUnreadable := outcome.(running.ProjectUnreadable)
+			if !isUnreadable {
+				t.Fatalf("check answered %#v; want the project file refused", outcome)
+			}
+			coded, isCoded := unreadable.Cause.(interface{ ErrorCode() ergo.Code })
+			if !isCoded {
+				t.Fatalf("the project file was refused with %v, which has no code; want %s", unreadable.Cause, each.want)
+			}
+			if got := coded.ErrorCode(); got != each.want {
+				t.Fatalf("the project file was refused with %s (%v); want %s", got, unreadable.Cause, each.want)
+			}
+		})
 	}
 }
 

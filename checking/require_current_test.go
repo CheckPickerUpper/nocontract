@@ -172,7 +172,8 @@ func scratchLedger(t *testing.T) string {
 	checkout := pathOrStop(t, "finding this checkout", mo.TupleToResult(filepath.Abs("..")))
 	writeScratchFile(t, directory, "go.mod", bytesOrStop(t, "making the scratch go.mod", scratchModFile(shopModFile, checkout)))
 	writeScratchFile(t, directory, "go.sum", bytesOrStop(t, "reading the shop's go.sum", mo.TupleToResult(os.ReadFile(filepath.Join(shop, "go.sum")))))
-	writeScratchFile(t, directory, "nocontract.json", []byte(`{"language": "go", "packages": ["./..."], "typescript": "web/ledger_api.generated.ts", "api": "LedgerApi"}`))
+	writeScratchFile(t, directory, "nocontract.json", []byte(`{"language": "go", "packages": ["./..."], "typescript": "web/ledger_api.generated.ts", "api": "LedgerApi", `+
+		`"openapi": {"file": "ledger_api.openapi.json", "version": "1.0.0"}}`))
 	writeScratchFile(t, directory, "ledger/ledger_routes.go", []byte(ledgerRoutes))
 	return directory
 }
@@ -218,6 +219,7 @@ func TestAFailureAddedWithoutGeneratingFailsTheProjectsTest(t *testing.T) {
 	wantLines := []string{
 		"NC-1034 These files differ from what nocontract generate writes; run it again:",
 		filepath.Join(directory, "ledger", "nocontract_routes.go"),
+		filepath.Join(directory, "ledger_api.openapi.json"),
 		filepath.Join(directory, "web", "ledger_api.generated.ts"),
 		"Run go tool nocontract generate to write the generated files again.",
 	}

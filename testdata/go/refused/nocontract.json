@@ -2,5 +2,6 @@
   "language": "go",
   "packages": ["./..."],
   "typescript": "refused_api.generated.ts",
-  "api": "RefusedApi"
+  "api": "RefusedApi",
+  "openapi": { "file": "refused_api.openapi.json", "version": "1.0.0" }
 }

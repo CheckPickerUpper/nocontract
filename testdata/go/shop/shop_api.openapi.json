@@ -1,0 +1,413 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ShopApi",
+    "version": "1.0.0"
+  },
+  "tags": [
+    {
+      "name": "balance"
+    }
+  ],
+  "paths": {
+    "/shoppers/{shopper_id}/balance": {
+      "get": {
+        "tags": [
+          "balance"
+        ],
+        "operationId": "balance.readBalance",
+        "parameters": [
+          {
+            "name": "shopper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "currency",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CAD",
+                "USD"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestRefused"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotSignedIn"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopperNotFound"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerNotWritten"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shoppers/{shopper_id}/top-ups": {
+      "post": {
+        "tags": [
+          "balance"
+        ],
+        "operationId": "balance.topUp",
+        "parameters": [
+          {
+            "name": "shopper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "$ref": "#/components/schemas/Money"
+                  }
+                },
+                "required": [
+                  "amount"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopUpQueued"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestRefused"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopperNotFound"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopUpRefused"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerNotWritten"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnswerNotWritten": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "AnswerNotWritten"
+            ]
+          },
+          "answer": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "NC-1002"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "answer",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "BalanceRead": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "BalanceRead"
+            ]
+          },
+          "balance": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "changed": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "balance",
+          "changed",
+          "note"
+        ],
+        "additionalProperties": false
+      },
+      "Money": {
+        "type": "object",
+        "properties": {
+          "cents": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "CAD",
+              "USD"
+            ]
+          }
+        },
+        "required": [
+          "cents",
+          "currency"
+        ],
+        "additionalProperties": false
+      },
+      "NotSignedIn": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "NotSignedIn"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "SH-1101"
+            ]
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "scope"
+        ],
+        "additionalProperties": false
+      },
+      "RequestRefused": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RequestRefused"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "NC-1001"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "part": {
+            "type": "string",
+            "enum": [
+              "path",
+              "query",
+              "body"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "part",
+          "name",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "ShopperNotFound": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ShopperNotFound"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "SH-1001"
+            ]
+          },
+          "shopper_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "shopper_id"
+        ],
+        "additionalProperties": false
+      },
+      "TopUpQueued": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TopUpQueued"
+            ]
+          },
+          "reference": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "reference"
+        ],
+        "additionalProperties": false
+      },
+      "TopUpRefused": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TopUpRefused"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "SH-1002"
+            ]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "reasons"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}
