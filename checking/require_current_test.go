@@ -12,10 +12,10 @@ import (
 	"testing"
 
 	"github.com/CheckPickerUpper/outcome"
-	"golang.org/x/mod/modfile"
 
 	"github.com/CheckPickerUpper/nocontract/checking"
 	"github.com/CheckPickerUpper/nocontract/internal/running"
+	"github.com/CheckPickerUpper/nocontract/internal/scratchproject"
 )
 
 // failureRecorder is a test whose FailNow records what was written to its output instead of
@@ -40,40 +40,6 @@ func (recorder *failureRecorder) FailNow() {
 	recorder.failures = append(recorder.failures, recorder.output.String())
 	recorder.output.Reset()
 }
-
-// ledgerRoutes is a package with one route, whose outcome has one member.
-const ledgerRoutes = `// Package ledger reads balances.
-package ledger
-
-import "context"
-
-// ReadInput names the shopper.
-type ReadInput struct {
-	ShopperID int ` + "`path:\"shopper_id\"`" + `
-}
-
-// ReadOutcome is what reading a balance ended as.
-//
-//sumtype:decl
-type ReadOutcome interface{ isReadOutcome() }
-
-// BalanceRead is the shopper's balance.
-//
-//ergo:not-an-error
-//nocontract:status 200
-type BalanceRead struct {
-	Cents int ` + "`json:\"cents\"`" + `
-}
-
-func (BalanceRead) isReadOutcome() {}
-
-// ReadBalance reads one shopper's balance.
-//
-//nocontract:route GET /shoppers/{shopper_id}/balance
-func ReadBalance(ctx context.Context, input ReadInput) ReadOutcome {
-	return BalanceRead{Cents: input.ShopperID}
-}
-`
 
 // shopperMissing adds a failure to the ledger's outcome.
 const shopperMissing = `package ledger
@@ -122,62 +88,6 @@ func ReadAccount(ctx context.Context, input nocontract.NoInput) ReadOutcome {
 }
 `
 
-// stopOn stops the test with the step's name and cause when the step failed.
-func stopOn(t *testing.T, step string, failure error) {
-	t.Helper()
-	outcome.ForEachOption(outcome.EmptyableToOption(failure), func(cause error) { t.Fatalf("%s: %v", step, cause) })
-}
-
-// bytesOrStop is the content a step produced, or stops the test with the step's name and cause.
-func bytesOrStop(t *testing.T, step string, produced outcome.Result[[]byte]) []byte {
-	t.Helper()
-	return outcome.Fold(produced, func(content []byte) []byte { return content }, func(cause error) []byte {
-		t.Fatalf("%s: %v", step, cause)
-		return []byte{}
-	})
-}
-
-// pathOrStop is the path a step produced, or stops the test with the step's name and cause.
-func pathOrStop(t *testing.T, step string, produced outcome.Result[string]) string {
-	t.Helper()
-	return outcome.Fold(produced, func(path string) string { return path }, func(cause error) string {
-		t.Fatalf("%s: %v", step, cause)
-		return ""
-	})
-}
-
-// writeScratchFile writes content to the file at the slash-separated path under directory.
-func writeScratchFile(t *testing.T, directory string, path string, content []byte) {
-	t.Helper()
-	file := filepath.Join(directory, filepath.FromSlash(path))
-	stopOn(t, "making the folder of "+file, os.MkdirAll(filepath.Dir(file), 0o755))
-	stopOn(t, "writing "+file, os.WriteFile(file, content, 0o644))
-}
-
-// scratchModFile is the shop's go.mod with nocontract read from checkout.
-func scratchModFile(shopModFile []byte, checkout string) outcome.Result[[]byte] {
-	return outcome.Fold(outcome.TupleToResult(modfile.Parse("go.mod", shopModFile, nil)), func(module *modfile.File) outcome.Result[[]byte] {
-		return outcome.FoldOption(outcome.EmptyableToOption(module.AddReplace("github.com/CheckPickerUpper/nocontract", "", checkout, "")), outcome.Err[[]byte],
-			func() outcome.Result[[]byte] { return outcome.TupleToResult(module.Format()) })
-	}, outcome.Err[[]byte])
-}
-
-// scratchLedger is a project holding the ledger package, in a scratch module that reads this
-// checkout of nocontract, built as the example shop's module is.
-func scratchLedger(t *testing.T) string {
-	t.Helper()
-	directory := t.TempDir()
-	shop := filepath.Join("..", "testdata", "go", "shop")
-	shopModFile := bytesOrStop(t, "reading the shop's go.mod", outcome.TupleToResult(os.ReadFile(filepath.Join(shop, "go.mod"))))
-	checkout := pathOrStop(t, "finding this checkout", outcome.TupleToResult(filepath.Abs("..")))
-	writeScratchFile(t, directory, "go.mod", bytesOrStop(t, "making the scratch go.mod", scratchModFile(shopModFile, checkout)))
-	writeScratchFile(t, directory, "go.sum", bytesOrStop(t, "reading the shop's go.sum", outcome.TupleToResult(os.ReadFile(filepath.Join(shop, "go.sum")))))
-	writeScratchFile(t, directory, "nocontract.json", []byte(`{"language": "go", "packages": ["./..."], "typescript": "web/ledger_api.generated.ts", "api": "LedgerApi", `+
-		`"openapi": {"file": "ledger_api.openapi.json", "version": "1.0.0"}, "server": "server"}`))
-	writeScratchFile(t, directory, "ledger/ledger_routes.go", []byte(ledgerRoutes))
-	return directory
-}
-
 // generate runs generate on the project and fails the test unless it wrote files.
 func generate(t *testing.T, directory string) {
 	t.Helper()
@@ -191,8 +101,8 @@ func generate(t *testing.T, directory string) {
 // message it failed with.
 func requireCurrent(t *testing.T, directory string) []string {
 	t.Helper()
-	here := pathOrStop(t, "finding this package's folder", outcome.TupleToResult(filepath.Abs(".")))
-	relative := pathOrStop(t, "finding the project file from this package's folder", outcome.TupleToResult(filepath.Rel(here, filepath.Join(directory, "nocontract.json"))))
+	here := scratchproject.PathOrStop(t, "finding this package's folder", outcome.TupleToResult(filepath.Abs(".")))
+	relative := scratchproject.PathOrStop(t, "finding the project file from this package's folder", outcome.TupleToResult(filepath.Rel(here, filepath.Join(directory, "nocontract.json"))))
 	recorder := &failureRecorder{testContext: t.Context(), output: &strings.Builder{}, failures: []string{}}
 	checking.RequireCurrent(recorder, filepath.ToSlash(relative))
 	return recorder.failures
@@ -202,10 +112,10 @@ func requireCurrent(t *testing.T, directory string) []string {
 // wrote into the route package fails, naming each file that differs, until generate runs again.
 func TestAFailureAddedWithoutGeneratingFailsTheProjectsTest(t *testing.T) {
 	t.Parallel()
-	directory := scratchLedger(t)
+	directory := scratchproject.Ledger(t, "..")
 	generate(t, directory)
 
-	written := bytesOrStop(t, "reading the test generate writes into the ledger package",
+	written := scratchproject.BytesOrStop(t, "reading the test generate writes into the ledger package",
 		outcome.TupleToResult(os.ReadFile(filepath.Join(directory, "ledger", "nocontract_files_test.go"))))
 	wantTest := "// Code generated by nocontract. DO NOT EDIT.\n\npackage ledger_test\n\nimport (\n\t\"testing\"\n\n\t\"github.com/CheckPickerUpper/nocontract/checking\"\n)\n\n" +
 		"// TestNocontractFilesCurrent fails when a file nocontract generates differs from what `go tool nocontract generate` writes now.\n" +
@@ -214,7 +124,7 @@ func TestAFailureAddedWithoutGeneratingFailsTheProjectsTest(t *testing.T) {
 		t.Fatalf("generate wrote the ledger's test as\n%s\nwant\n%s", written, wantTest)
 	}
 
-	writeScratchFile(t, directory, "ledger/shopper_missing.go", []byte(shopperMissing))
+	scratchproject.WriteFile(t, directory, "ledger/shopper_missing.go", []byte(shopperMissing))
 	stale := requireCurrent(t, directory)
 	wantLines := []string{
 		"NC-1034 These files differ from what nocontract generate writes; run it again:",
@@ -260,10 +170,10 @@ func main() { _ = ledger.ReadInput{ShopperID: 7} }
 // all the same: generate writes the file again, and check then finds every file current.
 func TestAGeneratedFileThatNoLongerCompilesIsWrittenAgain(t *testing.T) {
 	t.Parallel()
-	directory := scratchLedger(t)
+	directory := scratchproject.Ledger(t, "..")
 	generate(t, directory)
-	writeScratchFile(t, directory, "ledger/nocontract_routes.go", []byte(staleRuntimeRoutes))
-	writeScratchFile(t, directory, "cmd/ledger/main.go", []byte(ledgerCommand))
+	scratchproject.WriteFile(t, directory, "ledger/nocontract_routes.go", []byte(staleRuntimeRoutes))
+	scratchproject.WriteFile(t, directory, "cmd/ledger/main.go", []byte(ledgerCommand))
 
 	generate(t, directory)
 	project := filepath.Join(directory, "nocontract.json")
@@ -277,12 +187,12 @@ func TestAGeneratedFileThatNoLongerCompilesIsWrittenAgain(t *testing.T) {
 // deletes it from the package that held it.
 func TestTheTestMovesToTheRoutePackageThatSortsFirst(t *testing.T) {
 	t.Parallel()
-	directory := scratchLedger(t)
+	directory := scratchproject.Ledger(t, "..")
 	generate(t, directory)
-	writeScratchFile(t, directory, "account/account_routes.go", []byte(accountRoutes))
+	scratchproject.WriteFile(t, directory, "account/account_routes.go", []byte(accountRoutes))
 	generate(t, directory)
 
-	written := bytesOrStop(t, "reading the test generate writes into the account package",
+	written := scratchproject.BytesOrStop(t, "reading the test generate writes into the account package",
 		outcome.TupleToResult(os.ReadFile(filepath.Join(directory, "account", "nocontract_files_test.go"))))
 	if !strings.Contains(string(written), "package account_test\n") {
 		t.Fatalf("generate wrote the account's test as\n%s\nwant it in package account_test", written)
