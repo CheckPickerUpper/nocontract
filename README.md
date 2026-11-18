@@ -329,7 +329,7 @@ not valid escaping. `AnswerNotWritten`
 | `string` | `Schema.String` |
 | a string type with constants | `Schema.Literals` of its constants |
 | whole numbers of 32 bits or fewer | `Schema.Int` within the type's range |
-| 64-bit whole numbers, `int` and `uint` included | `Schema.BigIntFromString`, a `bigint` within the type's range |
+| 64-bit whole numbers, `int` and `uint` included | a `bigint` within the type's range, read from canonical decimal text |
 | `float32`, `float64` | `Schema.Finite` |
 | `bool` | `Schema.Boolean` |
 | `time.Time` | `Schema.DateTimeUtcFromString` |

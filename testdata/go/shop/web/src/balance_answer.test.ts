@@ -18,6 +18,13 @@ test("a balance past what 64 bits hold is refused", () => {
   assert.ok(Exit.isFailure(Schema.decodeUnknownExit(BalanceRead)(answered("9223372036854775808"))))
 })
 
+// The server and the published pattern refuse each of these, so the client refuses them too.
+test("a balance that is not canonical decimal text is refused", () => {
+  for (const cents of ["007", "+7", "-0"]) {
+    assert.ok(Exit.isFailure(Schema.decodeUnknownExit(BalanceRead)(answered(cents))), `cents of ${cents} decoded`)
+  }
+})
+
 test("an amount of 2^53 + 1 cents encodes as its decimal text", () => {
   assert.deepEqual(Schema.encodeSync(Money)({ cents: 9007199254740993n, currency: "CAD" }), { cents: "9007199254740993", currency: "CAD" })
 })

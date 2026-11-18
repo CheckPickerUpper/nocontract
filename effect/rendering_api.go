@@ -207,13 +207,15 @@ func literalsText(literals description.Literals) string {
 }
 
 // widthText is the schema of a whole number of width, checked from its least to its most value as
-// its wire carries it: a JSON number read as a number, or decimal text read as a bigint.
+// its wire carries it: a JSON number read as a number, or decimal text read as a bigint once the
+// wire's pattern takes it, since BigIntFromString alone also takes "007" and "-0".
 func widthText(width description.IntegerWidth) string {
-	switch width.Wire().(type) {
+	switch wire := width.Wire().(type) {
 	case description.NumberWire:
 		return fmt.Sprintf("Schema.Int.check(Schema.isBetween({ minimum: %s, maximum: %s }))", width.Least(), width.Most())
 	case description.DecimalTextWire:
-		return fmt.Sprintf("Schema.BigIntFromString.check(Schema.isBetweenBigInt({ minimum: %sn, maximum: %sn }))", width.Least(), width.Most())
+		return fmt.Sprintf("Schema.String.check(Schema.isPattern(new RegExp(%s))).pipe(Schema.decodeTo(Schema.BigIntFromString.check(Schema.isBetweenBigInt({ minimum: %sn, maximum: %sn }))))",
+			quoted(wire.Pattern), width.Least(), width.Most())
 	case nil:
 	}
 	return "Schema.Never"
