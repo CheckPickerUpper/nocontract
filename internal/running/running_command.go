@@ -446,8 +446,9 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 				projectFile: projectFile, typeScript: filepath.Join(directory, project.TypeScript),
 				openAPI: OpenAPIFile{File: filepath.Join(directory, project.OpenAPI.File), Version: project.OpenAPI.Version},
 			}
-			return outcome.Fold(renderedFiles(assembled.API, read.Plan, paths, existing), finish,
-				func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
+			return outcome.Fold(renderedFiles(assembled.API, read.Plan, paths, existing), func(files []generatedFile) Outcome {
+				return judgedServing(ctx, directory, project, files, finish)
+			}, func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
 		case assembling.APIRefused:
 			return DeclarationsRefused{Refusals: assembled.Refusals}
 		case nil:
@@ -631,6 +632,48 @@ func loadPackages(ctx context.Context, directory string, patterns []string, exis
 		ParseFile: nil, Tests: false, Overlay: overlay,
 	}
 	return outcome.TupleToResult(packages.Load(config, append(patterns, serverplan.NoContractPath)...))
+}
+
+// judgedServing hands the files to finish when no file the project wrote serves anything but the
+// generated API or makes a handler of its own. The project's packages are loaded again with their
+// tests and with each Go file generate writes as it writes it, so the API they serve is the one
+// these files declare.
+func judgedServing(ctx context.Context, directory string, project Project, files []generatedFile, finish func([]generatedFile) Outcome) Outcome {
+	overlay := map[string][]byte{}
+	for _, file := range files {
+		if filepath.Ext(file.path) == ".go" {
+			overlay[file.path] = mo.Fold(file.content, func(content []byte) []byte { return content }, func(error) []byte { return []byte(setAsideFile) })
+		}
+	}
+	config := &packages.Config{
+		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
+		Context: ctx, Logf: func(string, ...any) {}, Dir: directory, Env: os.Environ(), BuildFlags: []string{}, Fset: token.NewFileSet(),
+		ParseFile: nil, Tests: true, Overlay: overlay,
+	}
+	return outcome.Fold(outcome.TupleToResult(packages.Load(config, project.Packages...)), func(loaded []*packages.Package) Outcome {
+		if problems := builtProblems(loaded); len(problems) > 0 {
+			return PackagesNotLoaded{Errors: problems}
+		}
+		if refusals := reading.JudgeServing(reading.ServingRequest{Packages: loaded, Server: filepath.Join(directory, project.Server)}); len(refusals) > 0 {
+			return DeclarationsRefused{Refusals: refusals}
+		}
+		return finish(files)
+	}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
+}
+
+// builtProblems is every problem Go reported in the project's packages built with generate's
+// files, each once though a package and the same package with its tests both report it.
+func builtProblems(loaded []*packages.Package) []error {
+	problems, reported := []error{}, map[packages.Error]struct{}{}
+	for _, each := range loaded {
+		for _, problem := range each.Errors {
+			if _, isReported := reported[problem]; !isReported {
+				reported[problem] = struct{}{}
+				problems = append(problems, problem)
+			}
+		}
+	}
+	return problems
 }
 
 // loadProblems is every problem Go reported in a package whose declarations were read. No

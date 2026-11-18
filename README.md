@@ -242,13 +242,26 @@ The API answers a request no declared route takes on its own:
 
 A path segment written as text in one route is preferred over a `{name}` segment in another.
 
+The API is the only handler a project serves. `generate` and `check` refuse, in every file the
+project wrote, tests included, each with its file, line and code:
+
+- serving a value whose type is not the API with `http.ListenAndServe`, `ListenAndServeTLS`,
+  `Serve`, `ServeTLS`, or `httptest.NewServer`, `NewTLSServer` and `NewUnstartedServer`, or using
+  one of them without calling it;
+- an `http.Server` written without a `Handler` or with one that is not the API, and setting a
+  server's `Handler` to anything else;
+- making a handler of its own: `http.HandlerFunc`, a `ServeHTTP` method, or registering on a
+  `ServeMux` with `Handle` or `HandleFunc`.
+
+A handler wrapping the API, for logging, metrics or CORS, is refused with the rest. A
+[layer](#layers) runs that code around every request instead.
+
 ## Layers
 
 A `nocontract.Layer` runs around every request the API answers, matched or not, for logging,
 metrics, request ids or CORS headers. It is handed the request as a `nocontract.Visit`, which reads
 the method, URL, header and the route matched (`nocontract.RouteMatched` with the declared method
-and path, `nocontract.NoRouteMatched`, or `nocontract.PathNotUnescaped` with the path segment that
-is not valid escaping), and sets headers on the response. Its `next` runs the
+and path, or `nocontract.NoRouteMatched`), and sets headers on the response. Its `next` runs the
 route, once however often it is called, and returns the `nocontract.Answered`: the status, the
 `_tag` and the code of what the route answered. Only the API builds an `Answered`, and it sends the
 route's own answer whatever a layer returns, so a layer cannot change the status or body or answer
@@ -290,7 +303,8 @@ member's `//nocontract:status`.
 ```
 
 Two failures can answer any route. `RequestRefused` (400, `NC-1001`) is a path segment, query
-parameter or body the input could not read, before the handler runs. `AnswerNotWritten`
+parameter or body the input could not read, before the handler runs, or a path segment that is
+not valid escaping. `AnswerNotWritten`
 (500, `NC-1002`) is an outcome that could not be written as JSON. `RouteNotFound` and
 `MethodNotDeclared` answer requests no declared route takes, as [Serving](#serving) lists.
 

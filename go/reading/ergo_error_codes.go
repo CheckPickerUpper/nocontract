@@ -836,3 +836,218 @@ func (failure RouteDirectiveRepeated) Report(language messages.Language) ergo.Re
 func (failure RouteDirectiveRepeated) Causes() []error {
 	return nil
 }
+
+func (ValueServedNotAPI) ErrorCode() ergo.Code { return "NC-1072" }
+
+// ValueServedNotAPIArguments holds the arguments ValueServedNotAPI's message names, in the order the message first names them.
+type ValueServedNotAPIArguments struct {
+	Function string `json:"Function"`
+	Type     string `json:"Type"`
+}
+
+// ReportArguments marks ValueServedNotAPIArguments as the arguments of a report.
+func (ValueServedNotAPIArguments) ReportArguments() {}
+
+// Report is ValueServedNotAPI's code, its message in language and the arguments the message names.
+func (failure ValueServedNotAPI) Report(language messages.Language) ergo.Report {
+	arguments := ValueServedNotAPIArguments{Function: string(failure.Function), Type: string(failure.Type)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " serves a "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "; serve the generated API, which answers only the declared routes."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1072", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Function}, messageformat.TextValue{Text: arguments.Type}}}), Arguments: arguments}
+}
+
+// Causes is every error ValueServedNotAPI holds, then the causes of every failure it holds.
+func (failure ValueServedNotAPI) Causes() []error {
+	return nil
+}
+
+func (ServingFunctionNotCalled) ErrorCode() ergo.Code { return "NC-1073" }
+
+// ServingFunctionNotCalledArguments holds the arguments ServingFunctionNotCalled's message names, in the order the message first names them.
+type ServingFunctionNotCalledArguments struct {
+	Function string `json:"Function"`
+}
+
+// ReportArguments marks ServingFunctionNotCalledArguments as the arguments of a report.
+func (ServingFunctionNotCalledArguments) ReportArguments() {}
+
+// Report is ServingFunctionNotCalled's code, its message in language and the arguments the message names.
+func (failure ServingFunctionNotCalled) Report(language messages.Language) ergo.Report {
+	arguments := ServingFunctionNotCalledArguments{Function: string(failure.Function)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is used without calling it, so what it serves cannot be read; call it with the generated API."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1073", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Function}}}), Arguments: arguments}
+}
+
+// Causes is every error ServingFunctionNotCalled holds, then the causes of every failure it holds.
+func (failure ServingFunctionNotCalled) Causes() []error {
+	return nil
+}
+
+func (ServerHandlerNotAPI) ErrorCode() ergo.Code { return "NC-1074" }
+
+// ServerHandlerNotAPIArguments holds the arguments ServerHandlerNotAPI's message names, in the order the message first names them.
+type ServerHandlerNotAPIArguments struct {
+	Type string `json:"Type"`
+}
+
+// ReportArguments marks ServerHandlerNotAPIArguments as the arguments of a report.
+func (ServerHandlerNotAPIArguments) ReportArguments() {}
+
+// Report is ServerHandlerNotAPI's code, its message in language and the arguments the message names.
+func (failure ServerHandlerNotAPI) Report(language messages.Language) ergo.Report {
+	arguments := ServerHandlerNotAPIArguments{Type: string(failure.Type)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The http.Server is written with a "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " as its Handler; give it the generated API."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1074", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Type}}}), Arguments: arguments}
+}
+
+// Causes is every error ServerHandlerNotAPI holds, then the causes of every failure it holds.
+func (failure ServerHandlerNotAPI) Causes() []error {
+	return nil
+}
+
+func (ServerHandlerMissing) ErrorCode() ergo.Code { return "NC-1075" }
+
+// ServerHandlerMissingArguments holds the arguments ServerHandlerMissing's message names, in the order the message first names them.
+type ServerHandlerMissingArguments struct {
+}
+
+// ReportArguments marks ServerHandlerMissingArguments as the arguments of a report.
+func (ServerHandlerMissingArguments) ReportArguments() {}
+
+// Report is ServerHandlerMissing's code, its message in language and the arguments the message names.
+func (failure ServerHandlerMissing) Report(language messages.Language) ergo.Report {
+	arguments := ServerHandlerMissingArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The http.Server is written without a Handler, so it serves http.DefaultServeMux; give it the generated API."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1075", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error ServerHandlerMissing holds, then the causes of every failure it holds.
+func (failure ServerHandlerMissing) Causes() []error {
+	return nil
+}
+
+func (ServerHandlerAssigned) ErrorCode() ergo.Code { return "NC-1076" }
+
+// ServerHandlerAssignedArguments holds the arguments ServerHandlerAssigned's message names, in the order the message first names them.
+type ServerHandlerAssignedArguments struct {
+	Type string `json:"Type"`
+}
+
+// ReportArguments marks ServerHandlerAssignedArguments as the arguments of a report.
+func (ServerHandlerAssignedArguments) ReportArguments() {}
+
+// Report is ServerHandlerAssigned's code, its message in language and the arguments the message names.
+func (failure ServerHandlerAssigned) Report(language messages.Language) ergo.Report {
+	arguments := ServerHandlerAssignedArguments{Type: string(failure.Type)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "An http.Server's Handler is set to a "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "; set it to the generated API."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1076", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Type}}}), Arguments: arguments}
+}
+
+// Causes is every error ServerHandlerAssigned holds, then the causes of every failure it holds.
+func (failure ServerHandlerAssigned) Causes() []error {
+	return nil
+}
+
+func (HandlerFuncUsed) ErrorCode() ergo.Code { return "NC-1077" }
+
+// HandlerFuncUsedArguments holds the arguments HandlerFuncUsed's message names, in the order the message first names them.
+type HandlerFuncUsedArguments struct {
+}
+
+// ReportArguments marks HandlerFuncUsedArguments as the arguments of a report.
+func (HandlerFuncUsedArguments) ReportArguments() {}
+
+// Report is HandlerFuncUsed's code, its message in language and the arguments the message names.
+func (failure HandlerFuncUsed) Report(language messages.Language) ergo.Report {
+	arguments := HandlerFuncUsedArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "http.HandlerFunc makes a handler outside the generated API; run code around every request with a nocontract.Layer."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1077", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error HandlerFuncUsed holds, then the causes of every failure it holds.
+func (failure HandlerFuncUsed) Causes() []error {
+	return nil
+}
+
+func (ServeHTTPDeclared) ErrorCode() ergo.Code { return "NC-1078" }
+
+// ServeHTTPDeclaredArguments holds the arguments ServeHTTPDeclared's message names, in the order the message first names them.
+type ServeHTTPDeclaredArguments struct {
+	Type string `json:"Type"`
+}
+
+// ReportArguments marks ServeHTTPDeclaredArguments as the arguments of a report.
+func (ServeHTTPDeclaredArguments) ReportArguments() {}
+
+// Report is ServeHTTPDeclared's code, its message in language and the arguments the message names.
+func (failure ServeHTTPDeclared) Report(language messages.Language) ergo.Report {
+	arguments := ServeHTTPDeclaredArguments{Type: string(failure.Type)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " declares ServeHTTP, which makes it a handler outside the generated API; run code around every request with a nocontract.Layer."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1078", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Type}}}), Arguments: arguments}
+}
+
+// Causes is every error ServeHTTPDeclared holds, then the causes of every failure it holds.
+func (failure ServeHTTPDeclared) Causes() []error {
+	return nil
+}
+
+func (HandlerRegistered) ErrorCode() ergo.Code { return "NC-1079" }
+
+// HandlerRegisteredArguments holds the arguments HandlerRegistered's message names, in the order the message first names them.
+type HandlerRegisteredArguments struct {
+	Function string `json:"Function"`
+}
+
+// ReportArguments marks HandlerRegisteredArguments as the arguments of a report.
+func (HandlerRegisteredArguments) ReportArguments() {}
+
+// Report is HandlerRegistered's code, its message in language and the arguments the message names.
+func (failure HandlerRegistered) Report(language messages.Language) ergo.Report {
+	arguments := HandlerRegisteredArguments{Function: string(failure.Function)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " registers a handler outside the generated API; declare the route with //nocontract:route."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1079", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Function}}}), Arguments: arguments}
+}
+
+// Causes is every error HandlerRegistered holds, then the causes of every failure it holds.
+func (failure HandlerRegistered) Causes() []error {
+	return nil
+}

@@ -822,3 +822,99 @@ Message: `The route {Route} of the package {Package} has no endpoint in the API'
 | --- | --- |
 | `Package` | `string` |
 | `Route` | `string` |
+
+## NC-1072 ValueServedNotAPI
+
+ValueServedNotAPI is a call that serves HTTP with a handler whose type is not the generated API,
+so it could answer a route the client and the OpenAPI file do not list.
+
+Declared in `go/reading/reading_serving.go`.
+
+Message: `{Function} serves a {Type}; serve the generated API, which answers only the declared routes.`
+
+| Field | Type |
+| --- | --- |
+| `Function` | `string` |
+| `Type` | `string` |
+
+## NC-1073 ServingFunctionNotCalled
+
+ServingFunctionNotCalled is a function that serves HTTP used other than by calling it, so what
+it serves cannot be read.
+
+Declared in `go/reading/reading_serving.go`.
+
+Message: `{Function} is used without calling it, so what it serves cannot be read; call it with the generated API.`
+
+| Field | Type |
+| --- | --- |
+| `Function` | `string` |
+
+## NC-1074 ServerHandlerNotAPI
+
+ServerHandlerNotAPI is an http.Server written with a Handler whose type is not the generated API.
+
+Declared in `go/reading/reading_serving.go`.
+
+Message: `The http.Server is written with a {Type} as its Handler; give it the generated API.`
+
+| Field | Type |
+| --- | --- |
+| `Type` | `string` |
+
+## NC-1075 ServerHandlerMissing
+
+ServerHandlerMissing is an http.Server written without a Handler, which serves
+http.DefaultServeMux and whatever any package registered on it.
+
+Declared in `go/reading/reading_serving.go`.
+
+Message: `The http.Server is written without a Handler, so it serves http.DefaultServeMux; give it the generated API.`
+
+## NC-1076 ServerHandlerAssigned
+
+ServerHandlerAssigned is an http.Server's Handler set to a value whose type is not the generated
+API.
+
+Declared in `go/reading/reading_serving.go`.
+
+Message: `An http.Server's Handler is set to a {Type}; set it to the generated API.`
+
+| Field | Type |
+| --- | --- |
+| `Type` | `string` |
+
+## NC-1077 HandlerFuncUsed
+
+HandlerFuncUsed is http.HandlerFunc named in a file the project wrote, which makes a function a
+handler outside the generated API.
+
+Declared in `go/reading/reading_serving.go`.
+
+Message: `http.HandlerFunc makes a handler outside the generated API; run code around every request with a nocontract.Layer.`
+
+## NC-1078 ServeHTTPDeclared
+
+ServeHTTPDeclared is a ServeHTTP method declared on a project type, which makes the type a
+handler outside the generated API.
+
+Declared in `go/reading/reading_serving.go`.
+
+Message: `{Type} declares ServeHTTP, which makes it a handler outside the generated API; run code around every request with a nocontract.Layer.`
+
+| Field | Type |
+| --- | --- |
+| `Type` | `string` |
+
+## NC-1079 HandlerRegistered
+
+HandlerRegistered is a handler registered on an http.ServeMux, which answers a route outside the
+generated API.
+
+Declared in `go/reading/reading_serving.go`.
+
+Message: `{Function} registers a handler outside the generated API; declare the route with //nocontract:route.`
+
+| Field | Type |
+| --- | --- |
+| `Function` | `string` |

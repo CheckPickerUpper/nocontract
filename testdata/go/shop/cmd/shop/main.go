@@ -44,8 +44,6 @@ func logRequest(visit nocontract.Visit, next func() nocontract.Answered) nocontr
 	switch matched := visit.Route().(type) {
 	case nocontract.RouteMatched:
 		route = matched.Method + " " + matched.Path
-	case nocontract.PathNotUnescaped:
-		route = "no route: the segment " + matched.Segment + " is not valid escaping"
 	case nocontract.NoRouteMatched, nil:
 	}
 	code := mo.Fold(answered.Code(), func(code string) string { return code }, func(error) string { return "no code" })

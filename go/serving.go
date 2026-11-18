@@ -117,24 +117,13 @@ type RouteMatched struct {
 }
 
 // NoRouteMatched is a request no declared route takes: a path no route declares, a method the
-// path's routes do not declare, or an OPTIONS request.
+// path's routes do not declare, an OPTIONS request, or a path that is not valid escaping.
 //
 //ergo:not-an-error
 type NoRouteMatched struct{}
 
-// PathNotUnescaped is a request whose path holds a segment that is not valid escaping, so no
-// declared path can be compared with it, and why it could not be unescaped. It is answered with
-// RouteNotFound.
-//
-//ergo:not-an-error
-type PathNotUnescaped struct {
-	Segment string
-	Reason  string
-}
-
-func (RouteMatched) isVisitedRoute()     {}
-func (NoRouteMatched) isVisitedRoute()   {}
-func (PathNotUnescaped) isVisitedRoute() {}
+func (RouteMatched) isVisitedRoute()   {}
+func (NoRouteMatched) isVisitedRoute() {}
 
 // Answered is what the server answered a request with. Only the server builds it, from the answer
 // it sends, so a layer reads it and cannot make one up.
@@ -226,7 +215,8 @@ func (optionsResponse) isResponse() {}
 
 // Respond answers one request to a generated server through its layers: the route its method and
 // path match; 204 with Allow to an OPTIONS request for a declared path; MethodNotDeclared to
-// another method on a declared path; and RouteNotFound to a path no route declares. Only the
+// another method on a declared path; RouteNotFound to a path no route declares; and RequestRefused
+// to a path holding a segment that is not valid escaping. Only the
 // generated API's ServeHTTP calls it.
 func Respond(writer http.ResponseWriter, request *http.Request, endpoints []Endpoint, layers []Layer) {
 	matched := matchRequest(endpoints, request)
@@ -289,9 +279,7 @@ func visitedRoute(matched requestMatch) VisitedRoute {
 	switch match := matched.(type) {
 	case endpointMatched:
 		return RouteMatched{Method: match.candidate.endpoint.Method, Path: declaredPath(match.candidate.endpoint.Path)}
-	case pathUnreadable:
-		return PathNotUnescaped{Segment: match.segment, Reason: match.reason}
-	case pathMatched, nothingMatched, nil:
+	case pathMatched, nothingMatched, pathUnreadable, nil:
 	}
 	return NoRouteMatched{}
 }
@@ -311,7 +299,10 @@ func answerMatched(matched requestMatch, request *http.Request) Answered {
 		}
 		refused := NocontractAnswerSharedFailure(MethodNotDeclared{Method: request.Method, Allowed: match.allowed})
 		return Answered{response: methodResponse{answer: sent(refused), allowed: match.allowed}}
-	case nothingMatched, pathUnreadable, nil:
+	case pathUnreadable:
+		refused := NocontractAnswerSharedFailure(RequestRefused{Part: RequestRefusedPartPath, Name: match.segment, Reason: match.reason})
+		return Answered{response: answerResponse{answer: sent(refused)}}
+	case nothingMatched, nil:
 	}
 	return Answered{response: answerResponse{answer: sent(NocontractAnswerSharedFailure(RouteNotFound{Method: request.Method, Path: request.URL.Path}))}}
 }
