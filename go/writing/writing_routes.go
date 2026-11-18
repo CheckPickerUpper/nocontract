@@ -32,7 +32,7 @@ import (
 // declares still type-checks, and the file's own code, which may no longer compile, is not read.
 func Stubbed(existing []byte) mo.Result[[]byte] {
 	files := token.NewFileSet()
-	return mo.Fold(mo.TupleToResult(parser.ParseFile(files, serverplan.FileName, existing, parser.SkipObjectResolution)), func(file *ast.File) mo.Result[[]byte] {
+	return mo.Fold(mo.TupleToResult(parser.ParseFile(files, serverplan.RoutesFileName, existing, parser.SkipObjectResolution)), func(file *ast.File) mo.Result[[]byte] {
 		kept := []ast.Decl{}
 		for _, declaration := range file.Decls {
 			switch declared := declaration.(type) {

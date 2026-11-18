@@ -457,7 +457,7 @@ func goFiles(served []serverplan.Package) mo.Result[[]generatedFile] {
 	for _, each := range served {
 		files = mo.Fold(files, func(done []generatedFile) mo.Result[[]generatedFile] {
 			return mo.Fold(writing.Render(each), func(goFile []byte) mo.Result[[]generatedFile] {
-				return mo.Ok(append(slices.Clone(done), generatedFile{path: filepath.Join(each.Directory, serverplan.FileName), content: mo.Some(goFile)}))
+				return mo.Ok(append(slices.Clone(done), generatedFile{path: filepath.Join(each.Directory, serverplan.RoutesFileName), content: mo.Some(goFile)}))
 			}, mo.Err[[]generatedFile])
 		}, mo.Err[[]generatedFile])
 	}

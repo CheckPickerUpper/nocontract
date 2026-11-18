@@ -13,16 +13,17 @@ import (
 
 // The Go files NoContract writes into a project's packages.
 const (
-	// FileName is the Go file written into each package that declares a route or a guard's refusal.
-	FileName = "nocontract_routes.go"
+	// RoutesFileName is the Go file written into each package that declares a route or a guard's
+	// refusal.
+	RoutesFileName = "nocontract_routes.go"
 	// FilesTestFileName is the test written into the package whose folder sorts first among those
-	// given a FileName, which fails while any generated file differs from what generate writes.
+	// given a RoutesFileName, which fails while any generated file differs from what generate writes.
 	FilesTestFileName = "nocontract_files_test.go"
 )
 
 // GeneratedFileNames is the name of every Go file NoContract writes.
 func GeneratedFileNames() []string {
-	return []string{FileName, FilesTestFileName}
+	return []string{RoutesFileName, FilesTestFileName}
 }
 
 // FilesTest is the test written into one package: the package's name and the project file's path
