@@ -8,6 +8,7 @@ import (
 
 	ergo "github.com/CheckPickerUpper/ErGo"
 	"github.com/CheckPickerUpper/ErGo/declarations"
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
 
@@ -84,9 +85,9 @@ func sortedByAnswer(declared declaredType, members []sealedMember) sealedRead {
 
 // readSealed reads a sealed interface of the project and every member's answer.
 func readSealed(index projectIndex, key typeKey, position token.Pos) reading[sealedRead] {
-	return mo.Fold(keyed.Entry(index.declared, key), func(declared declaredType) reading[sealedRead] {
+	return outcome.FoldOption(keyed.Entry(index.declared, key), func(declared declaredType) reading[sealedRead] {
 		return readDeclaredSealed(index, key, declared, position)
-	}, func(error) reading[sealedRead] {
+	}, func() reading[sealedRead] {
 		return notRead[sealedRead](index.refused(position, DeclarationOutsideProject{Type: key.path + "." + key.name}))
 	})
 }
@@ -122,12 +123,12 @@ type memberCandidates struct {
 
 // sealedMemberCandidates is every type of the outcome's package that implements it, in source order. Its
 // unexported method seals it, so no other package declares a member.
-func sealedMemberCandidates(index projectIndex, outcome declaredType, contract *types.Interface) memberCandidates {
-	scope := outcome.loaded.Types.Scope()
+func sealedMemberCandidates(index projectIndex, sealed declaredType, contract *types.Interface) memberCandidates {
+	scope := sealed.loaded.Types.Scope()
 	members, finding := []declaredType{}, nothingFound()
 	for _, name := range scope.Names() {
 		object, isTypeName := scope.Lookup(name).(*types.TypeName)
-		if !isTypeName || object.IsAlias() || object == outcome.object {
+		if !isTypeName || object.IsAlias() || object == sealed.object {
 			continue
 		}
 		if _, isInterface := object.Type().Underlying().(*types.Interface); isInterface {
@@ -139,7 +140,7 @@ func sealedMemberCandidates(index projectIndex, outcome declaredType, contract *
 			}
 			continue
 		}
-		keyed.Entry(index.declared, typeKeyFor(object)).ForEach(func(declared declaredType) { members = append(members, declared) })
+		outcome.ForEachOption(keyed.Entry(index.declared, typeKeyFor(object)), func(declared declaredType) { members = append(members, declared) })
 	}
 	slices.SortFunc(members, func(left, right declaredType) int { return index.sourceOrder(left.object.Pos(), right.object.Pos()) })
 	return memberCandidates{members: members, found: finding}
@@ -189,8 +190,8 @@ func readStatus(index projectIndex, member declaredType) reading[description.Sta
 	}
 	switch lines := writtenLines(member.comment, statusKind{}).(type) {
 	case oneLine:
-		return mo.Fold(mo.TupleToResult(strconv.Atoi(lines.line.argument)), func(number int) reading[description.Status] {
-			return mo.Fold(description.ParseStatus(number), func(status description.Status) reading[description.Status] {
+		return outcome.Fold(outcome.TupleToResult(strconv.Atoi(lines.line.argument)), func(number int) reading[description.Status] {
+			return outcome.Fold(description.ParseStatus(number), func(status description.Status) reading[description.Status] {
 				return readAs(status, nothingFound())
 			}, func(error) reading[description.Status] { return malformed(lines.line) })
 		}, func(error) reading[description.Status] { return malformed(lines.line) })

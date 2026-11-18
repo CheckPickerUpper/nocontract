@@ -20,6 +20,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/description"
@@ -80,14 +81,14 @@ func usedImports(file *ast.File, kept []ast.Decl) *ast.GenDecl {
 	specs := []ast.Spec{}
 	for _, spec := range file.Imports {
 		mo.EmptyableToOption(spec.Name).ForEach(func(alias *ast.Ident) {
-			keyed.Entry(used, alias.Name).ForEach(func(struct{}) { specs = append(specs, spec) })
+			outcome.ForEachOption(keyed.Entry(used, alias.Name), func(struct{}) { specs = append(specs, spec) })
 		})
 	}
 	return &ast.GenDecl{Doc: &ast.CommentGroup{List: []*ast.Comment{}}, TokPos: token.NoPos, Tok: token.IMPORT, Lparen: 1, Specs: specs, Rparen: 1}
 }
 
 // Render is the formatted Go file of the package.
-func Render(served serverplan.Package) mo.Result[[]byte] {
+func Render(served serverplan.Package) outcome.Result[[]byte] {
 	names := newImports(served.Path, served.Serves)
 	body := &strings.Builder{}
 	switch serves := served.Serves.(type) {
@@ -107,7 +108,7 @@ func Render(served serverplan.Package) mo.Result[[]byte] {
 		body.WriteString(answerText(answerFunction{name: name, sealed: sealed.Outcome.Name, members: sealed.Members}, names))
 	}
 	file := description.GeneratedHeader + "\npackage " + served.Name + "\n\n" + names.declaration() + "\n" + body.String()
-	return mo.TupleToResult(format.Source([]byte(file)))
+	return outcome.TupleToResult(format.Source([]byte(file)))
 }
 
 // exported is a name with its first letter in upper case, for the generated functions' names.
@@ -127,7 +128,7 @@ func routesText(served serverplan.ServesRoutes, names *imports) string {
 	}
 	for _, route := range served.Routes {
 		text.WriteString(routeText(route, names))
-		keyed.Entry(unwritten, route.Outcome).ForEach(func(outcome serverplan.OutcomeAnswer) {
+		outcome.ForEachOption(keyed.Entry(unwritten, route.Outcome), func(outcome serverplan.OutcomeAnswer) {
 			delete(unwritten, route.Outcome)
 			text.WriteString(answerText(answerFunction{name: outcomeFunction(outcome.Outcome, names), sealed: names.qualified(outcome.Outcome), members: outcome.Members}, names))
 		})
@@ -315,8 +316,8 @@ func (names *imports) reference(path string) reference {
 	if path == names.home {
 		return unqualified{}
 	}
-	return mo.Fold(keyed.Entry(names.aliases, path), func(alias string) reference { return qualifiedBy{alias: alias} },
-		func(error) reference { return names.imported(path) })
+	return outcome.FoldOption(keyed.Entry(names.aliases, path), func(alias string) reference { return qualifiedBy{alias: alias} },
+		func() reference { return names.imported(path) })
 }
 
 // imported is the package at path imported under an alias no other import or local name takes.

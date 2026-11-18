@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
 
@@ -56,8 +57,8 @@ type packageRoutes struct {
 func routesByPackage(entries []routeEntry) []packageRoutes {
 	grouped := map[string]packageRoutes{}
 	for _, entry := range entries {
-		group := mo.Fold(keyed.Entry(grouped, entry.loaded.PkgPath), func(group packageRoutes) packageRoutes { return group },
-			func(error) packageRoutes { return packageRoutes{loaded: entry.loaded, entries: []routeEntry{}} })
+		group := outcome.FoldOption(keyed.Entry(grouped, entry.loaded.PkgPath), func(group packageRoutes) packageRoutes { return group },
+			func() packageRoutes { return packageRoutes{loaded: entry.loaded, entries: []routeEntry{}} })
 		grouped[entry.loaded.PkgPath] = packageRoutes{loaded: group.loaded, entries: append(slices.Clone(group.entries), entry)}
 	}
 	groups := []packageRoutes{}
@@ -189,7 +190,7 @@ func goPlan(index projectIndex, guards guardTable, groups []packageRoutes) serve
 		guard.members.ForEach(func(members []sealedMember) {
 			refusal := serverplan.SealedAnswer{Use: serverplan.GuardAnswers{Guard: name}, Outcome: goName(guard.declared), Members: memberPlans(members)}
 			path := guard.declared.loaded.PkgPath
-			declaring := mo.Fold(keyed.Entry(planned, path), func(declaring plannedPackage) plannedPackage { return declaring }, func(error) plannedPackage {
+			declaring := outcome.FoldOption(keyed.Entry(planned, path), func(declaring plannedPackage) plannedPackage { return declaring }, func() plannedPackage {
 				return plannedPackage{
 					loaded: guard.declared.loaded, directory: filepath.Dir(index.position(guard.declared.spec.Pos()).Filename),
 					serves: serverplan.ServesNoRoutes{}, answers: []serverplan.SealedAnswer{},

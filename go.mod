@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	github.com/CheckPickerUpper/ErGo v0.0.0-20261115191336-da68dcb0f844
+	github.com/CheckPickerUpper/outcome v0.0.0-20261116220618-27755f6ba168
 	github.com/creachadair/atomicfile v0.4.2
 	github.com/fatih/structtag v1.2.0
 	github.com/samber/mo v1.17.0

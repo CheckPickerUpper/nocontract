@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/samber/mo"
+	"github.com/CheckPickerUpper/outcome"
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
@@ -28,7 +28,7 @@ const jsonMediaType = "application/json"
 
 // Render is the OpenAPI document of api, whose own version is version, as JSON indented by two
 // spaces with a closing newline, or why encoding/json could not write it.
-func Render(api description.API, version string) mo.Result[[]byte] {
+func Render(api description.API, version string) outcome.Result[[]byte] {
 	tags := []tag{}
 	for _, group := range api.Groups {
 		tags = append(tags, tag{Name: group.Name})
@@ -40,9 +40,9 @@ func Render(api description.API, version string) mo.Result[[]byte] {
 		Paths:      paths(api),
 		Components: components{Schemas: componentSchemas(api)},
 	}
-	return mo.Fold(mo.TupleToResult(json.MarshalIndent(written, "", "  ")), func(encoded []byte) mo.Result[[]byte] {
-		return mo.Ok(append(encoded, '\n'))
-	}, mo.Err[[]byte])
+	return outcome.Fold(outcome.TupleToResult(json.MarshalIndent(written, "", "  ")), func(encoded []byte) outcome.Result[[]byte] {
+		return outcome.Ok(append(encoded, '\n'))
+	}, outcome.Err[[]byte])
 }
 
 // paths is every route's operation, under its path and its method.
@@ -51,8 +51,8 @@ func paths(api description.API) map[string]map[string]operation {
 	for _, group := range api.Groups {
 		for _, endpoint := range group.Endpoints {
 			path := writtenPath(endpoint.Path)
-			methods := mo.Fold(keyed.Entry(written, path), func(found map[string]operation) map[string]operation { return found },
-				func(error) map[string]operation { return map[string]operation{} })
+			methods := outcome.FoldOption(keyed.Entry(written, path), func(found map[string]operation) map[string]operation { return found },
+				func() map[string]operation { return map[string]operation{} })
 			methods[strings.ToLower(endpoint.Method.Name())] = routeOperation(group.Name, endpoint)
 			written[path] = methods
 		}

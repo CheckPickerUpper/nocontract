@@ -9,7 +9,7 @@ import (
 	"cmp"
 	"slices"
 
-	"github.com/samber/mo"
+	"github.com/CheckPickerUpper/outcome"
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/effect"
@@ -176,10 +176,10 @@ type resolvedMembers struct {
 func (members endpointMembers) resolved(declared DeclaredEndpoint, names []string) resolvedMembers {
 	found := resolvedMembers{members: []description.Member{}, refusals: []Refusal{}}
 	for _, name := range names {
-		mo.Fold(keyed.Entry(members.declared, name), func(member description.Member) struct{} {
+		outcome.FoldOption(keyed.Entry(members.declared, name), func(member description.Member) struct{} {
 			found.members = append(found.members, member)
 			return struct{}{}
-		}, func(error) struct{} {
+		}, func() struct{} {
 			found.refusals = append(found.refusals, Refusal{Position: declared.Position, Problem: MemberUndeclared{Endpoint: declared.Name, Member: name}})
 			return struct{}{}
 		})

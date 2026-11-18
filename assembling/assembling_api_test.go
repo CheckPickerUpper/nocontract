@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/samber/mo"
+	"github.com/CheckPickerUpper/outcome"
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
@@ -113,7 +113,7 @@ func TestARouteIsDescribedWithItsBoundPathAndTheMembersItAnswersWith(t *testing.
 	reads.Params = []description.Field{item}
 	reads.Failures = []string{"Missing"}
 	declared := api(reads, route("list", "/items", 3))
-	notFound := mo.Fold(description.ParseStatus(404), func(status description.Status) description.FailureStatus {
+	notFound := outcome.Fold(description.ParseStatus(404), func(status description.Status) description.FailureStatus {
 		failure, isFailure := status.(description.FailureStatus)
 		if !isFailure {
 			t.Fatalf("404 parsed as %#v; want a failure status", status)

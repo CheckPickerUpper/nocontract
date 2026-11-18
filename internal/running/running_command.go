@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	ergo "github.com/CheckPickerUpper/ErGo"
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/creachadair/atomicfile"
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
@@ -442,7 +443,7 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 				projectFile: projectFile, typeScript: filepath.Join(directory, project.TypeScript),
 				openAPI: OpenAPIFile{File: filepath.Join(directory, project.OpenAPI.File), Version: project.OpenAPI.Version},
 			}
-			return mo.Fold(renderedFiles(assembled.API, read.Plan, paths, existing), finish,
+			return outcome.Fold(renderedFiles(assembled.API, read.Plan, paths, existing), finish,
 				func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
 		case assembling.APIRefused:
 			return DeclarationsRefused{Refusals: assembled.Refusals}
@@ -454,9 +455,9 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 
 // renderedFiles is the TypeScript file, the OpenAPI file, each package's Go file, the test of them
 // all, and every generated Go file this run no longer writes, which must go.
-func renderedFiles(api description.API, plan serverplan.Plan, paths projectPaths, existing map[string][]byte) mo.Result[[]generatedFile] {
-	return mo.Fold(servedFiles(plan.Packages, paths.projectFile), func(served []generatedFile) mo.Result[[]generatedFile] {
-		return mo.Fold(openapi.Render(api, paths.openAPI.Version), func(document []byte) mo.Result[[]generatedFile] {
+func renderedFiles(api description.API, plan serverplan.Plan, paths projectPaths, existing map[string][]byte) outcome.Result[[]generatedFile] {
+	return outcome.Fold(servedFiles(plan.Packages, paths.projectFile), func(served []generatedFile) outcome.Result[[]generatedFile] {
+		return outcome.Fold(openapi.Render(api, paths.openAPI.Version), func(document []byte) outcome.Result[[]generatedFile] {
 			// Every existing generated file goes unless this run writes it again.
 			contents := map[string]mo.Option[[]byte]{paths.typeScript: mo.Some(effect.Render(api)), paths.openAPI.File: mo.Some(document)}
 			for path := range existing {
@@ -469,20 +470,20 @@ func renderedFiles(api description.API, plan serverplan.Plan, paths projectPaths
 			for _, path := range slices.Sorted(maps.Keys(contents)) {
 				files = append(files, generatedFile{path: path, content: contents[path]})
 			}
-			return mo.Ok(files)
-		}, mo.Err[[]generatedFile])
-	}, mo.Err[[]generatedFile])
+			return outcome.Ok(files)
+		}, outcome.Err[[]generatedFile])
+	}, outcome.Err[[]generatedFile])
 }
 
 // goFiles is the generated Go file of each package, or why one could not be formatted.
-func goFiles(served []serverplan.Package) mo.Result[[]generatedFile] {
-	files := mo.Ok([]generatedFile{})
+func goFiles(served []serverplan.Package) outcome.Result[[]generatedFile] {
+	files := outcome.Ok([]generatedFile{})
 	for _, each := range served {
-		files = mo.Fold(files, func(done []generatedFile) mo.Result[[]generatedFile] {
-			return mo.Fold(writing.Render(each), func(goFile []byte) mo.Result[[]generatedFile] {
-				return mo.Ok(append(slices.Clone(done), generatedFile{path: filepath.Join(each.Directory, serverplan.RoutesFileName), content: mo.Some(goFile)}))
-			}, mo.Err[[]generatedFile])
-		}, mo.Err[[]generatedFile])
+		files = outcome.Fold(files, func(done []generatedFile) outcome.Result[[]generatedFile] {
+			return outcome.Fold(writing.Render(each), func(goFile []byte) outcome.Result[[]generatedFile] {
+				return outcome.Ok(append(slices.Clone(done), generatedFile{path: filepath.Join(each.Directory, serverplan.RoutesFileName), content: mo.Some(goFile)}))
+			}, outcome.Err[[]generatedFile])
+		}, outcome.Err[[]generatedFile])
 	}
 	return files
 }

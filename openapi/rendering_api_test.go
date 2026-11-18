@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	ergo "github.com/CheckPickerUpper/ErGo"
-	"github.com/samber/mo"
+	"github.com/CheckPickerUpper/outcome"
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/openapi"
@@ -16,7 +16,7 @@ import (
 // failure status.
 func answered(t *testing.T, number int, code ergo.Code) description.Answer {
 	t.Helper()
-	parsed := mo.Fold(description.ParseStatus(number), func(status description.Status) description.Answer {
+	parsed := outcome.Fold(description.ParseStatus(number), func(status description.Status) description.Answer {
 		switch typed := status.(type) {
 		case description.SuccessStatus:
 			return description.Succeeds{Status: typed}
@@ -95,13 +95,13 @@ func itemAPI(t *testing.T) description.API {
 // Schema, each route's parameters, body and members under their statuses, in a fixed key order.
 func TestAnAPIIsWrittenAsItsOneOpenAPIDocument(t *testing.T) {
 	t.Parallel()
-	want := mo.Fold(mo.TupleToResult(os.ReadFile(filepath.Join("testdata", "item_api.openapi.json"))),
+	want := outcome.Fold(outcome.TupleToResult(os.ReadFile(filepath.Join("testdata", "item_api.openapi.json"))),
 		func(content []byte) string { return string(content) },
 		func(cause error) string {
 			t.Fatalf("reading the expected document: %v", cause)
 			return ""
 		})
-	got := mo.Fold(openapi.Render(itemAPI(t), "2.1.0"), func(written []byte) string { return string(written) }, func(cause error) string {
+	got := outcome.Fold(openapi.Render(itemAPI(t), "2.1.0"), func(written []byte) string { return string(written) }, func(cause error) string {
 		t.Fatalf("Render refused: %v", cause)
 		return ""
 	})

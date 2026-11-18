@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	ergo "github.com/CheckPickerUpper/ErGo"
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/messages"
@@ -280,15 +281,15 @@ func (unanswerable StatusUnanswerable) Error() string {
 }
 
 // ParseStatus is the success or failure status number names.
-func ParseStatus(number int) mo.Result[Status] {
+func ParseStatus(number int) outcome.Result[Status] {
 	known := http.StatusText(number) != ""
 	switch {
 	case known && number >= http.StatusOK && number < http.StatusMultipleChoices && number != http.StatusNoContent && number != http.StatusResetContent:
-		return mo.Ok[Status](SuccessStatus{code: number})
+		return outcome.Ok[Status](SuccessStatus{code: number})
 	case known && number >= http.StatusBadRequest && number < 600:
-		return mo.Ok[Status](FailureStatus{code: number})
+		return outcome.Ok[Status](FailureStatus{code: number})
 	}
-	return mo.Err[Status](StatusUnanswerable{Number: number})
+	return outcome.Err[Status](StatusUnanswerable{Number: number})
 }
 
 // Answer is whether a member answers as a success or as a failure with its permanent code.

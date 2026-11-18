@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/description"
@@ -46,11 +47,11 @@ func boundPath(declared DeclaredEndpoint) pathBinding {
 		case literalSegment:
 			segments = append(segments, description.PathText{Text: text})
 		case parameterSegment:
-			mo.Fold(keyed.Entry(unbound, segment.name), func(field description.Field) struct{} {
+			outcome.FoldOption(keyed.Entry(unbound, segment.name), func(field description.Field) struct{} {
 				delete(unbound, segment.name)
 				segments = append(segments, description.PathParameter{Field: field})
 				return struct{}{}
-			}, func(error) struct{} {
+			}, func() struct{} {
 				refused(PathParameterUndeclared{Parameter: segment.name})
 				return struct{}{}
 			})

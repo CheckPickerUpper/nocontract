@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/samber/mo"
+	"github.com/CheckPickerUpper/outcome"
 
 	"github.com/CheckPickerUpper/nocontract/internal/running"
 )
@@ -28,14 +28,14 @@ type Test interface {
 // generated file is current.
 func RequireCurrent(t Test, projectFile string) {
 	t.Helper()
-	outcome := running.Run(running.Request{Arguments: []string{"check", "-project", filepath.FromSlash(projectFile)}, Context: t.Context()})
-	if _, isCurrent := outcome.(running.FilesCurrent); isCurrent {
+	checked := running.Run(running.Request{Arguments: []string{"check", "-project", filepath.FromSlash(projectFile)}, Context: t.Context()})
+	if _, isCurrent := checked.(running.FilesCurrent); isCurrent {
 		return
 	}
-	report := strings.Join(append(outcome.Lines(), "Run go tool nocontract generate to write the generated files again."), "\n") + "\n"
+	report := strings.Join(append(checked.Lines(), "Run go tool nocontract generate to write the generated files again."), "\n") + "\n"
 	// The test's output is the only place a report goes, so the test fails whether or not the output
 	// took it; the testing package's writer takes every write.
-	mo.Fold(mo.TupleToResult(io.WriteString(t.Output(), report)), func(int) struct{} {
+	outcome.Fold(outcome.TupleToResult(io.WriteString(t.Output(), report)), func(int) struct{} {
 		t.FailNow()
 		return struct{}{}
 	}, func(error) struct{} {

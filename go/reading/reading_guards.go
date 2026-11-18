@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
@@ -78,9 +79,9 @@ func readGuardDeclaration(index projectIndex, guards map[string]guardEntry, mark
 	switch lines := marked.line.(type) {
 	case oneLine:
 		return mo.Fold(guardName(lines.line.argument), func(name string) reading[namedGuard] {
-			return mo.Fold(keyed.Entry(guards, name), func(first guardEntry) reading[namedGuard] {
+			return outcome.FoldOption(keyed.Entry(guards, name), func(first guardEntry) reading[namedGuard] {
 				return notRead[namedGuard](index.refused(marked.declared.spec.Pos(), GuardRepeated{Guard: name, First: index.position(first.declared.spec.Pos()).String()}))
-			}, func(error) reading[namedGuard] {
+			}, func() reading[namedGuard] {
 				read := readGuardRefusal(index, marked.declared)
 				return readAs(namedGuard{name: name, entry: guardEntry{declared: marked.declared, members: read.value}}, read.found)
 			})
@@ -131,7 +132,7 @@ func readNamedRouteGuard(index projectIndex, guards guardTable, line directive) 
 	}
 	name, argument := words[0], words[1]
 	return mo.Fold(guardName(name), func(name string) reading[routeGuard] {
-		return mo.Fold(keyed.Entry(guards.guards, name), func(guard guardEntry) reading[routeGuard] {
+		return outcome.FoldOption(keyed.Entry(guards.guards, name), func(guard guardEntry) reading[routeGuard] {
 			return mo.Fold(guard.members, func(members []sealedMember) reading[routeGuard] {
 				names := []string{}
 				for _, member := range members {
@@ -139,7 +140,7 @@ func readNamedRouteGuard(index projectIndex, guards guardTable, line directive) 
 				}
 				return readAs(routeGuard{plan: serverplan.Guarded{Name: name, Argument: argument}, members: names}, nothingFound())
 			}, func(error) reading[routeGuard] { return notRead[routeGuard](nothingFound()) })
-		}, func(error) reading[routeGuard] {
+		}, func() reading[routeGuard] {
 			return notRead[routeGuard](index.refused(line.position, GuardUndeclared{Guard: name}))
 		})
 	}, func(error) reading[routeGuard] { return malformed })

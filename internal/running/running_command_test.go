@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	ergo "github.com/CheckPickerUpper/ErGo"
-	"github.com/samber/mo"
+	"github.com/CheckPickerUpper/outcome"
 
 	"github.com/CheckPickerUpper/nocontract/internal/running"
 )
@@ -58,11 +58,11 @@ func TestAProjectFileMissingItsOpenAPIFileOrVersionIsRefused(t *testing.T) {
 			t.Parallel()
 			project := filepath.Join(t.TempDir(), "nocontract.json")
 			content := `{"language": "go", "packages": ["./..."], "typescript": "shop_api.generated.ts", "api": "ShopApi"` + each.openAPI + "}"
-			mo.EmptyableToOption(os.WriteFile(project, []byte(content), 0o644)).ForEach(func(cause error) { t.Fatalf("writing %s: %v", project, cause) })
-			outcome := running.Run(running.Request{Arguments: []string{"check", "-project", project}, Context: t.Context()})
-			unreadable, isUnreadable := outcome.(running.ProjectUnreadable)
+			outcome.ForEachOption(outcome.EmptyableToOption(os.WriteFile(project, []byte(content), 0o644)), func(cause error) { t.Fatalf("writing %s: %v", project, cause) })
+			checked := running.Run(running.Request{Arguments: []string{"check", "-project", project}, Context: t.Context()})
+			unreadable, isUnreadable := checked.(running.ProjectUnreadable)
 			if !isUnreadable {
-				t.Fatalf("check answered %#v; want the project file refused", outcome)
+				t.Fatalf("check answered %#v; want the project file refused", checked)
 			}
 			coded, isCoded := unreadable.Cause.(interface{ ErrorCode() ergo.Code })
 			if !isCoded {
