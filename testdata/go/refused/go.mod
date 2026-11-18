@@ -5,7 +5,7 @@ go 1.27.4
 require github.com/CheckPickerUpper/nocontract v0.0.0
 
 require (
-	github.com/CheckPickerUpper/ErGo v0.0.0-20261116091821-2da0eef94ba3 // indirect
+	github.com/CheckPickerUpper/ErGo v0.0.0-20261118210535-5e49b5eba7bc // indirect
 	github.com/CheckPickerUpper/outcome v0.0.0-20261116220618-27755f6ba168 // indirect
 	github.com/creachadair/atomicfile v0.4.2 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
