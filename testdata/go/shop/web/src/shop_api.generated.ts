@@ -116,6 +116,9 @@ export class OrdersGroup extends HttpApiGroup.make("orders").add(
     params: {
       shopper_id: Schema.BigIntFromString.check(Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })),
     },
+    query: {
+      store: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
+    },
     payload: Order,
     success: [OrderPlaced],
     error: [RequestRefused, AnswerNotWritten],

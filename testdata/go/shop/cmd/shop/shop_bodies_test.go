@@ -65,7 +65,7 @@ func requestSchema(t *testing.T, route string) *jsonschema.Schema {
 // is one JSON value whose objects each name every member once, which is all a schema can judge.
 func TestARouteReadsItsBodyWholeOrRefusesItWhereItIsWrong(t *testing.T) {
 	served := shopServer(t, []nocontract.Layer{})
-	const topUps, orders = "/shoppers/7/top-ups", "/shoppers/7/orders"
+	const topUps, orders = "/shoppers/7/top-ups", "/shoppers/7/orders?store=3"
 	topUpSchema, orderSchema := requestSchema(t, "/shoppers/{shopper_id}/top-ups"), requestSchema(t, "/shoppers/{shopper_id}/orders")
 	order := func(items, deliverBetween, wrapped, courierNotes string) string {
 		return `{"items":` + items + `,"gift_note":null,"deliver_between":` + deliverBetween + `,"wrapped":` + wrapped + `,"tips":{"CAD":2.5},"courier_notes":` +

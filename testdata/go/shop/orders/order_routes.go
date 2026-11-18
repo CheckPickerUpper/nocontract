@@ -35,9 +35,10 @@ type Order struct {
 	CourierNotes   map[Courier]string `json:"courier_notes"`
 }
 
-// PlaceInput names the shopper and carries the order.
+// PlaceInput names the shopper and the store the order is placed with, and carries the order.
 type PlaceInput struct {
-	ShopperID int `path:"shopper_id"`
+	ShopperID int    `path:"shopper_id"`
+	Store     uint16 `query:"store"`
 	Body      Order
 }
 

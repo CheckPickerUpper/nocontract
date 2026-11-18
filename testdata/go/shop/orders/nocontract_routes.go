@@ -12,8 +12,10 @@ import (
 // NocontractRoutePlace answers one request to POST /shoppers/{shopper_id}/orders. Only the generated server calls it.
 func NocontractRoutePlace(request *http.Request) nocontract.Answer {
 	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(readShopperID int) nocontract.Answer {
-		return nocontract.Then(nocontract.Body(request, nocontractBodyOrder), func(readBody Order) nocontract.Answer {
-			return nocontractAnswerPlaceOutcome(Place(request.Context(), PlaceInput{ShopperID: readShopperID, Body: readBody}))
+		return nocontract.Then(nocontract.Unsigned[uint16](nocontract.Query(request, "store")), func(readStore uint16) nocontract.Answer {
+			return nocontract.Then(nocontract.Body(request, nocontractBodyOrder), func(readBody Order) nocontract.Answer {
+				return nocontractAnswerPlaceOutcome(Place(request.Context(), PlaceInput{ShopperID: readShopperID, Store: readStore, Body: readBody}))
+			})
 		})
 	})
 }

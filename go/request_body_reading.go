@@ -411,24 +411,28 @@ func whole[V any](value BodyValue, within numberRange, parse func(string) mo.Res
 // outside within.
 func decimalText[V any](value BodyValue, within numberRange, parse func(string) mo.Result[V]) BodyReading[V] {
 	return Next(value.token("a whole number written as a string", jsontext.KindString), func(token jsontext.Token) BodyReading[V] {
-		return mo.Fold(canonicalDecimal(token.String()), func(read string) BodyReading[V] {
-			return mo.Fold(parse(read), func(fitted V) BodyReading[V] { return Read[V]{Value: fitted} }, func(error) BodyReading[V] {
+		read := token.String()
+		return mo.Fold(decimalWhole(read, parse), func(parsed mo.Result[V]) BodyReading[V] {
+			return mo.Fold(parsed, func(fitted V) BodyReading[V] { return Read[V]{Value: fitted} }, func(error) BodyReading[V] {
 				return BodyRefused{Cause: BodyNumberOutside{Path: value.path, Read: strconv.Quote(read), Least: within.least, Most: within.most}}
 			})
 		}, func(error) BodyReading[V] {
-			return BodyRefused{Cause: BodyDecimalTextNotCanonical{Path: value.path, Read: token.String()}}
+			return BodyRefused{Cause: BodyDecimalTextNotCanonical{Path: value.path, Read: read}}
 		})
 	})
 }
 
-// canonicalDecimal is text when it is canonical decimal text: 0, or an optional - and a digit from
-// 1 to 9 followed by any digits.
-func canonicalDecimal(text string) mo.Option[string] {
+// decimalWhole is text, when it is canonical decimal text, as the whole number parse reads it into,
+// and none when it is not. Canonical decimal text is 0, or an optional - and a digit from 1 to 9
+// followed by any digits. Every reader of a whole number written as text reads it here, a body's
+// string and a path or query parameter alike. parse reads every canonical decimal text, so its
+// error is only that the number is outside its type.
+func decimalWhole[V any](text string, parse func(string) mo.Result[V]) mo.Option[mo.Result[V]] {
 	digits := strings.TrimPrefix(text, "-")
 	if text == "0" || (digits != "" && digits[0] != '0' && strings.Trim(digits, "0123456789") == "") {
-		return mo.Some(text)
+		return mo.Some(parse(text))
 	}
-	return mo.None[string]()
+	return mo.None[mo.Result[V]]()
 }
 
 // parsedSigned is read, a whole number in decimal, as the signed type I, refused with

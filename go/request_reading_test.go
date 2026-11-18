@@ -43,7 +43,7 @@ func TestAWholeNumberIsReadOnlyWhenItFitsItsFieldsType(t *testing.T) {
 	}{
 		{text: "255", want: nocontract.Read[uint8]{Value: 255}},
 		{text: "256", want: refusedQuery(`strconv.ParseUint: parsing "256": value out of range`)},
-		{text: "-1", want: refusedQuery(`strconv.ParseUint: parsing "-1": invalid syntax`)},
+		{text: "-1", want: refusedQuery(`strconv.ParseUint: parsing "-1": value out of range`)},
 	} {
 		if got := nocontract.Unsigned[uint8](queried(t, each.text)); got != each.want {
 			t.Errorf("%s was read as %#v; want %#v", each.text, got, each.want)

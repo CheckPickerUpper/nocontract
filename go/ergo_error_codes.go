@@ -562,3 +562,30 @@ func (failure BodyDecimalTextNotCanonical) Report(language messages.Language) er
 func (failure BodyDecimalTextNotCanonical) Causes() []error {
 	return nil
 }
+
+func (DecimalTextNotCanonical) ErrorCode() ergo.Code { return "NC-1136" }
+
+// DecimalTextNotCanonicalArguments holds the arguments DecimalTextNotCanonical's message names, in the order the message first names them.
+type DecimalTextNotCanonicalArguments struct {
+	Text string `json:"Text"`
+}
+
+// ReportArguments marks DecimalTextNotCanonicalArguments as the arguments of a report.
+func (DecimalTextNotCanonicalArguments) ReportArguments() {}
+
+// Report is DecimalTextNotCanonical's code, its message in language and the arguments the message names.
+func (failure DecimalTextNotCanonical) Report(language messages.Language) ergo.Report {
+	arguments := DecimalTextNotCanonicalArguments{Text: string(failure.Text)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "\""}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "\" is not a whole number written as canonical decimal text: an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1136", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Text}}}), Arguments: arguments}
+}
+
+// Causes is every error DecimalTextNotCanonical holds, then the causes of every failure it holds.
+func (failure DecimalTextNotCanonical) Causes() []error {
+	return nil
+}

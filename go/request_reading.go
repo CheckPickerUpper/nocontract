@@ -120,30 +120,41 @@ func fittedUnsigned[U unsignedWhole](whole uint64) mo.Option[U] {
 	return mo.None[U]()
 }
 
-// Signed is the part's text as the whole number type I its field holds, refused when it does not
-// fit I.
-func Signed[I signedWhole](text Text) Reading[I] {
-	return parsed(text, func(read string) mo.Result[I] {
-		return mo.Fold(mo.TupleToResult(strconv.ParseInt(read, 10, 64)), func(whole int64) mo.Result[I] {
-			return mo.Fold(fittedSigned[I](whole), mo.Ok[I], func(error) mo.Result[I] {
-				// The refusal strconv gives a number too large for the size it is asked to parse.
-				return mo.Err[I](&strconv.NumError{Func: "ParseInt", Num: read, Err: strconv.ErrRange})
-			})
-		}, mo.Err[I])
-	})
+// DecimalTextNotCanonical is a part's text where a whole number is read that is not canonical
+// decimal text.
+//
+//ergo:code NC-1136
+//ergo:message "{Text}" is not a whole number written as canonical decimal text: an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0.
+type DecimalTextNotCanonical struct {
+	Text string
 }
 
-// Unsigned is the part's text as the whole number type U at or above zero its field holds, refused
-// when it does not fit U.
+// Error is the failure's message in the source language.
+func (cause DecimalTextNotCanonical) Error() string {
+	return cause.Report(messages.Match("")).Message
+}
+
+// decimalParameter is read, a part's text, as the whole number parse reads it into, refused when it
+// is not canonical decimal text, and refused as strconv's parser refuses a number too large for the
+// size it is asked to parse when the number is outside its type.
+func decimalParameter[V any](read string, parse func(string) mo.Result[V], parser string) mo.Result[V] {
+	return mo.Fold(decimalWhole(read, parse), func(parsed mo.Result[V]) mo.Result[V] {
+		return mo.Fold(parsed, mo.Ok[V], func(error) mo.Result[V] {
+			return mo.Err[V](&strconv.NumError{Func: parser, Num: read, Err: strconv.ErrRange})
+		})
+	}, func(error) mo.Result[V] { return mo.Err[V](DecimalTextNotCanonical{Text: read}) })
+}
+
+// Signed is the part's canonical decimal text as the whole number type I its field holds, refused
+// when it is not canonical decimal text or does not fit I.
+func Signed[I signedWhole](text Text) Reading[I] {
+	return parsed(text, func(read string) mo.Result[I] { return decimalParameter(read, parsedSigned[I], "ParseInt") })
+}
+
+// Unsigned is the part's canonical decimal text as the whole number type U at or above zero its
+// field holds, refused when it is not canonical decimal text or does not fit U.
 func Unsigned[U unsignedWhole](text Text) Reading[U] {
-	return parsed(text, func(read string) mo.Result[U] {
-		return mo.Fold(mo.TupleToResult(strconv.ParseUint(read, 10, 64)), func(whole uint64) mo.Result[U] {
-			return mo.Fold(fittedUnsigned[U](whole), mo.Ok[U], func(error) mo.Result[U] {
-				// The refusal strconv gives a number too large for the size it is asked to parse.
-				return mo.Err[U](&strconv.NumError{Func: "ParseUint", Num: read, Err: strconv.ErrRange})
-			})
-		}, mo.Err[U])
-	})
+	return parsed(text, func(read string) mo.Result[U] { return decimalParameter(read, parsedUnsigned[U], "ParseUint") })
 }
 
 // Truth is the part's text as the boolean type B its field holds.

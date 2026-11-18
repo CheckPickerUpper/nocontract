@@ -338,7 +338,9 @@ not valid escaping. `AnswerNotWritten`
 | `map[string]T` | `Schema.Record(Schema.String, T)` |
 | named and unnamed structs | `Schema.Struct` |
 
-A path or query field is text, a whole number, a boolean or a string type with constants.
+A path or query field is text, a whole number, a boolean or a string type with constants. A whole
+number in a path or query is read only as canonical decimal text, whatever its width: `7` is taken,
+and `007`, `+7` and `-0` are refused.
 
 A 64-bit whole number travels in JSON as a string of its canonical decimal text, such as
 `"9007199254740993"`, as protobuf's JSON mapping carries `int64` and `uint64`: a JavaScript

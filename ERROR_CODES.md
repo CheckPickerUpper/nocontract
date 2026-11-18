@@ -1522,3 +1522,16 @@ Message: `{Path} holds "{Read}", which is not a whole number written as canonica
 | --- | --- |
 | `Path` | `string` |
 | `Read` | `string` |
+
+## NC-1136 DecimalTextNotCanonical
+
+DecimalTextNotCanonical is a part's text where a whole number is read that is not canonical
+decimal text.
+
+Declared in `go/request_reading.go`.
+
+Message: `"{Text}" is not a whole number written as canonical decimal text: an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0.`
+
+| Field | Type |
+| --- | --- |
+| `Text` | `string` |

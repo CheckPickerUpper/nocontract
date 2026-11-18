@@ -148,6 +148,48 @@ func TestAWholeNumberPastWhatJavaScriptHoldsIsAnsweredAsDecimalText(t *testing.T
 	}
 }
 
+// Every whole-number parameter, a 64-bit path segment and a 16-bit query parameter alike, is read
+// only as canonical decimal text: a value in range is taken, and a leading zero, a plus sign or
+// minus zero is refused with the text read.
+func TestAWholeNumberParameterIsReadOnlyAsCanonicalDecimalText(t *testing.T) {
+	served := shopServer(t, []nocontract.Layer{})
+	refused := func(part, name, read string) received {
+		return received{status: 400, allow: "", header: "", body: `{"_tag":"RequestRefused","code":"NC-1001","part":"` + part + `","name":"` + name +
+			`","reason":"\"` + read + `\" is not a whole number written as canonical decimal text: an optional -, then 0 or a digit from 1 to 9 followed ` +
+			`by any digits, and never -0."}`}
+	}
+	const order = `{"items":[],"gift_note":null,"deliver_between":["2026-12-01T09:00:00Z","2026-12-02T09:00:00Z"],"wrapped":false,"tips":{},"courier_notes":{}}`
+	for _, each := range []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		want   received
+	}{
+		{
+			name: "a 64-bit shopper in range", method: http.MethodGet, path: "/shoppers/7/balance?currency=CAD", body: "",
+			want: received{status: 200, allow: "", header: "", body: `{"_tag":"BalanceRead","balance":{"cents":"1250","currency":"CAD"},"overdraft":null,` +
+				`"changed":"2026-11-14T12:00:00Z","note":"first top-up"}`},
+		},
+		{name: "a 64-bit shopper with a leading zero", method: http.MethodGet, path: "/shoppers/007/balance?currency=CAD", body: "", want: refused("path", "shopper_id", "007")},
+		{name: "a 64-bit shopper with a plus sign", method: http.MethodGet, path: "/shoppers/+7/balance?currency=CAD", body: "", want: refused("path", "shopper_id", "+7")},
+		{name: "a 64-bit shopper of minus zero", method: http.MethodGet, path: "/shoppers/-0/balance?currency=CAD", body: "", want: refused("path", "shopper_id", "-0")},
+		{
+			name: "a 16-bit store in range", method: http.MethodPost, path: "/shoppers/7/orders?store=3", body: order,
+			want: received{status: 201, allow: "", header: "", body: `{"_tag":"OrderPlaced","order":` + order + `}`},
+		},
+		{name: "a 16-bit store with a leading zero", method: http.MethodPost, path: "/shoppers/7/orders?store=007", body: order, want: refused("query", "store", "007")},
+		{name: "a 16-bit store with a plus sign", method: http.MethodPost, path: "/shoppers/7/orders?store=%2B7", body: order, want: refused("query", "store", "+7")},
+		{name: "a 16-bit store of minus zero", method: http.MethodPost, path: "/shoppers/7/orders?store=-0", body: order, want: refused("query", "store", "-0")},
+	} {
+		t.Run(each.name, func(t *testing.T) {
+			if got := send(t, served, each.method, each.path, "shopper-7", each.body); got != each.want {
+				t.Errorf("%s %s was answered\n%+v\nwant\n%+v", each.method, each.path, got, each.want)
+			}
+		})
+	}
+}
+
 // scopeUnknown is why closedGuard cannot check a route: the scope its guard line names.
 type scopeUnknown struct{ Scope string }
 
