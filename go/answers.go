@@ -37,9 +37,14 @@ type Failure struct {
 	Code   string
 }
 
+// AnswerMarshalers is the marshaler of each Go type an answer holds that encoding/json writes
+// otherwise than the description declares, such as a 64-bit whole number, which it writes as decimal
+// text. Generated code writes the list for every answer, empty when the answer holds no such type.
+type AnswerMarshalers []*jsonv2.Marshalers
+
 // Succeeded is a success member's answer, member's fields written after its tag, each Go type a
 // marshaler of written takes written by it.
-func Succeeded[M any](success Success, member M, written ...*jsonv2.Marshalers) Answer {
+func Succeeded[M any](success Success, member M, written AnswerMarshalers) Answer {
 	return Answer{
 		status: success.Status, tag: success.Tag, code: mo.None[string](),
 		body: encoded(taggedSuccess[M]{Tag: success.Tag, Fields: member}, written),
@@ -48,7 +53,7 @@ func Succeeded[M any](success Success, member M, written ...*jsonv2.Marshalers) 
 
 // Failed is a failure member's answer, member's fields written after its tag and code, each Go type
 // a marshaler of written takes written by it.
-func Failed[M any](failure Failure, member M, written ...*jsonv2.Marshalers) Answer {
+func Failed[M any](failure Failure, member M, written AnswerMarshalers) Answer {
 	return Answer{
 		status: failure.Status, tag: failure.Tag, code: mo.Some(failure.Code),
 		body: encoded(taggedFailure[M]{Tag: failure.Tag, Code: failure.Code, Fields: member}, written),
@@ -57,7 +62,7 @@ func Failed[M any](failure Failure, member M, written ...*jsonv2.Marshalers) Ans
 
 // encoded is value as encoding/json writes it with written, which writes an embedded member's
 // fields beside the tag and code in the one object it encodes.
-func encoded[V any](value V, written []*jsonv2.Marshalers) mo.Result[[]byte] {
+func encoded[V any](value V, written AnswerMarshalers) mo.Result[[]byte] {
 	return mo.TupleToResult(jsonv2.Marshal(value, json.DefaultOptionsV1(), jsonv2.WithMarshalers(jsonv2.JoinMarshalers(written...))))
 }
 

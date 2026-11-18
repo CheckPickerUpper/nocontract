@@ -23,7 +23,7 @@ func NocontractRoutePlace(request *http.Request) nocontract.Answer {
 func nocontractAnswerPlaceOutcome(outcome PlaceOutcome) nocontract.Answer {
 	switch member := outcome.(type) {
 	case OrderPlaced:
-		return nocontract.Succeeded(nocontract.Success{Status: 201, Tag: "OrderPlaced"}, member)
+		return nocontract.Succeeded(nocontract.Success{Status: 201, Tag: "OrderPlaced"}, member, nocontract.AnswerMarshalers{})
 	case nil:
 	}
 	return nocontract.NoOutcome()

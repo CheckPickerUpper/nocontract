@@ -43,15 +43,18 @@ func TestAnAnswerIsOneObjectOfItsTagCodeAndFields(t *testing.T) {
 		status int
 		body   string
 	}{
-		{answer: Succeeded(Success{Status: http.StatusAccepted, Tag: "Queued"}, queued{Reference: "r1"}), status: http.StatusAccepted, body: `{"_tag":"Queued","reference":"r1"}`},
-		{answer: Succeeded(Success{Status: http.StatusOK, Tag: "Empty"}, emptied{}), status: http.StatusOK, body: `{"_tag":"Empty"}`},
 		{
-			answer: Failed(Failure{Status: http.StatusNotFound, Tag: "Missing", Code: "AB-1001"}, missing{ID: 7}), status: http.StatusNotFound,
+			answer: Succeeded(Success{Status: http.StatusAccepted, Tag: "Queued"}, queued{Reference: "r1"}, AnswerMarshalers{}), status: http.StatusAccepted,
+			body: `{"_tag":"Queued","reference":"r1"}`,
+		},
+		{answer: Succeeded(Success{Status: http.StatusOK, Tag: "Empty"}, emptied{}, AnswerMarshalers{}), status: http.StatusOK, body: `{"_tag":"Empty"}`},
+		{
+			answer: Failed(Failure{Status: http.StatusNotFound, Tag: "Missing", Code: "AB-1001"}, missing{ID: 7}, AnswerMarshalers{}), status: http.StatusNotFound,
 			body: `{"_tag":"Missing","code":"AB-1001","id":7}`,
 		},
-		{answer: Succeeded(Success{Status: http.StatusOK, Tag: "Custom"}, custom{ID: 3}), status: http.StatusOK, body: `{"_tag":"Custom","id":3}`},
+		{answer: Succeeded(Success{Status: http.StatusOK, Tag: "Custom"}, custom{ID: 3}, AnswerMarshalers{}), status: http.StatusOK, body: `{"_tag":"Custom","id":3}`},
 		{
-			answer: Succeeded(Success{Status: http.StatusOK, Tag: "Fed"}, fed{Feed: make(chan int)}), status: http.StatusInternalServerError,
+			answer: Succeeded(Success{Status: http.StatusOK, Tag: "Fed"}, fed{Feed: make(chan int)}, AnswerMarshalers{}), status: http.StatusInternalServerError,
 			body: `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"Fed","reason":"json: unsupported type: chan int"}`,
 		},
 		{answer: NoOutcome(), status: http.StatusInternalServerError, body: `{"_tag":"AnswerNotWritten","code":"NC-1002","answer":"","reason":"the route answered no outcome"}`},

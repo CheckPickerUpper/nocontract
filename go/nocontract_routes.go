@@ -80,13 +80,13 @@ func (MethodNotDeclared) isSharedFailure() {}
 func NocontractAnswerSharedFailure(outcome SharedFailure) Answer {
 	switch member := outcome.(type) {
 	case RequestRefused:
-		return Failed(Failure{Status: 400, Tag: "RequestRefused", Code: "NC-1001"}, member)
+		return Failed(Failure{Status: 400, Tag: "RequestRefused", Code: "NC-1001"}, member, AnswerMarshalers{})
 	case AnswerNotWritten:
-		return Failed(Failure{Status: 500, Tag: "AnswerNotWritten", Code: "NC-1002"}, member)
+		return Failed(Failure{Status: 500, Tag: "AnswerNotWritten", Code: "NC-1002"}, member, AnswerMarshalers{})
 	case RouteNotFound:
-		return Failed(Failure{Status: 404, Tag: "RouteNotFound", Code: "NC-1069"}, member)
+		return Failed(Failure{Status: 404, Tag: "RouteNotFound", Code: "NC-1069"}, member, AnswerMarshalers{})
 	case MethodNotDeclared:
-		return Failed(Failure{Status: 405, Tag: "MethodNotDeclared", Code: "NC-1070"}, member)
+		return Failed(Failure{Status: 405, Tag: "MethodNotDeclared", Code: "NC-1070"}, member, AnswerMarshalers{})
 	case nil:
 	}
 	return NoOutcome()

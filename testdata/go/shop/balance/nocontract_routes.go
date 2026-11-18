@@ -20,11 +20,11 @@ func NocontractRouteReadBalance(receiver Ledger, request *http.Request) nocontra
 func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
 	switch member := outcome.(type) {
 	case BalanceRead:
-		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "BalanceRead"}, member, nocontract.SignedText[int](), nocontract.NullableValue[Money]())
+		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "BalanceRead"}, member, nocontract.AnswerMarshalers{nocontract.SignedText[int](), nocontract.NullableValue[Money]()})
 	case ShopperNotFound:
-		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member, nocontract.SignedText[int]())
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member, nocontract.AnswerMarshalers{nocontract.SignedText[int]()})
 	case BalanceNotOpened:
-		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "BalanceNotOpened", Code: "SH-1003"}, member)
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "BalanceNotOpened", Code: "SH-1003"}, member, nocontract.AnswerMarshalers{})
 	case nil:
 	}
 	return nocontract.NoOutcome()
@@ -42,11 +42,11 @@ func NocontractRouteTopUp(request *http.Request) nocontract.Answer {
 func nocontractAnswerTopUpOutcome(outcome TopUpOutcome) nocontract.Answer {
 	switch member := outcome.(type) {
 	case ShopperNotFound:
-		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member, nocontract.SignedText[int]())
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member, nocontract.AnswerMarshalers{nocontract.SignedText[int]()})
 	case TopUpQueued:
-		return nocontract.Succeeded(nocontract.Success{Status: 202, Tag: "TopUpQueued"}, member)
+		return nocontract.Succeeded(nocontract.Success{Status: 202, Tag: "TopUpQueued"}, member, nocontract.AnswerMarshalers{})
 	case TopUpRefused:
-		return nocontract.Failed(nocontract.Failure{Status: 409, Tag: "TopUpRefused", Code: "SH-1002"}, member)
+		return nocontract.Failed(nocontract.Failure{Status: 409, Tag: "TopUpRefused", Code: "SH-1002"}, member, nocontract.AnswerMarshalers{})
 	case nil:
 	}
 	return nocontract.NoOutcome()

@@ -224,14 +224,15 @@ func writtenMarshaler(written serverplan.WrittenType, names *imports) string {
 	return ""
 }
 
-// memberWritten is the member answered by the generated file, after the marshaler of each Go type
-// its answer holds that encoding/json writes otherwise than the description declares.
+// memberWritten is the member answered by the generated file, then the list of the marshaler of
+// each Go type its answer holds that encoding/json writes otherwise than the description declares,
+// written even when it is empty.
 func memberWritten(member serverplan.Member, names *imports) string {
-	arguments := []string{"member"}
+	marshalers := []string{}
 	for _, written := range member.Written {
-		arguments = append(arguments, writtenMarshaler(written, names))
+		marshalers = append(marshalers, writtenMarshaler(written, names))
 	}
-	return strings.Join(arguments, ", ")
+	return "member, " + names.runtime("AnswerMarshalers") + "{" + strings.Join(marshalers, ", ") + "}"
 }
 
 // outcomeFunction is the generated function that answers a route outcome's members.
