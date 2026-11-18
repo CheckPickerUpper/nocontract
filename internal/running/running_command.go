@@ -420,7 +420,8 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 		}
 		switch assembled := assembling.Assemble(assembling.Request{Declared: read.Declared, Refused: read.Refused}).(type) {
 		case assembling.APIAssembled:
-			return mo.Fold(renderedFiles(assembled.API, read.Plan, filepath.Join(directory, project.TypeScript), existing), finish,
+			paths := projectPaths{projectFile: projectFile, typeScript: filepath.Join(directory, project.TypeScript)}
+			return mo.Fold(renderedFiles(assembled.API, read.Plan, paths, existing), finish,
 				func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
 		case assembling.APIRefused:
 			return DeclarationsRefused{Refusals: assembled.Refusals}
@@ -430,12 +431,12 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 	}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
 }
 
-// renderedFiles is the TypeScript file, each package's Go file, and every generated Go file of a
-// package that no longer declares a route, which must go.
-func renderedFiles(api description.API, plan serverplan.Plan, typeScript string, existing map[string][]byte) mo.Result[[]generatedFile] {
-	return mo.Fold(goFiles(plan.Packages), func(served []generatedFile) mo.Result[[]generatedFile] {
+// renderedFiles is the TypeScript file, each package's Go file, the test of them all, and every
+// generated Go file this run no longer writes, which must go.
+func renderedFiles(api description.API, plan serverplan.Plan, paths projectPaths, existing map[string][]byte) mo.Result[[]generatedFile] {
+	return mo.Fold(servedFiles(plan.Packages, paths.projectFile), func(served []generatedFile) mo.Result[[]generatedFile] {
 		// Every existing generated file goes unless this run writes it again.
-		contents := map[string]mo.Option[[]byte]{typeScript: mo.Some(effect.Render(api))}
+		contents := map[string]mo.Option[[]byte]{paths.typeScript: mo.Some(effect.Render(api))}
 		for path := range existing {
 			contents[path] = mo.None[[]byte]()
 		}

@@ -6,16 +6,42 @@ package serverplan
 
 import (
 	"path/filepath"
+	"slices"
 
 	"github.com/CheckPickerUpper/nocontract/description"
 )
 
-// FileName is the Go file written into each package that declares a route or a guard's refusal.
-const FileName = "nocontract_routes.go"
+// The Go files NoContract writes into a project's packages.
+const (
+	// FileName is the Go file written into each package that declares a route or a guard's refusal.
+	FileName = "nocontract_routes.go"
+	// FilesTestFileName is the test written into the package whose folder sorts first among those
+	// given a FileName, which fails while any generated file differs from what generate writes.
+	FilesTestFileName = "nocontract_files_test.go"
+)
+
+// GeneratedFileNames is the name of every Go file NoContract writes.
+func GeneratedFileNames() []string {
+	return []string{FileName, FilesTestFileName}
+}
+
+// FilesTest is the test written into one package: the package's name and the project file's path
+// from the package's folder, separated by slashes.
+type FilesTest struct {
+	PackageName string
+	ProjectFile string
+}
 
 // NoContractPath is the import path of the Go package the generated code is built from, whose own
 // failures every route can answer.
 const NoContractPath = "github.com/CheckPickerUpper/nocontract/go"
+
+// CheckingPath is the import path of the package whose RequireCurrent the generated test calls.
+const CheckingPath = "github.com/CheckPickerUpper/nocontract/checking"
+
+// CheckingPackage is the name of the Go package at CheckingPath, which the generated test refers to
+// it by.
+const CheckingPackage = "checking"
 
 // NoContractPackage is the name of the Go package at NoContractPath, which every generated file
 // refers to it by.
@@ -41,7 +67,7 @@ func (WrittenFile) isSourceFile()   {}
 
 // SourceFileAt is who wrote the Go file at path.
 func SourceFileAt(path string) SourceFile {
-	if filepath.Base(path) == FileName {
+	if slices.Contains(GeneratedFileNames(), filepath.Base(path)) {
 		return GeneratedFile{}
 	}
 	return WrittenFile{}

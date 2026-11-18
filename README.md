@@ -193,7 +193,9 @@ go tool nocontract check      # exits 1 when a file differs from what generate w
 ```
 
 `generate` writes `nocontract_routes.go` into each package that declares a route or a guard's
-refusal, and the TypeScript file. Run `check` wherever your other checks run.
+refusal, and the TypeScript file. It also writes `nocontract_files_test.go` into the first of those
+packages, in folder order, so `go test ./...` fails while any generated file differs from what
+`generate` writes, listing each one. `check` runs the same comparison on its own.
 
 ## Serving
 
