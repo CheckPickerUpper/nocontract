@@ -142,6 +142,17 @@ type ProjectUnreadable struct {
 //ergo:message Go could not load the packages holding routes.
 type PackagesNotLoaded struct{ Errors []error }
 
+// RuntimeNotListed is a project for which Go listed no NoContract runtime package. When go list
+// exits with an error, such as for a go.mod that needs updating, go/packages reading dependencies
+// from export data drops that error and returns no package at all.
+//
+//ergo:code NC-1130
+//ergo:message Go listed no NoContract runtime package for the project in {Directory}; run go list ./... there to see why.
+type RuntimeNotListed struct{ Directory string }
+
+// Error is the failure's message in the source language.
+func (missing RuntimeNotListed) Error() string { return missing.Report(messages.Match("")).Message }
+
 // FileNotWritten is a generate that could not write or delete one file.
 //
 //ergo:code NC-1039
@@ -495,7 +506,7 @@ func loadPackages(ctx context.Context, directory string, patterns []string, exis
 					return outcome.Ok(loadedProject{packages: loaded, sizes: each.TypesSizes})
 				}
 			}
-			return outcome.Err[loadedProject](RuntimeNotFound{})
+			return outcome.Err[loadedProject](RuntimeNotListed{Directory: directory})
 		}, outcome.Err[loadedProject])
 }
 

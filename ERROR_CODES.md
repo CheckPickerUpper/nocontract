@@ -1438,3 +1438,17 @@ Message: `These files are where nocontract generate writes its own, and NoContra
 | Field | Type |
 | --- | --- |
 | `Paths` | `[]string` |
+
+## NC-1130 RuntimeNotListed
+
+RuntimeNotListed is a project for which Go listed no NoContract runtime package. When go list
+exits with an error, such as for a go.mod that needs updating, go/packages reading dependencies
+from export data drops that error and returns no package at all.
+
+Declared in `internal/running/running_command.go`.
+
+Message: `Go listed no NoContract runtime package for the project in {Directory}; run go list ./... there to see why.`
+
+| Field | Type |
+| --- | --- |
+| `Directory` | `string` |

@@ -1,6 +1,7 @@
 package running_test
 
 import (
+	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/CheckPickerUpper/outcome"
 
 	"github.com/CheckPickerUpper/nocontract/internal/running"
+	"github.com/CheckPickerUpper/nocontract/internal/scratchproject"
 )
 
 // project is the absolute path of the project file of the example project named.
@@ -156,5 +158,21 @@ func wrongDirectiveRefusals() []string {
 		`115:1: NC-1102 The line //nocontract:guard Staff on a handler is not one guard name and one argument.`,
 		`121:1: NC-1103 staff in the line //nocontract:guard staff admin is not an exported Go identifier, the form a guard's name takes.`,
 		`128:1: NC-1104 The line //nocontract:guard Staff owner is a second guard line; a declaration names one guard.`,
+	}
+}
+
+// A project whose go.mod requires an older release of a module than NoContract does needs its
+// go.mod updated, so go list lists nothing there, and check names the project's folder.
+func TestAProjectWhoseGoModNeedsUpdatingIsNamedByItsFolder(t *testing.T) {
+	t.Parallel()
+	directory := scratchproject.Ledger(t, filepath.Join("..", ".."))
+	checkout := scratchproject.PathOrStop(t, "finding the checkout", outcome.TupleToResult(filepath.Abs(filepath.Join("..", ".."))))
+	scratchproject.WriteFile(t, directory, "go.mod", []byte("module example.com/shop\n\ngo 1.27.4\n\nrequire (\n\tgithub.com/CheckPickerUpper/nocontract v0.0.0\n"+
+		"\tgithub.com/fatih/structtag v1.1.0 // indirect\n)\n\nreplace github.com/CheckPickerUpper/nocontract => "+checkout+"\n"))
+	checked := runOn(t, "check", directory)
+	notLoaded, isNotLoaded := checked.(running.PackagesNotLoaded)
+	want := running.RuntimeNotListed{Directory: directory}
+	if !isNotLoaded || !slices.ContainsFunc(notLoaded.Errors, func(cause error) bool { return errors.Is(cause, want) }) {
+		t.Fatalf("check answered %#v; want %#v", checked, want)
 	}
 }

@@ -454,3 +454,30 @@ func (failure FilesNotGenerated) Report(language messages.Language) ergo.Report 
 func (failure FilesNotGenerated) Causes() []error {
 	return nil
 }
+
+func (RuntimeNotListed) ErrorCode() ergo.Code { return "NC-1130" }
+
+// RuntimeNotListedArguments holds the arguments RuntimeNotListed's message names, in the order the message first names them.
+type RuntimeNotListedArguments struct {
+	Directory string `json:"Directory"`
+}
+
+// ReportArguments marks RuntimeNotListedArguments as the arguments of a report.
+func (RuntimeNotListedArguments) ReportArguments() {}
+
+// Report is RuntimeNotListed's code, its message in language and the arguments the message names.
+func (failure RuntimeNotListed) Report(language messages.Language) ergo.Report {
+	arguments := RuntimeNotListedArguments{Directory: string(failure.Directory)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "Go listed no NoContract runtime package for the project in "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "; run go list ./... there to see why."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1130", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Directory}}}), Arguments: arguments}
+}
+
+// Causes is every error RuntimeNotListed holds, then the causes of every failure it holds.
+func (failure RuntimeNotListed) Causes() []error {
+	return nil
+}
