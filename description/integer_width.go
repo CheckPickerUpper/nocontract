@@ -35,10 +35,13 @@ type NumberWire struct{}
 // DecimalTextWire is a whole number written as a JSON string holding its canonical decimal text:
 // an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0. A float64
 // holds no whole number past 2^53 exactly, so 64-bit widths travel as text, as protobuf's JSON
-// mapping carries int64 and uint64.
+// mapping carries int64 and uint64. Pattern is the regular expression taking exactly the canonical
+// decimal text of the numbers the width holds, which every client's schema states.
 //
 //ergo:not-an-error
-type DecimalTextWire struct{}
+type DecimalTextWire struct {
+	Pattern string
+}
 
 func (NumberWire) isIntegerWire()      {}
 func (DecimalTextWire) isIntegerWire() {}
@@ -150,7 +153,9 @@ func (Signed16) Wire() IntegerWire { return NumberWire{} }
 func (Signed32) Wire() IntegerWire { return NumberWire{} }
 
 // Wire is decimal text.
-func (Signed64) Wire() IntegerWire { return DecimalTextWire{} }
+func (width Signed64) Wire() IntegerWire {
+	return DecimalTextWire{Pattern: decimalTextPattern(width.Least(), width.Most())}
+}
 
 // Wire is a JSON number.
 func (Unsigned8) Wire() IntegerWire { return NumberWire{} }
@@ -162,4 +167,6 @@ func (Unsigned16) Wire() IntegerWire { return NumberWire{} }
 func (Unsigned32) Wire() IntegerWire { return NumberWire{} }
 
 // Wire is decimal text.
-func (Unsigned64) Wire() IntegerWire { return DecimalTextWire{} }
+func (width Unsigned64) Wire() IntegerWire {
+	return DecimalTextWire{Pattern: decimalTextPattern(width.Least(), width.Most())}
+}

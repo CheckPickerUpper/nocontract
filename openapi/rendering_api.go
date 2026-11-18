@@ -229,14 +229,13 @@ func fieldSchema(shape description.Schema) schema {
 // widthSchema is a whole number of width as its wire carries it: a JSON number from its least to its
 // most value, or a string of decimal text whose pattern holds exactly that range.
 func widthSchema(width description.IntegerWidth) schema {
-	switch width.Wire().(type) {
+	switch wire := width.Wire().(type) {
 	case description.NumberWire:
 		return numberWidthSchema(width)
 	case description.DecimalTextWire:
-		pattern := decimalTextPattern(width.Least(), width.Most())
 		return outcome.FoldOption(decimalTextFormat(width), func(format string) schema {
-			return formattedDecimalTextSchema{Type: "string", Format: format, Pattern: pattern}
-		}, func() schema { return decimalTextSchema{Type: "string", Pattern: pattern} })
+			return formattedDecimalTextSchema{Type: "string", Format: format, Pattern: wire.Pattern}
+		}, func() schema { return decimalTextSchema{Type: "string", Pattern: wire.Pattern} })
 	case nil:
 	}
 	return neverSchema{Not: struct{}{}}
