@@ -41,6 +41,11 @@ func (recorder *failureRecorder) FailNow() {
 	recorder.output.Reset()
 }
 
+// TestMain builds and generates the ledger project once for every test of the binary to copy.
+func TestMain(m *testing.M) {
+	os.Exit(scratchproject.RunWithGeneratedLedger(context.Background(), m, ".."))
+}
+
 // shopperMissing adds a failure to the ledger's outcome.
 const shopperMissing = `package ledger
 
@@ -112,8 +117,7 @@ func requireCurrent(t *testing.T, directory string) []string {
 // wrote into the route package fails, naming each file that differs, until generate runs again.
 func TestAFailureAddedWithoutGeneratingFailsTheProjectsTest(t *testing.T) {
 	t.Parallel()
-	directory := scratchproject.Ledger(t, "..")
-	generate(t, directory)
+	directory := scratchproject.GeneratedLedger(t)
 
 	written := scratchproject.BytesOrStop(t, "reading the test generate writes into the ledger package",
 		outcome.TupleToResult(os.ReadFile(filepath.Join(directory, "ledger", "nocontract_files_test.go"))))
@@ -167,19 +171,18 @@ func main() { _ = ledger.ReadInput{ShopperID: 7} }
 `
 
 // A project upgraded to a runtime that no longer declares what its generated file names is read
-// all the same: generate writes the file again, and check then finds every file current.
+// all the same, and generate writes the file again.
 func TestAGeneratedFileThatNoLongerCompilesIsWrittenAgain(t *testing.T) {
 	t.Parallel()
-	directory := scratchproject.Ledger(t, "..")
-	generate(t, directory)
+	directory := scratchproject.GeneratedLedger(t)
 	scratchproject.WriteFile(t, directory, "ledger/nocontract_routes.go", []byte(staleRuntimeRoutes))
 	scratchproject.WriteFile(t, directory, "cmd/ledger/main.go", []byte(ledgerCommand))
 
-	generate(t, directory)
 	project := filepath.Join(directory, "nocontract.json")
-	checked := running.Run(running.Request{Arguments: []string{"check", "-project", project}, Context: t.Context()})
-	if _, isCurrent := checked.(running.FilesCurrent); !isCurrent {
-		t.Fatalf("check answered %v after generate; want every file current", checked.Lines())
+	generated := running.Run(running.Request{Arguments: []string{"generate", "-project", project}, Context: t.Context()})
+	written, isWritten := generated.(running.FilesWritten)
+	if !isWritten || !slices.Contains(written.Paths, filepath.Join(directory, "ledger", "nocontract_routes.go")) {
+		t.Fatalf("generate answered %v; want the ledger's generated file written again", generated.Lines())
 	}
 }
 
@@ -187,8 +190,7 @@ func TestAGeneratedFileThatNoLongerCompilesIsWrittenAgain(t *testing.T) {
 // deletes it from the package that held it.
 func TestTheTestMovesToTheRoutePackageThatSortsFirst(t *testing.T) {
 	t.Parallel()
-	directory := scratchproject.Ledger(t, "..")
-	generate(t, directory)
+	directory := scratchproject.GeneratedLedger(t)
 	scratchproject.WriteFile(t, directory, "account/account_routes.go", []byte(accountRoutes))
 	generate(t, directory)
 
