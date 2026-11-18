@@ -3,19 +3,16 @@
 package balance
 
 import (
-	json "encoding/json"
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
+	mo "github.com/samber/mo"
 	http "net/http"
 )
 
 // NocontractRouteReadBalance answers one request to GET /shoppers/{shopper_id}/balance. Only the generated server calls it.
 func NocontractRouteReadBalance(receiver Ledger, request *http.Request) nocontract.Answer {
-	var input ReadInput
-	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(read int) nocontract.Answer {
-		input.ShopperID = read
-		return nocontract.Then(nocontract.Literal[Currency](nocontract.Query(request, "currency"), "CAD", "USD"), func(read Currency) nocontract.Answer {
-			input.Currency = read
-			return nocontractAnswerReadOutcome(receiver.ReadBalance(request.Context(), input))
+	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(readShopperID int) nocontract.Answer {
+		return nocontract.Then(nocontract.Literal[Currency](nocontract.Query(request, "currency"), "CAD", "USD"), func(readCurrency Currency) nocontract.Answer {
+			return nocontractAnswerReadOutcome(receiver.ReadBalance(request.Context(), ReadInput{ShopperID: readShopperID, Currency: readCurrency}))
 		})
 	})
 }
@@ -35,11 +32,9 @@ func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
 
 // NocontractRouteTopUp answers one request to POST /shoppers/{shopper_id}/top-ups. Only the generated server calls it.
 func NocontractRouteTopUp(request *http.Request) nocontract.Answer {
-	var input TopUpInput
-	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(read int) nocontract.Answer {
-		input.ShopperID = read
-		return nocontract.Then(nocontract.Body(request, func(decoder *json.Decoder) error { return decoder.Decode(&input.Body) }), func(struct{}) nocontract.Answer {
-			return nocontractAnswerTopUpOutcome(TopUp(request.Context(), input))
+	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(readShopperID int) nocontract.Answer {
+		return nocontract.Then(nocontract.Body(request, nocontractBodyTopUp), func(readBody nocontractBodyTopUpStruct) nocontract.Answer {
+			return nocontractAnswerTopUpOutcome(TopUp(request.Context(), TopUpInput{ShopperID: readShopperID, Body: readBody}))
 		})
 	})
 }
@@ -55,4 +50,66 @@ func nocontractAnswerTopUpOutcome(outcome TopUpOutcome) nocontract.Answer {
 	case nil:
 	}
 	return nocontract.NoOutcome()
+}
+
+// nocontractBodyMoneyMembers holds each member nocontractBodyMoney has read.
+type nocontractBodyMoneyMembers struct {
+	Cents    mo.Option[int]
+	Currency mo.Option[Currency]
+}
+
+// nocontractBodyMoney reads a JSON object holding each field of the struct it returns once.
+func nocontractBodyMoney(value nocontract.BodyValue) nocontract.BodyReading[Money] {
+	return nocontract.Next(nocontract.BodyObject(value, nocontractBodyMoneyMembers{Cents: mo.None[int](), Currency: mo.None[Currency]()}, nocontractBodyMoneyMember), func(members nocontractBodyMoneyMembers) nocontract.BodyReading[Money] {
+		return nocontract.Next(nocontract.Present(value, "cents", members.Cents), func(readCents int) nocontract.BodyReading[Money] {
+			return nocontract.Next(nocontract.Present(value, "currency", members.Currency), func(readCurrency Currency) nocontract.BodyReading[Money] {
+				return nocontract.Read[Money]{Value: Money{Cents: readCents, Currency: readCurrency}}
+			})
+		})
+	})
+}
+
+// nocontractBodyMoneyMember reads one member of the object nocontractBodyMoney reads.
+func nocontractBodyMoneyMember(members nocontractBodyMoneyMembers, member nocontract.BodyMember) nocontract.BodyReading[nocontractBodyMoneyMembers] {
+	switch member.Name {
+	case "cents":
+		return nocontract.Once(member, members.Cents, nocontract.BodySigned[int], func(read int) nocontractBodyMoneyMembers {
+			return nocontractBodyMoneyMembers{Cents: mo.Some(read), Currency: members.Currency}
+		})
+	case "currency":
+		return nocontract.Once(member, members.Currency, nocontract.BodyLiteral[Currency]("CAD", "USD"), func(read Currency) nocontractBodyMoneyMembers {
+			return nocontractBodyMoneyMembers{Cents: members.Cents, Currency: mo.Some(read)}
+		})
+	}
+	return nocontract.Unknown[nocontractBodyMoneyMembers](member)
+}
+
+// nocontractBodyTopUpStruct is the struct nocontractBodyTopUp reads.
+type nocontractBodyTopUpStruct = struct {
+	Amount Money "json:\"amount\""
+}
+
+// nocontractBodyTopUpMembers holds each member nocontractBodyTopUp has read.
+type nocontractBodyTopUpMembers struct {
+	Amount mo.Option[Money]
+}
+
+// nocontractBodyTopUp reads a JSON object holding each field of the struct it returns once.
+func nocontractBodyTopUp(value nocontract.BodyValue) nocontract.BodyReading[nocontractBodyTopUpStruct] {
+	return nocontract.Next(nocontract.BodyObject(value, nocontractBodyTopUpMembers{Amount: mo.None[Money]()}, nocontractBodyTopUpMember), func(members nocontractBodyTopUpMembers) nocontract.BodyReading[nocontractBodyTopUpStruct] {
+		return nocontract.Next(nocontract.Present(value, "amount", members.Amount), func(readAmount Money) nocontract.BodyReading[nocontractBodyTopUpStruct] {
+			return nocontract.Read[nocontractBodyTopUpStruct]{Value: nocontractBodyTopUpStruct{Amount: readAmount}}
+		})
+	})
+}
+
+// nocontractBodyTopUpMember reads one member of the object nocontractBodyTopUp reads.
+func nocontractBodyTopUpMember(members nocontractBodyTopUpMembers, member nocontract.BodyMember) nocontract.BodyReading[nocontractBodyTopUpMembers] {
+	switch member.Name {
+	case "amount":
+		return nocontract.Once(member, members.Amount, nocontractBodyMoney, func(read Money) nocontractBodyTopUpMembers {
+			return nocontractBodyTopUpMembers{Amount: mo.Some(read)}
+		})
+	}
+	return nocontract.Unknown[nocontractBodyTopUpMembers](member)
 }

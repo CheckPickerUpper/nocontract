@@ -324,16 +324,10 @@ type TextKind interface{ isTextKind() }
 //ergo:not-an-error
 type TextAsIs struct{}
 
-// TextSigned is text read as a whole number that fits the field's signed integer type.
+// TextWhole is text read as a whole number that fits the field's integer type, whose sign is Sign.
 //
 //ergo:not-an-error
-type TextSigned struct{}
-
-// TextUnsigned is text read as a whole number at or above zero that fits the field's unsigned
-// integer type.
-//
-//ergo:not-an-error
-type TextUnsigned struct{}
+type TextWhole struct{ Sign WholeSign }
 
 // TextTruth is text read as a boolean.
 //
@@ -345,13 +339,33 @@ type TextTruth struct{}
 //ergo:not-an-error
 type TextLiteral struct{ Values []string }
 
-func (TextAsIs) isTextKind()     {}
-func (TextSigned) isTextKind()   {}
-func (TextUnsigned) isTextKind() {}
-func (TextTruth) isTextKind()    {}
-func (TextLiteral) isTextKind()  {}
+func (TextAsIs) isTextKind()    {}
+func (TextWhole) isTextKind()   {}
+func (TextTruth) isTextKind()   {}
+func (TextLiteral) isTextKind() {}
 
-// BodyRead is whether a route decodes its input's Body field from the JSON body.
+// WholeSign is whether a field's integer type holds whole numbers below zero.
+//
+//sumtype:decl
+type WholeSign interface{ isWholeSign() }
+
+// SignedWhole is an integer type holding whole numbers below zero, such as int.
+//
+//ergo:not-an-error
+type SignedWhole struct{}
+
+// UnsignedWhole is an integer type holding only whole numbers at or above zero, such as uint8.
+//
+//ergo:not-an-error
+type UnsignedWhole struct{}
+
+func (SignedWhole) isWholeSign()   {}
+func (UnsignedWhole) isWholeSign() {}
+
+// BodyFieldName is the name of the input field a route reads the JSON body into.
+const BodyFieldName = "Body"
+
+// BodyRead is whether a route reads its input's Body field from the JSON body.
 //
 //sumtype:decl
 type BodyRead interface{ isBodyRead() }
@@ -361,13 +375,129 @@ type BodyRead interface{ isBodyRead() }
 //ergo:not-an-error
 type NoBodyRead struct{}
 
-// BodyFieldRead is a route that decodes the JSON body into its input's Body field.
+// BodyFieldRead is a route that reads the JSON body as Value into its input's Body field.
 //
 //ergo:not-an-error
-type BodyFieldRead struct{}
+type BodyFieldRead struct{ Value BodyValue }
 
 func (NoBodyRead) isBodyRead()    {}
 func (BodyFieldRead) isBodyRead() {}
+
+// BodyValue is one JSON value of a request's body: the Go type the generated code reads it as, and
+// its shape, which decides how.
+type BodyValue struct {
+	GoType types.Type
+	Shape  BodyShape
+}
+
+// BodyShape is how the generated code reads one JSON value of a body.
+//
+//sumtype:decl
+type BodyShape interface{ isBodyShape() }
+
+// TextShape is a string read as the field's text type.
+//
+//ergo:not-an-error
+type TextShape struct{}
+
+// WholeShape is a whole number read to fit the field's integer type, whose sign is Sign.
+//
+//ergo:not-an-error
+type WholeShape struct{ Sign WholeSign }
+
+// NumberShape is a number read to fit the field's floating-point type.
+//
+//ergo:not-an-error
+type NumberShape struct{}
+
+// TruthShape is true or false.
+//
+//ergo:not-an-error
+type TruthShape struct{}
+
+// InstantShape is an RFC 3339 time read as a time.Time in UTC.
+//
+//ergo:not-an-error
+type InstantShape struct{}
+
+// LiteralShape is a string that must be one of Values.
+//
+//ergo:not-an-error
+type LiteralShape struct{ Values []string }
+
+// ListShape is an array read as a slice, each item as Item.
+//
+//ergo:not-an-error
+type ListShape struct{ Item BodyValue }
+
+// ArrayShape is an array of exactly Length items read as a Go array, each item as Item.
+//
+//ergo:not-an-error
+type ArrayShape struct {
+	Length int64
+	Item   BodyValue
+}
+
+// DictionaryShape is an object read as a map, each value as Value.
+//
+//ergo:not-an-error
+type DictionaryShape struct{ Value BodyValue }
+
+// NullableShape is null read as an empty mo.Option, and any other value as Inner.
+//
+//ergo:not-an-error
+type NullableShape struct{ Inner BodyValue }
+
+// StructShape is an object holding exactly Fields, each once.
+//
+//ergo:not-an-error
+type StructShape struct{ Fields []BodyStructField }
+
+func (TextShape) isBodyShape()       {}
+func (WholeShape) isBodyShape()      {}
+func (NumberShape) isBodyShape()     {}
+func (TruthShape) isBodyShape()      {}
+func (InstantShape) isBodyShape()    {}
+func (LiteralShape) isBodyShape()    {}
+func (ListShape) isBodyShape()       {}
+func (ArrayShape) isBodyShape()      {}
+func (DictionaryShape) isBodyShape() {}
+func (NullableShape) isBodyShape()   {}
+func (StructShape) isBodyShape()     {}
+
+// BodyStructField is one field of a struct a body holds: its Go field, the name the body writes it
+// under, and its value.
+type BodyStructField struct {
+	GoField string
+	Name    string
+	Value   BodyValue
+}
+
+// Values is value and every value it holds, each before the values it holds.
+func (value BodyValue) Values() []BodyValue {
+	values := []BodyValue{value}
+	switch shape := value.Shape.(type) {
+	case ListShape:
+		return append(values, shape.Item.Values()...)
+	case ArrayShape:
+		return append(values, shape.Item.Values()...)
+	case DictionaryShape:
+		return append(values, shape.Value.Values()...)
+	case NullableShape:
+		return append(values, shape.Inner.Values()...)
+	case StructShape:
+		for _, field := range shape.Fields {
+			values = append(values, field.Value.Values()...)
+		}
+	case TextShape, WholeShape, NumberShape, TruthShape, InstantShape, LiteralShape, nil:
+	}
+	return values
+}
+
+// OptionPath is the import path of the package declaring Option, the type a field that may hold
+// null is written as, and the type the generated code keeps each member of a body's struct in until
+// it is read.
+const OptionPath = "github.com/samber/mo"
 
 // Member is one member of an outcome or a guard's refusal: its Go type, whose name is its tag, and
 // how it answers.

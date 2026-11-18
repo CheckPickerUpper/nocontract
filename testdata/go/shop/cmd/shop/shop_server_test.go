@@ -39,8 +39,9 @@ type received struct {
 	body   string
 }
 
-// send sends one request for shopper, an empty shopper meaning none, and reads the response.
-func send(t *testing.T, served *httptest.Server, method, path, shopper string) received {
+// send sends one request for shopper, an empty shopper meaning none, carrying body, and reads the
+// response.
+func send(t *testing.T, served *httptest.Server, method, path, shopper, body string) received {
 	t.Helper()
 	failed := func(doing string) func(error) received {
 		return func(cause error) received {
@@ -48,7 +49,7 @@ func send(t *testing.T, served *httptest.Server, method, path, shopper string) r
 			return received{status: 0, allow: "", header: "", body: ""}
 		}
 	}
-	built := mo.TupleToResult(http.NewRequestWithContext(t.Context(), method, served.URL+path, strings.NewReader("")))
+	built := mo.TupleToResult(http.NewRequestWithContext(t.Context(), method, served.URL+path, strings.NewReader(body)))
 	return mo.Fold(built, func(request *http.Request) received {
 		request.Header.Set(shopperauth.ShopperHeader, shopper)
 		return mo.Fold(mo.TupleToResult(served.Client().Do(request)), func(response *http.Response) received {
@@ -83,7 +84,7 @@ func TestARequestNoDeclaredRouteTakesIsAnsweredByTheServer(t *testing.T) {
 	}
 	for _, each := range cases {
 		t.Run(each.name, func(t *testing.T) {
-			if got := send(t, served, each.method, each.path, ""); got != each.want {
+			if got := send(t, served, each.method, each.path, "", ""); got != each.want {
 				t.Errorf("%s %s was answered %+v; want %+v", each.method, each.path, got, each.want)
 			}
 		})
@@ -108,7 +109,7 @@ func TestTheShopperGuardRefusesARequestWithoutAShopperAndAdmitsOneToTheRoute(t *
 	}
 	for _, each := range cases {
 		t.Run(each.name, func(t *testing.T) {
-			if got := send(t, served, http.MethodGet, "/shoppers/8/balance?currency=CAD", each.shopper); got != each.want {
+			if got := send(t, served, http.MethodGet, "/shoppers/8/balance?currency=CAD", each.shopper, ""); got != each.want {
 				t.Errorf("the request was answered %+v; want %+v", got, each.want)
 			}
 		})
@@ -165,9 +166,9 @@ func TestALayerSeesEveryAnswerAndSetsAHeaderTheClientReceives(t *testing.T) {
 	}
 	served := shopServer(t, []nocontract.Layer{recording})
 	answers := []received{
-		send(t, served, http.MethodGet, "/shoppers/7/balance?currency=CAD", "shopper-7"),
-		send(t, served, http.MethodGet, "/shoppers/7/balance?currency=CAD", ""),
-		send(t, served, http.MethodGet, "/shoppers", ""),
+		send(t, served, http.MethodGet, "/shoppers/7/balance?currency=CAD", "shopper-7", ""),
+		send(t, served, http.MethodGet, "/shoppers/7/balance?currency=CAD", "", ""),
+		send(t, served, http.MethodGet, "/shoppers", "", ""),
 	}
 	for _, answer := range answers {
 		if answer.header != "yes" {

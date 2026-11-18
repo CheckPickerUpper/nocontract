@@ -9,6 +9,21 @@ export const Money = Schema.Struct({
 })
 export type Money = typeof Money.Type
 
+export const Item = Schema.Struct({
+  sku: Schema.String,
+  quantity: Schema.Int,
+})
+export type Item = typeof Item.Type
+
+export const Order = Schema.Struct({
+  items: Schema.Array(Item),
+  gift_note: Schema.NullOr(Schema.String),
+  deliver_between: Schema.Array(Schema.DateTimeUtcFromString),
+  wrapped: Schema.Boolean,
+  tips: Schema.Record(Schema.String, Schema.Finite),
+})
+export type Order = typeof Order.Type
+
 export class RequestRefused extends Schema.TaggedError<RequestRefused>()("RequestRefused", {
   code: Schema.Literal("NC-1001"),
   part: Schema.Literals(["path", "query", "body"]),
@@ -66,6 +81,11 @@ export class TopUpRefused extends Schema.TaggedError<TopUpRefused>()("TopUpRefus
   reasons: Schema.Array(Schema.String),
 }, { httpApiStatus: 409 }) {}
 
+export const OrderPlaced = Schema.TaggedStruct("OrderPlaced", {
+  order: Order,
+}).pipe(HttpApiSchema.status(201))
+export type OrderPlaced = typeof OrderPlaced.Type
+
 export class BalanceGroup extends HttpApiGroup.make("balance").add(
   HttpApiEndpoint.get("readBalance", "/shoppers/:shopper_id/balance", {
     params: {
@@ -89,4 +109,15 @@ export class BalanceGroup extends HttpApiGroup.make("balance").add(
   })
 ) {}
 
-export class ShopApi extends HttpApi.make("ShopApi").add(BalanceGroup) {}
+export class OrdersGroup extends HttpApiGroup.make("orders").add(
+  HttpApiEndpoint.post("place", "/shoppers/:shopper_id/orders", {
+    params: {
+      shopper_id: Schema.Int,
+    },
+    payload: Order,
+    success: [OrderPlaced],
+    error: [RequestRefused, AnswerNotWritten],
+  })
+) {}
+
+export class ShopApi extends HttpApi.make("ShopApi").add(BalanceGroup, OrdersGroup) {}

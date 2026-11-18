@@ -457,7 +457,7 @@ Message: `"{Text}" is not one of the values this field accepts.`
 
 BodyNotSingle is a body holding more than one JSON value.
 
-Declared in `go/request_reading.go`.
+Declared in `go/request_body_reading.go`.
 
 Message: `The body holds more than one JSON value.`
 
@@ -1224,3 +1224,160 @@ Message: `The field {Field} is unexported and declared in {Package}, so the rout
 | --- | --- |
 | `Field` | `string` |
 | `Package` | `string` |
+
+## NC-1114 BodyMemberMissing
+
+BodyMemberMissing is a member the body's struct declares and the body does not hold.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} is missing from the body.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+
+## NC-1115 BodyMemberRepeated
+
+BodyMemberRepeated is a member the body writes more than once in one object.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} is written more than once.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+
+## NC-1116 BodyMemberUnknown
+
+BodyMemberUnknown is a member the body writes that its struct does not declare.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} is not a member the body accepts.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+
+## NC-1117 BodyValueMistyped
+
+BodyValueMistyped is a value of another JSON type than its field holds: the JSON type wanted,
+and the value read.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} must hold {Want}, and it holds {Read}.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Want` | `string` |
+| `Read` | `string` |
+
+## NC-1118 BodyLiteralOutside
+
+BodyLiteralOutside is a string that is none of the values its field accepts.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} holds "{Read}", which is not one of the values it accepts.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Read` | `string` |
+| `Values` | `[]string` |
+
+## NC-1119 BodyNumberNotWhole
+
+BodyNumberNotWhole is a number a whole number field holds, written with a fraction or an exponent.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} holds {Read}, which is not written as a whole number.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Read` | `string` |
+
+## NC-1120 BodyNumberOutside
+
+BodyNumberOutside is a number outside what its field's type holds: the number, and the least
+and the most that type holds.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} holds {Read}, which is outside {Least} to {Most}.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Read` | `string` |
+| `Least` | `string` |
+| `Most` | `string` |
+
+## NC-1121 BodyInstantUnreadable
+
+BodyInstantUnreadable is a string an instant field holds that is not an RFC 3339 time, and why.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} holds "{Read}", which is not an RFC 3339 time: {Reason}.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Read` | `string` |
+| `Reason` | `string` |
+
+## NC-1122 BodyListLengthWrong
+
+BodyListLengthWrong is a list holding another number of items than its field's fixed length.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} must hold exactly {Length} items, and it holds {Read}.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Length` | `int` |
+| `Read` | `int` |
+
+## NC-1123 BodyMalformed
+
+BodyMalformed is a body that stops being JSON: the value being read, the byte where it stopped,
+and why.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} is not JSON: {Reason}.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Offset` | `int64` |
+| `Reason` | `string` |
+
+## NC-1124 BodyEmpty
+
+BodyEmpty is a body holding no JSON value.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `The body holds no JSON value.`
+
+## NC-1125 BodyNotReceived
+
+BodyNotReceived is a body the server could not read from the request, and why.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `The body could not be read: {Reason}.`
+
+| Field | Type |
+| --- | --- |
+| `Reason` | `string` |

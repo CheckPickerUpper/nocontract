@@ -25,7 +25,7 @@ import (
 
 // Render is the formatted Go file of the package.
 func Render(served serverplan.Package) outcome.Result[[]byte] {
-	names := newImports(served.Path, routeFileImports(served.Serves), []string{})
+	names := newImports(served.Path, routeFileImports(served.Serves), readNames(served.Serves))
 	body := &strings.Builder{}
 	switch serves := served.Serves.(type) {
 	case serverplan.ServesRoutes:
@@ -54,33 +54,61 @@ func exported(name string) string {
 }
 
 // routesText is each route's function, every outcome's answer following the first route that
-// answers it.
+// answers it, then the function reading each struct the routes' bodies hold.
 func routesText(served serverplan.ServesRoutes, names *imports) string {
 	text := &strings.Builder{}
 	unwritten := map[serverplan.GoName]serverplan.OutcomeAnswer{}
 	for _, outcome := range served.Outcomes {
 		unwritten[outcome.Outcome] = outcome
 	}
+	readers := &bodyReaders{structs: []bodyStruct{}, taken: []string{}, text: &strings.Builder{}}
 	for _, route := range served.Routes {
-		text.WriteString(routeText(route, names))
+		text.WriteString(routeText(route, names, readers))
 		outcome.ForEachOption(keyed.Entry(unwritten, route.Outcome), func(outcome serverplan.OutcomeAnswer) {
 			delete(unwritten, route.Outcome)
 			text.WriteString(answerText(answerFunction{name: outcomeFunction(outcome.Outcome, names), sealed: names.qualified(outcome.Outcome), members: outcome.Members}, names))
 		})
 	}
+	text.WriteString(readers.text.String())
 	return text.String()
 }
 
-// handlerCall is the call that runs a route's handler on its input.
-func handlerCall(handler serverplan.Handler) string {
+// handlerCall is the call that runs a route's handler on input.
+func handlerCall(handler serverplan.Handler, input string) string {
 	switch called := handler.(type) {
 	case serverplan.FunctionHandler:
-		return called.Name + "(request.Context(), input)"
+		return called.Name + "(request.Context(), " + input + ")"
 	case serverplan.MethodHandler:
-		return "receiver." + called.Method + "(request.Context(), input)"
+		return "receiver." + called.Method + "(request.Context(), " + input + ")"
 	case nil:
 	}
 	return ""
+}
+
+// readName is the name the generated code gives the value read into the Go field named field.
+func readName(field string) string {
+	return "read" + field
+}
+
+// readNames is every name readName gives a value the package's generated code reads, which no
+// package alias may take.
+func readNames(serves serverplan.Routing) []string {
+	read := []string{}
+	switch routes := serves.(type) {
+	case serverplan.ServesRoutes:
+		for _, route := range routes.Routes {
+			for _, param := range slices.Concat(route.Params, route.Query) {
+				read = append(read, readName(param.GoField))
+			}
+			switch body := route.Body.(type) {
+			case serverplan.BodyFieldRead:
+				read = append(append(read, readName(serverplan.BodyFieldName)), bodyReadNames(body.Value)...)
+			case serverplan.NoBodyRead, nil:
+			}
+		}
+	case serverplan.ServesNoRoutes, nil:
+	}
+	return read
 }
 
 // routeParameters is what a route's function takes: the receiver of its method handler, if it has
@@ -94,49 +122,53 @@ func routeParameters(handler serverplan.Handler) string {
 	return "request *http.Request"
 }
 
-func routeText(route serverplan.Route, names *imports) string {
+// routeText is a route's function, which reads each part of the request its input holds, then
+// builds the input from the values read and runs the handler on it.
+func routeText(route serverplan.Route, names *imports, readers *bodyReaders) string {
 	name := serverplan.RouteFunction(route.Name)
 	text := &strings.Builder{}
-	fmt.Fprintf(text, "\n// %s answers one request to %s %s. Only the generated server calls it.\nfunc %s(%s) %s {\n\tvar input %s\n",
-		name, route.Method.Name(), route.Path.Text(), name, routeParameters(route.Handler), names.runtime("Answer"), names.qualified(route.Input))
-	steps := []string{}
+	fmt.Fprintf(text, "\n// %s answers one request to %s %s. Only the generated server calls it.\nfunc %s(%s) %s {\n",
+		name, route.Method.Name(), route.Path.Text(), name, routeParameters(route.Handler), names.runtime("Answer"))
+	steps, fields := []string{}, []string{}
 	for _, param := range route.Params {
 		steps = append(steps, paramStep(param, names.runtime("Path")+"(request, "+strconv.Quote(param.Name)+")", names))
+		fields = append(fields, param.GoField+": "+readName(param.GoField))
 	}
 	for _, param := range route.Query {
 		steps = append(steps, paramStep(param, names.runtime("Query")+"(request, "+strconv.Quote(param.Name)+")", names))
+		fields = append(fields, param.GoField+": "+readName(param.GoField))
 	}
-	switch route.Body.(type) {
+	switch body := route.Body.(type) {
 	case serverplan.BodyFieldRead:
-		decoder := names.qualified(serverplan.GoName{Package: "encoding/json", Name: "Decoder"})
-		steps = append(steps, fmt.Sprintf("return %s(%s(request, func(decoder *%s) error { return decoder.Decode(&input.Body) }), func(struct{}) %s {\n",
-			names.runtime("Then"), names.runtime("Body"), decoder, names.runtime("Answer")))
+		steps = append(steps, fmt.Sprintf("return %s(%s(request, %s), func(%s %s) %s {\n", names.runtime("Then"), names.runtime("Body"),
+			readers.reader(body.Value, exported(route.Name), names), readName(serverplan.BodyFieldName), readers.written(body.Value, exported(route.Name), names),
+			names.runtime("Answer")))
+		fields = append(fields, serverplan.BodyFieldName+": "+readName(serverplan.BodyFieldName))
 	case serverplan.NoBodyRead, nil:
 	}
 	for _, step := range steps {
 		text.WriteString(step)
 	}
-	fmt.Fprintf(text, "return %s(%s)\n", outcomeFunction(route.Outcome, names), handlerCall(route.Handler))
+	input := names.qualified(route.Input) + "{" + strings.Join(fields, ", ") + "}"
+	fmt.Fprintf(text, "return %s(%s)\n", outcomeFunction(route.Outcome, names), handlerCall(route.Handler, input))
 	text.WriteString(strings.Repeat("})\n", len(steps)))
 	text.WriteString("}\n")
 	return text.String()
 }
 
-// paramStep opens the step that reads one parameter's text as its field's type and sets the field.
+// paramStep opens the step that reads one parameter's text as its field's type.
 func paramStep(param serverplan.Param, text string, names *imports) string {
 	goType := names.goType(param.GoType)
-	return fmt.Sprintf("return %s(%s, func(read %s) %s {\ninput.%s = read\n", names.runtime("Then"), readCall(param.Text, goType, text, names), goType,
-		names.runtime("Answer"), param.GoField)
+	return fmt.Sprintf("return %s(%s, func(%s %s) %s {\n", names.runtime("Then"), readCall(param.Text, goType, text, names), readName(param.GoField), goType,
+		names.runtime("Answer"))
 }
 
 // readCall is the nocontract call reading a parameter's text as goType.
 func readCall(kind serverplan.TextKind, goType, text string, names *imports) string {
 	reader, arguments := "Textual", []string{text}
 	switch read := kind.(type) {
-	case serverplan.TextSigned:
-		reader = "Signed"
-	case serverplan.TextUnsigned:
-		reader = "Unsigned"
+	case serverplan.TextWhole:
+		reader = wholeReader(read.Sign)
 	case serverplan.TextTruth:
 		reader = "Truth"
 	case serverplan.TextLiteral:
@@ -147,6 +179,17 @@ func readCall(kind serverplan.TextKind, goType, text string, names *imports) str
 	case serverplan.TextAsIs, nil:
 	}
 	return names.runtime(reader) + "[" + goType + "](" + strings.Join(arguments, ", ") + ")"
+}
+
+// wholeReader is the name of the runtime's reader of a parameter's whole number of sign; the reader
+// of a body's is named the same after Body.
+func wholeReader(sign serverplan.WholeSign) string {
+	switch sign.(type) {
+	case serverplan.UnsignedWhole:
+		return "Unsigned"
+	case serverplan.SignedWhole, nil:
+	}
+	return "Signed"
 }
 
 // outcomeFunction is the generated function that answers a route outcome's members.
@@ -274,7 +317,7 @@ func (qualifiedBy) isReference() {}
 // localNames are the names the generated functions give their parameters and variables, which no
 // package alias may take.
 func localNames() []string {
-	return []string{"input", "read", "request", "writer", "outcome", "member", "receiver", "api", "layers"}
+	return []string{"read", "request", "writer", "outcome", "member", "members", "value", "items", "receiver", "api", "layers"}
 }
 
 // runtime is a declaration of nocontract's runtime as the generated file writes it.

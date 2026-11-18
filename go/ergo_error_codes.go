@@ -171,3 +171,338 @@ func (failure MethodNotDeclared) Report(language messages.Language) ergo.Report 
 func (failure MethodNotDeclared) Causes() []error {
 	return nil
 }
+
+func (BodyMemberMissing) ErrorCode() ergo.Code { return "NC-1114" }
+
+// BodyMemberMissingArguments holds the arguments BodyMemberMissing's message names, in the order the message first names them.
+type BodyMemberMissingArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks BodyMemberMissingArguments as the arguments of a report.
+func (BodyMemberMissingArguments) ReportArguments() {}
+
+// Report is BodyMemberMissing's code, its message in language and the arguments the message names.
+func (failure BodyMemberMissing) Report(language messages.Language) ergo.Report {
+	arguments := BodyMemberMissingArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is missing from the body."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1114", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyMemberMissing holds, then the causes of every failure it holds.
+func (failure BodyMemberMissing) Causes() []error {
+	return nil
+}
+
+func (BodyMemberRepeated) ErrorCode() ergo.Code { return "NC-1115" }
+
+// BodyMemberRepeatedArguments holds the arguments BodyMemberRepeated's message names, in the order the message first names them.
+type BodyMemberRepeatedArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks BodyMemberRepeatedArguments as the arguments of a report.
+func (BodyMemberRepeatedArguments) ReportArguments() {}
+
+// Report is BodyMemberRepeated's code, its message in language and the arguments the message names.
+func (failure BodyMemberRepeated) Report(language messages.Language) ergo.Report {
+	arguments := BodyMemberRepeatedArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is written more than once."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1115", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyMemberRepeated holds, then the causes of every failure it holds.
+func (failure BodyMemberRepeated) Causes() []error {
+	return nil
+}
+
+func (BodyMemberUnknown) ErrorCode() ergo.Code { return "NC-1116" }
+
+// BodyMemberUnknownArguments holds the arguments BodyMemberUnknown's message names, in the order the message first names them.
+type BodyMemberUnknownArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks BodyMemberUnknownArguments as the arguments of a report.
+func (BodyMemberUnknownArguments) ReportArguments() {}
+
+// Report is BodyMemberUnknown's code, its message in language and the arguments the message names.
+func (failure BodyMemberUnknown) Report(language messages.Language) ergo.Report {
+	arguments := BodyMemberUnknownArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is not a member the body accepts."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1116", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyMemberUnknown holds, then the causes of every failure it holds.
+func (failure BodyMemberUnknown) Causes() []error {
+	return nil
+}
+
+func (BodyValueMistyped) ErrorCode() ergo.Code { return "NC-1117" }
+
+// BodyValueMistypedArguments holds the arguments BodyValueMistyped's message names, in the order the message first names them.
+type BodyValueMistypedArguments struct {
+	Path string `json:"Path"`
+	Want string `json:"Want"`
+	Read string `json:"Read"`
+}
+
+// ReportArguments marks BodyValueMistypedArguments as the arguments of a report.
+func (BodyValueMistypedArguments) ReportArguments() {}
+
+// Report is BodyValueMistyped's code, its message in language and the arguments the message names.
+func (failure BodyValueMistyped) Report(language messages.Language) ergo.Report {
+	arguments := BodyValueMistypedArguments{Path: string(failure.Path), Want: string(failure.Want), Read: string(failure.Read)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " must hold "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", and it holds "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1117", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Want}, messageformat.TextValue{Text: arguments.Read}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyValueMistyped holds, then the causes of every failure it holds.
+func (failure BodyValueMistyped) Causes() []error {
+	return nil
+}
+
+func (BodyLiteralOutside) ErrorCode() ergo.Code { return "NC-1118" }
+
+// BodyLiteralOutsideArguments holds the arguments BodyLiteralOutside's message names, in the order the message first names them.
+type BodyLiteralOutsideArguments struct {
+	Path string `json:"Path"`
+	Read string `json:"Read"`
+}
+
+// ReportArguments marks BodyLiteralOutsideArguments as the arguments of a report.
+func (BodyLiteralOutsideArguments) ReportArguments() {}
+
+// Report is BodyLiteralOutside's code, its message in language and the arguments the message names.
+func (failure BodyLiteralOutside) Report(language messages.Language) ergo.Report {
+	arguments := BodyLiteralOutsideArguments{Path: string(failure.Path), Read: string(failure.Read)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds \""}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "\", which is not one of the values it accepts."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1118", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Read}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyLiteralOutside holds, then the causes of every failure it holds.
+func (failure BodyLiteralOutside) Causes() []error {
+	return nil
+}
+
+func (BodyNumberNotWhole) ErrorCode() ergo.Code { return "NC-1119" }
+
+// BodyNumberNotWholeArguments holds the arguments BodyNumberNotWhole's message names, in the order the message first names them.
+type BodyNumberNotWholeArguments struct {
+	Path string `json:"Path"`
+	Read string `json:"Read"`
+}
+
+// ReportArguments marks BodyNumberNotWholeArguments as the arguments of a report.
+func (BodyNumberNotWholeArguments) ReportArguments() {}
+
+// Report is BodyNumberNotWhole's code, its message in language and the arguments the message names.
+func (failure BodyNumberNotWhole) Report(language messages.Language) ergo.Report {
+	arguments := BodyNumberNotWholeArguments{Path: string(failure.Path), Read: string(failure.Read)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", which is not written as a whole number."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1119", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Read}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyNumberNotWhole holds, then the causes of every failure it holds.
+func (failure BodyNumberNotWhole) Causes() []error {
+	return nil
+}
+
+func (BodyNumberOutside) ErrorCode() ergo.Code { return "NC-1120" }
+
+// BodyNumberOutsideArguments holds the arguments BodyNumberOutside's message names, in the order the message first names them.
+type BodyNumberOutsideArguments struct {
+	Path  string `json:"Path"`
+	Read  string `json:"Read"`
+	Least string `json:"Least"`
+	Most  string `json:"Most"`
+}
+
+// ReportArguments marks BodyNumberOutsideArguments as the arguments of a report.
+func (BodyNumberOutsideArguments) ReportArguments() {}
+
+// Report is BodyNumberOutside's code, its message in language and the arguments the message names.
+func (failure BodyNumberOutside) Report(language messages.Language) ergo.Report {
+	arguments := BodyNumberOutsideArguments{Path: string(failure.Path), Read: string(failure.Read), Least: string(failure.Least), Most: string(failure.Most)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", which is outside "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: " to "}, messageformat.Argument{Index: 3}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1120", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Read}, messageformat.TextValue{Text: arguments.Least}, messageformat.TextValue{Text: arguments.Most}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyNumberOutside holds, then the causes of every failure it holds.
+func (failure BodyNumberOutside) Causes() []error {
+	return nil
+}
+
+func (BodyInstantUnreadable) ErrorCode() ergo.Code { return "NC-1121" }
+
+// BodyInstantUnreadableArguments holds the arguments BodyInstantUnreadable's message names, in the order the message first names them.
+type BodyInstantUnreadableArguments struct {
+	Path   string `json:"Path"`
+	Read   string `json:"Read"`
+	Reason string `json:"Reason"`
+}
+
+// ReportArguments marks BodyInstantUnreadableArguments as the arguments of a report.
+func (BodyInstantUnreadableArguments) ReportArguments() {}
+
+// Report is BodyInstantUnreadable's code, its message in language and the arguments the message names.
+func (failure BodyInstantUnreadable) Report(language messages.Language) ergo.Report {
+	arguments := BodyInstantUnreadableArguments{Path: string(failure.Path), Read: string(failure.Read), Reason: string(failure.Reason)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds \""}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "\", which is not an RFC 3339 time: "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1121", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Read}, messageformat.TextValue{Text: arguments.Reason}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyInstantUnreadable holds, then the causes of every failure it holds.
+func (failure BodyInstantUnreadable) Causes() []error {
+	return nil
+}
+
+func (BodyListLengthWrong) ErrorCode() ergo.Code { return "NC-1122" }
+
+// BodyListLengthWrongArguments holds the arguments BodyListLengthWrong's message names, in the order the message first names them.
+type BodyListLengthWrongArguments struct {
+	Path   string `json:"Path"`
+	Length int    `json:"Length"`
+	Read   int    `json:"Read"`
+}
+
+// ReportArguments marks BodyListLengthWrongArguments as the arguments of a report.
+func (BodyListLengthWrongArguments) ReportArguments() {}
+
+// Report is BodyListLengthWrong's code, its message in language and the arguments the message names.
+func (failure BodyListLengthWrong) Report(language messages.Language) ergo.Report {
+	arguments := BodyListLengthWrongArguments{Path: string(failure.Path), Length: int(failure.Length), Read: int(failure.Read)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " must hold exactly "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " items, and it holds "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1122", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.SignedWhole{Value: int64(arguments.Length)}, messageformat.SignedWhole{Value: int64(arguments.Read)}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyListLengthWrong holds, then the causes of every failure it holds.
+func (failure BodyListLengthWrong) Causes() []error {
+	return nil
+}
+
+func (BodyMalformed) ErrorCode() ergo.Code { return "NC-1123" }
+
+// BodyMalformedArguments holds the arguments BodyMalformed's message names, in the order the message first names them.
+type BodyMalformedArguments struct {
+	Path   string `json:"Path"`
+	Reason string `json:"Reason"`
+}
+
+// ReportArguments marks BodyMalformedArguments as the arguments of a report.
+func (BodyMalformedArguments) ReportArguments() {}
+
+// Report is BodyMalformed's code, its message in language and the arguments the message names.
+func (failure BodyMalformed) Report(language messages.Language) ergo.Report {
+	arguments := BodyMalformedArguments{Path: string(failure.Path), Reason: string(failure.Reason)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is not JSON: "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1123", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Reason}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyMalformed holds, then the causes of every failure it holds.
+func (failure BodyMalformed) Causes() []error {
+	return nil
+}
+
+func (BodyEmpty) ErrorCode() ergo.Code { return "NC-1124" }
+
+// BodyEmptyArguments holds the arguments BodyEmpty's message names, in the order the message first names them.
+type BodyEmptyArguments struct {
+}
+
+// ReportArguments marks BodyEmptyArguments as the arguments of a report.
+func (BodyEmptyArguments) ReportArguments() {}
+
+// Report is BodyEmpty's code, its message in language and the arguments the message names.
+func (failure BodyEmpty) Report(language messages.Language) ergo.Report {
+	arguments := BodyEmptyArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The body holds no JSON value."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1124", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error BodyEmpty holds, then the causes of every failure it holds.
+func (failure BodyEmpty) Causes() []error {
+	return nil
+}
+
+func (BodyNotReceived) ErrorCode() ergo.Code { return "NC-1125" }
+
+// BodyNotReceivedArguments holds the arguments BodyNotReceived's message names, in the order the message first names them.
+type BodyNotReceivedArguments struct {
+	Reason string `json:"Reason"`
+}
+
+// ReportArguments marks BodyNotReceivedArguments as the arguments of a report.
+func (BodyNotReceivedArguments) ReportArguments() {}
+
+// Report is BodyNotReceived's code, its message in language and the arguments the message names.
+func (failure BodyNotReceived) Report(language messages.Language) ergo.Report {
+	arguments := BodyNotReceivedArguments{Reason: string(failure.Reason)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The body could not be read: "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1125", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Reason}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyNotReceived holds, then the causes of every failure it holds.
+func (failure BodyNotReceived) Causes() []error {
+	return nil
+}

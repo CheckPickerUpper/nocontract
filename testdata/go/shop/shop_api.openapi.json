@@ -7,6 +7,9 @@
   "tags": [
     {
       "name": "balance"
+    },
+    {
+      "name": "orders"
     }
   ],
   "paths": {
@@ -89,6 +92,66 @@
                       "ShopperNotFound": "#/components/schemas/ShopperNotFound"
                     }
                   }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerNotWritten"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shoppers/{shopper_id}/orders": {
+      "post": {
+        "tags": [
+          "orders"
+        ],
+        "operationId": "orders.place",
+        "parameters": [
+          {
+            "name": "shopper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Order"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderPlaced"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestRefused"
                 }
               }
             }
@@ -293,6 +356,22 @@
         ],
         "additionalProperties": false
       },
+      "Item": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer"
+          },
+          "sku": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku",
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
       "MethodNotDeclared": {
         "type": "object",
         "properties": {
@@ -369,6 +448,70 @@
           "_tag",
           "code",
           "scope"
+        ],
+        "additionalProperties": false
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "deliver_between": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "gift_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
+          },
+          "tips": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "wrapped": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "gift_note",
+          "deliver_between",
+          "wrapped",
+          "tips"
+        ],
+        "additionalProperties": false
+      },
+      "OrderPlaced": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "OrderPlaced"
+            ]
+          },
+          "order": {
+            "$ref": "#/components/schemas/Order"
+          }
+        },
+        "required": [
+          "_tag",
+          "order"
         ],
         "additionalProperties": false
       },

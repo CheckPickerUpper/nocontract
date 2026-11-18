@@ -223,7 +223,7 @@ func readEntry(index projectIndex, handler handlerDeclaration, parts routeParts)
 		loaded: handler.loaded, position: handler.function.Name.Pos(),
 		endpoint: assembling.DeclaredEndpoint{
 			Name: name, Method: parts.route.method, Path: parts.route.path, Params: parameterFields(parts.input.params),
-			Query: parameterFields(parts.input.query), Body: parts.input.body, Successes: parts.outcome.successes,
+			Query: parameterFields(parts.input.query), Body: describedBody(parts.input.body), Successes: parts.outcome.successes,
 			Failures: slices.Concat(parts.outcome.failures, parts.guard.members), Position: index.placed(handler.function.Name.Pos()),
 		},
 		route: serverplan.Route{
@@ -244,12 +244,22 @@ func readRouteDirective(index projectIndex, handler handlerDeclaration) reading[
 		})
 }
 
-// bodyRead is whether the generated code decodes the input's Body field.
-func bodyRead(body description.Body) serverplan.BodyRead {
-	switch body.(type) {
-	case description.JSONBody:
-		return serverplan.BodyFieldRead{}
-	case description.NoBody, nil:
+// describedBody is the body a route's endpoint declares.
+func describedBody(body inputBody) description.Body {
+	switch read := body.(type) {
+	case bodyFieldRead:
+		return description.JSONBody{Schema: read.schema}
+	case noInputBody, nil:
+	}
+	return description.NoBody{}
+}
+
+// bodyRead is how the generated code reads the input's Body field.
+func bodyRead(body inputBody) serverplan.BodyRead {
+	switch read := body.(type) {
+	case bodyFieldRead:
+		return serverplan.BodyFieldRead{Value: read.value}
+	case noInputBody, nil:
 	}
 	return serverplan.NoBodyRead{}
 }
@@ -310,8 +320,21 @@ type inputShape struct {
 	name   serverplan.GoName
 	params []parameter
 	query  []parameter
-	body   description.Body
+	body   inputBody
 }
+
+// inputBody is whether a route's input reads the JSON body.
+//
+//sumtype:decl
+type inputBody interface{ isInputBody() }
+
+// noInputBody is an input with no Body field, which reads no body.
+//
+//ergo:not-an-error
+type noInputBody struct{}
+
+func (bodyFieldRead) isInputBody() {}
+func (noInputBody) isInputBody()   {}
 
 // inputField is where one input field is read from, decided by one function.
 //
@@ -370,7 +393,7 @@ func inputFieldPlace(field indexedField, tags fieldTags) inputField {
 		}, func() inputField { return pathField{name: path.text} })
 	}, func() inputField {
 		return outcome.FoldOption(query, func(query tagValue) inputField { return queryField{name: query.text} }, func() inputField {
-			if field.variable.Name() == "Body" {
+			if field.variable.Name() == serverplan.BodyFieldName {
 				return bodyField{}
 			}
 			return unplacedField{}
@@ -393,10 +416,14 @@ type pathRead struct{ read parameter }
 //ergo:not-an-error
 type queryRead struct{ read parameter }
 
-// bodyFieldRead is the field read from the JSON body.
+// bodyFieldRead is the field read from the JSON body: the shape the description declares, and how
+// the generated code reads it.
 //
 //ergo:not-an-error
-type bodyFieldRead struct{ schema description.Schema }
+type bodyFieldRead struct {
+	schema description.Schema
+	value  serverplan.BodyValue
+}
 
 func (pathRead) isPlacedField()      {}
 func (queryRead) isPlacedField()     {}
@@ -443,7 +470,11 @@ func readPlacedFieldTagged(index projectIndex, loaded *packages.Package, field i
 			return mapped(readParameter(index, loaded, field.variable, name), func(read parameter) placedField { return queryRead{read: read} })
 		})
 	case bodyField:
-		return mapped(readSchema(index, field.variable.Type(), position, []typeKey{}), func(schema description.Schema) placedField { return bodyFieldRead{schema: schema} })
+		return andThen(readValue(index, field.variable.Type(), field.variable.Type(), position, []typeKey{}), func(read valueRead) reading[placedField] {
+			return mapped(writableBody(index, read.body, loaded.PkgPath, position), func(value serverplan.BodyValue) placedField {
+				return bodyFieldRead{schema: read.schema, value: value}
+			})
+		})
 	case embeddedInputField:
 		return notRead[placedField](index.refused(position, EmbeddedFieldUnsupported{Field: field.variable.Name()}))
 	case twicePlacedField:
@@ -455,7 +486,7 @@ func readPlacedFieldTagged(index projectIndex, loaded *packages.Package, field i
 
 // sortedInput is an input's fields, sorted by where each is read.
 func sortedInput(name serverplan.GoName, placed []placedField) inputShape {
-	shape := inputShape{name: name, params: []parameter{}, query: []parameter{}, body: description.NoBody{}}
+	shape := inputShape{name: name, params: []parameter{}, query: []parameter{}, body: noInputBody{}}
 	for _, field := range placed {
 		switch read := field.(type) {
 		case pathRead:
@@ -463,7 +494,7 @@ func sortedInput(name serverplan.GoName, placed []placedField) inputShape {
 		case queryRead:
 			shape.query = append(shape.query, read.read)
 		case bodyFieldRead:
-			shape.body = description.JSONBody{Schema: read.schema}
+			shape.body = read
 		case nil:
 		}
 	}
@@ -500,22 +531,9 @@ func textKind(basic *types.Basic, schema description.Schema) mo.Option[serverpla
 	case description.Truth:
 		return mo.Some[serverplan.TextKind](serverplan.TextTruth{})
 	case description.Integer:
-		return mo.Some(integerKind(basic))
+		return mo.Some[serverplan.TextKind](serverplan.TextWhole{Sign: wholeSign(basic)})
 	case description.Finite, description.Instant, description.List, description.Dictionary, description.Nullable,
 		description.StructRef, description.InlineStruct, nil:
 	}
 	return mo.None[serverplan.TextKind]()
-}
-
-// integerKind is whether a whole number of basic's type is parsed signed or unsigned; the runtime
-// parses it to fit the field's own type.
-func integerKind(basic *types.Basic) serverplan.TextKind {
-	switch basic.Kind() {
-	case types.Uint, types.Uintptr, types.Uint8, types.Uint16, types.Uint32, types.Uint64:
-		return serverplan.TextUnsigned{}
-	case types.Int, types.Int8, types.Int16, types.Int32, types.Int64, types.UntypedInt, types.UntypedRune, types.Invalid, types.Bool,
-		types.Float32, types.Float64, types.Complex64, types.Complex128, types.String, types.UnsafePointer, types.UntypedBool, types.UntypedFloat,
-		types.UntypedComplex, types.UntypedString, types.UntypedNil:
-	}
-	return serverplan.TextSigned{}
 }

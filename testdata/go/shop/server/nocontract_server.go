@@ -4,6 +4,7 @@ package server
 
 import (
 	balance "example.com/shop/balance"
+	orders "example.com/shop/orders"
 	shopperrefusal "example.com/shop/shopperauth/shopperrefusal"
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
 	mo "github.com/samber/mo"
@@ -33,6 +34,7 @@ func New(layers []nocontract.Layer, balanceLedger balance.Ledger, balanceShopper
 				return nocontract.Decided(checkReadBalance(request), shopperrefusal.NocontractAnswerRefusal, func() nocontract.Answer { return balance.NocontractRouteReadBalance(balanceLedger, request) })
 			}},
 			{Method: "POST", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "top-ups"}}, Answer: func(request *http.Request) nocontract.Answer { return balance.NocontractRouteTopUp(request) }},
+			{Method: "POST", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "orders"}}, Answer: func(request *http.Request) nocontract.Answer { return orders.NocontractRoutePlace(request) }},
 		}})
 	}, mo.Err[API])
 }

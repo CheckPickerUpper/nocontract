@@ -20,6 +20,15 @@ type FieldUnexportedElsewhere struct {
 
 func (FieldUnexportedElsewhere) isProblem() {}
 
+// writableBody is a body value the generated code of the package at from can write: the code
+// reading it writes the type of every value it holds, each refused at position when it cannot.
+func writableBody(index projectIndex, value serverplan.BodyValue, from string, position token.Pos) reading[serverplan.BodyValue] {
+	read := collected(value.Values(), func(held serverplan.BodyValue) reading[types.Type] {
+		return writableType(index, held.GoType, from, position)
+	})
+	return mapped(read, func([]types.Type) serverplan.BodyValue { return value })
+}
+
 // writableType is written when the generated code of the package at from can write it: every type
 // it names can be named there, and every field of a struct it writes out is exported or declared
 // there. A type it cannot name is refused at position, an unexported field where it is declared.

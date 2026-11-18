@@ -72,6 +72,7 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 		"NC-1096", "NC-1097", "NC-1096", "NC-1098", "NC-1099", "NC-1100", "NC-1101", "NC-1102", "NC-1103", "NC-1104",
 		"NC-1007", "NC-1014", "NC-1105", "NC-1106", "NC-1107",
 		"NC-1108", "NC-1108", "NC-1109", "NC-1110", "NC-1110", "NC-1111", "NC-1111", "NC-1112",
+		"NC-1027", "NC-1113",
 	}
 	slices.Sort(want)
 	if !slices.Equal(codes, want) {
@@ -81,11 +82,12 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 		file string
 		want []string
 	}{
-		{file: "refused_directives.go", want: wrongDirectiveRefusals()},
-		{file: "refused_markings.go", want: undecidedMarkingRefusals()},
-		{file: "refused_fields.go", want: misnamedFieldRefusals()},
+		{file: "routes/refused_directives.go", want: wrongDirectiveRefusals()},
+		{file: "routes/refused_markings.go", want: undecidedMarkingRefusals()},
+		{file: "routes/refused_fields.go", want: misnamedFieldRefusals()},
+		{file: "elsewhere/elsewhere_inputs.go", want: unwritableBodyRefusals()},
 	} {
-		placed := filepath.Join(filepath.Dir(project(t, "refused")), "routes", each.file) + ":"
+		placed := filepath.Join(filepath.Dir(project(t, "refused")), filepath.FromSlash(each.file)) + ":"
 		read := []string{}
 		for _, line := range refused.Lines() {
 			outcome.ForEachOption(outcome.TupleToOption(strings.CutPrefix(line, placed)), func(at string) { read = append(read, at) })
@@ -93,6 +95,16 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 		if !slices.Equal(read, each.want) {
 			t.Errorf("%s was refused as\n%s\nwant\n%s", each.file, strings.Join(read, "\n"), strings.Join(each.want, "\n"))
 		}
+	}
+}
+
+// unwritableBodyRefusals is each body a route reads from another package that its generated code
+// cannot write: a struct holding a field only its own package writes, and a type no other package
+// names.
+func unwritableBodyRefusals() []string {
+	return []string{
+		`10:3: NC-1113 The field note is unexported and declared in example.com/refused/elsewhere, so the route's generated code cannot write the struct that holds it.`,
+		`21:2: NC-1027 example.com/refused/elsewhere.hiddenBody is unexported and declared in another package, so the route's generated code cannot name it.`,
 	}
 }
 

@@ -1,0 +1,55 @@
+// Package orders takes shoppers' orders.
+package orders
+
+import (
+	"context"
+	"time"
+
+	"github.com/samber/mo"
+)
+
+// Item is one line of an order: what is ordered, and how many.
+type Item struct {
+	SKU      string `json:"sku"`
+	Quantity uint8  `json:"quantity"`
+}
+
+// Order is what a shopper orders: its items, the note on a gift, the first and the last time it may
+// be delivered, whether it is wrapped, and the tip in each currency.
+type Order struct {
+	Items          []Item             `json:"items"`
+	GiftNote       mo.Option[string]  `json:"gift_note"`
+	DeliverBetween [2]time.Time       `json:"deliver_between"`
+	Wrapped        bool               `json:"wrapped"`
+	Tips           map[string]float64 `json:"tips"`
+}
+
+// PlaceInput names the shopper and carries the order.
+type PlaceInput struct {
+	ShopperID int `path:"shopper_id"`
+	Body      Order
+}
+
+// PlaceOutcome is what placing an order ended as.
+//
+//sumtype:decl
+type PlaceOutcome interface {
+	isPlaceOutcome()
+}
+
+// OrderPlaced is an order the shop took, as it read it.
+//
+//ergo:not-an-error
+//nocontract:status 201
+type OrderPlaced struct {
+	Order Order `json:"order"`
+}
+
+func (OrderPlaced) isPlaceOutcome() {}
+
+// Place takes a shopper's order.
+//
+//nocontract:route POST /shoppers/{shopper_id}/orders
+func Place(_ context.Context, input PlaceInput) PlaceOutcome {
+	return OrderPlaced{Order: input.Body}
+}
