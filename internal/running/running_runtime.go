@@ -60,11 +60,11 @@ func runtimeDirectory(ctx context.Context) mo.Result[string] {
 }
 
 // generatedRuntime renders the runtime package's generated file from the one declaration of
-// nocontract's own failures, and hands it to finish. Nothing of the runtime is read, so a runtime
-// whose generated file is missing or stale is written again.
+// nocontract's own failures, and hands it, with what its path holds, to finish. Nothing of the
+// runtime is read, so a runtime whose generated file is missing or stale is written again.
 func generatedRuntime(directory string, finish finisher) Outcome {
 	path := filepath.Join(directory, serverplan.RoutesFileName)
 	return mo.Fold(writing.RenderRuntime(description.SharedFailures()), func(content []byte) Outcome {
-		return finish([]generatedFile{{path: path, content: mo.Some(content)}})
+		return onDisk([]generatedFile{{path: path, content: mo.Some(content)}}, finish)
 	}, func(cause error) Outcome { return FileNotWritten{Path: path, Cause: cause} })
 }

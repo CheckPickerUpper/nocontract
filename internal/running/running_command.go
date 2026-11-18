@@ -4,14 +4,12 @@
 package running
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"go/token"
 	"go/types"
 	"io"
-	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -20,7 +18,6 @@ import (
 
 	ergo "github.com/CheckPickerUpper/ErGo"
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/creachadair/atomicfile"
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
 
@@ -298,9 +295,9 @@ type projectRun struct {
 func (projectRun) isCommand()   {}
 func (UsageRefused) isCommand() {}
 
-// finisher is what a run does with the files it rendered: generate writes them, check compares
-// them.
-type finisher func([]generatedFile) Outcome
+// finisher is what a run does with the files it rendered, given what each one's path holds:
+// generate writes them, check compares them.
+type finisher func([]fileOnDisk) Outcome
 
 // verbParse is a command line read as its verb, or refused.
 //
@@ -383,8 +380,9 @@ type generatedFile struct {
 	content mo.Option[[]byte]
 }
 
-// generated reads the project, renders its files and hands them to finish.
-func generated(ctx context.Context, projectFile string, finish func([]generatedFile) Outcome) Outcome {
+// generated reads the project, renders its files and hands them, with what their paths hold, to
+// finish.
+func generated(ctx context.Context, projectFile string, finish finisher) Outcome {
 	return projectfile.Read(projectFile, func(project projectfile.Project) Outcome {
 		// Go is the only backend NoContract reads.
 		switch project.Backend().(type) {
@@ -398,32 +396,34 @@ func generated(ctx context.Context, projectFile string, finish func([]generatedF
 	})
 }
 
-// generatedGo reads a Go backend's routes, renders its files and hands them to finish.
-func generatedGo(ctx context.Context, project projectfile.Project, finish func([]generatedFile) Outcome) Outcome {
+// generatedGo reads a Go backend's routes, renders its files and hands them, with what their paths
+// hold, to finish.
+func generatedGo(ctx context.Context, project projectfile.Project, finish finisher) Outcome {
 	directory := project.Directory()
-	existing := existingGenerated(directory)
-	return outcome.Fold(loadPackages(ctx, directory, project.Packages(), existing), func(loaded loadedProject) Outcome {
-		read := reading.ReadRoutes(reading.Request{Packages: loaded.packages, Sizes: loaded.sizes, API: project.API(), Server: project.ServerFolder()})
-		if problems := loadProblems(loaded.packages, read.Packages); len(problems) > 0 {
-			return PackagesNotLoaded{Errors: problems}
-		}
-		switch routes := read.Routes.(type) {
-		case reading.RoutesRead:
-			switch assembled := assembling.Assemble(routes.Declared).(type) {
-			case assembling.APIAssembled:
-				return outcome.Fold(renderedFiles(assembled.API, routes.Plan, project, existing), func(files []generatedFile) Outcome {
-					return judgedServing(ctx, project, files, finish)
-				}, func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
-			case assembling.APIRefused:
-				return DeclarationsRefused{Refusals: assembled.Refusals}
+	return generatedGoFiles(directory, func(existing []string) Outcome {
+		return outcome.Fold(loadPackages(ctx, directory, project.Packages(), existing), func(loaded loadedProject) Outcome {
+			read := reading.ReadRoutes(reading.Request{Packages: loaded.packages, Sizes: loaded.sizes, API: project.API(), Server: project.ServerFolder()})
+			if problems := loadProblems(loaded.packages, read.Packages); len(problems) > 0 {
+				return PackagesNotLoaded{Errors: problems}
+			}
+			switch routes := read.Routes.(type) {
+			case reading.RoutesRead:
+				switch assembled := assembling.Assemble(routes.Declared).(type) {
+				case assembling.APIAssembled:
+					return outcome.Fold(renderedFiles(assembled.API, routes.Plan, project, existing), func(files []generatedFile) Outcome {
+						return onDisk(files, func(held []fileOnDisk) Outcome { return judgedServing(ctx, project, held, finish) })
+					}, func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
+				case assembling.APIRefused:
+					return DeclarationsRefused{Refusals: assembled.Refusals}
+				case nil:
+				}
+			case reading.RoutesRefused:
+				return DeclarationsRefused{Refusals: assembling.Refuse(routes.Declared, routes.Refusals).Refusals}
 			case nil:
 			}
-		case reading.RoutesRefused:
-			return DeclarationsRefused{Refusals: assembling.Refuse(routes.Declared, routes.Refusals).Refusals}
-		case nil:
-		}
-		return DeclarationsRefused{Refusals: []assembling.Refusal{}}
-	}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
+			return DeclarationsRefused{Refusals: []assembling.Refusal{}}
+		}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
+	})
 }
 
 // loadedProject is the project's packages and nocontract's, and the sizes of Go's basic types the
@@ -434,13 +434,14 @@ type loadedProject struct {
 }
 
 // renderedFiles is the TypeScript file, the OpenAPI file, each package's Go file, the server file,
-// the test of them all, and every generated Go file this run no longer writes, which must go.
-func renderedFiles(api description.API, plan serverplan.Plan, project projectfile.Project, existing map[string][]byte) outcome.Result[[]generatedFile] {
+// the test of them all, and every Go file NoContract wrote, at the paths existing names, that this
+// run no longer writes, which must go.
+func renderedFiles(api description.API, plan serverplan.Plan, project projectfile.Project, existing []string) outcome.Result[[]generatedFile] {
 	return outcome.Fold(servedFiles(plan, project.File()), func(served []generatedFile) outcome.Result[[]generatedFile] {
 		return outcome.Fold(openapi.Render(api, project.OpenAPI().Version()), func(document []byte) outcome.Result[[]generatedFile] {
-			// Every existing generated file goes unless this run writes it again.
+			// Every Go file NoContract wrote goes unless this run writes it again.
 			contents := map[string]mo.Option[[]byte]{project.TypeScriptFile(): mo.Some(effect.Render(api)), project.OpenAPI().File(): mo.Some(document)}
-			for path := range existing {
+			for _, path := range existing {
 				contents[path] = mo.None[[]byte]()
 			}
 			for _, file := range served {
@@ -468,44 +469,17 @@ func goFiles(served []serverplan.Package) outcome.Result[[]generatedFile] {
 	return files
 }
 
-// existingGenerated is every generated Go file under directory, by path, with its content.
-func existingGenerated(directory string) map[string][]byte {
-	found := map[string][]byte{}
-	visit := func(path string, entry fs.DirEntry) error {
-		name := entry.Name()
-		if entry.IsDir() && path != directory && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "testdata" || name == "vendor" || name == "node_modules") {
-			return filepath.SkipDir
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		switch serverplan.SourceFileAt(path).(type) {
-		case serverplan.GeneratedFile:
-			return mo.Fold(mo.TupleToResult(os.ReadFile(path)), func(content []byte) error {
-				found[path] = content
-				return nil
-			}, func(cause error) error { return cause })
-		case serverplan.WrittenFile, nil:
-		}
-		return nil
-	}
-	// A folder that cannot be walked holds no generated file this run can read, so it is skipped.
-	return mo.Fold(mo.EmptyableToOption(filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
-		return mo.Fold(mo.EmptyableToOption(walkErr), func(error) error { return filepath.SkipDir }, func(error) error { return visit(path, entry) })
-	})), func(error) map[string][]byte { return found }, func(error) map[string][]byte { return found })
-}
-
-// setAsideFile is what the loader reads in place of every existing generated file: a file no build
+// setAsideFile is what the loader reads in place of every Go file NoContract wrote: a file no build
 // includes. What NoContract wrote earlier, against whatever runtime, never decides whether the
 // project can be read, and no declaration is read from it.
 const setAsideFile = "//go:build ignore\n\npackage ignored\n"
 
 // loadPackages loads the project's packages and nocontract's, each with its syntax and types, with
-// every existing generated file left out of the build, and the sizes the load type-checked them
-// with, which every package holds and are read from nocontract's.
-func loadPackages(ctx context.Context, directory string, patterns []string, existing map[string][]byte) outcome.Result[loadedProject] {
+// every Go file NoContract wrote, at the paths existing names, left out of the build, and the sizes
+// the load type-checked them with, which every package holds and are read from nocontract's.
+func loadPackages(ctx context.Context, directory string, patterns []string, existing []string) outcome.Result[loadedProject] {
 	overlay := map[string][]byte{}
-	for path := range existing {
+	for _, path := range existing {
 		overlay[path] = []byte(setAsideFile)
 	}
 	config := &packages.Config{
@@ -529,11 +503,12 @@ func loadPackages(ctx context.Context, directory string, patterns []string, exis
 // generated API or makes a handler of its own. The project's packages are loaded again with their
 // tests and with each Go file generate writes as it writes it, so the API they serve is the one
 // these files declare.
-func judgedServing(ctx context.Context, project projectfile.Project, files []generatedFile, finish func([]generatedFile) Outcome) Outcome {
-	overlay := map[string][]byte{}
-	for _, file := range files {
-		if filepath.Ext(file.path) == ".go" {
-			overlay[file.path] = mo.Fold(file.content, func(content []byte) []byte { return content }, func(error) []byte { return []byte(setAsideFile) })
+func judgedServing(ctx context.Context, project projectfile.Project, files []fileOnDisk, finish finisher) Outcome {
+	overlay, generatedGo := map[string][]byte{}, []string{}
+	for _, each := range files {
+		if filepath.Ext(each.file.path) == ".go" {
+			overlay[each.file.path] = mo.Fold(each.file.content, func(content []byte) []byte { return content }, func(error) []byte { return []byte(setAsideFile) })
+			generatedGo = append(generatedGo, each.file.path)
 		}
 	}
 	config := &packages.Config{
@@ -545,7 +520,7 @@ func judgedServing(ctx context.Context, project projectfile.Project, files []gen
 		if problems := builtProblems(loaded); len(problems) > 0 {
 			return PackagesNotLoaded{Errors: problems}
 		}
-		if refusals := reading.JudgeServing(reading.ServingRequest{Packages: loaded, Server: project.ServerFolder()}); len(refusals) > 0 {
+		if refusals := reading.JudgeServing(reading.ServingRequest{Packages: loaded, Generated: generatedGo, Server: project.ServerFolder()}); len(refusals) > 0 {
 			return DeclarationsRefused{Refusals: refusals}
 		}
 		return finish(files)
@@ -581,64 +556,4 @@ func loadProblems(loaded []*packages.Package, read []string) []error {
 		}
 	}
 	return problems
-}
-
-func writeFiles(files []generatedFile) Outcome {
-	return writeEach(writeProgress{all: files, remaining: files, written: []string{}})
-}
-
-// writeProgress is a generate's progress through its files: every file, those not yet written,
-// and the paths written or deleted so far.
-type writeProgress struct {
-	all       []generatedFile
-	remaining []generatedFile
-	written   []string
-}
-
-// next is the progress past the first remaining file, having written it or not.
-func (progress writeProgress) next(written []string) writeProgress {
-	return writeProgress{all: progress.all, remaining: progress.remaining[1:], written: written}
-}
-
-// writeEach writes or deletes each remaining file that is not current, stopping at the first
-// that cannot be.
-func writeEach(progress writeProgress) Outcome {
-	if len(progress.remaining) == 0 {
-		if len(progress.written) == 0 {
-			return compareFiles(progress.all)
-		}
-		return FilesWritten{Paths: progress.written}
-	}
-	file := progress.remaining[0]
-	if _, isCurrent := compareFiles([]generatedFile{file}).(FilesCurrent); isCurrent {
-		return writeEach(progress.next(progress.written))
-	}
-	failure := mo.Fold(file.content, func(content []byte) error {
-		return mo.Fold(mo.EmptyableToOption(os.MkdirAll(filepath.Dir(file.path), 0o755)), func(cause error) error { return cause },
-			func(error) error { return atomicfile.WriteData(file.path, content, 0o644) })
-	}, func(error) error { return os.Remove(file.path) })
-	return mo.Fold(mo.EmptyableToOption(failure), func(cause error) Outcome {
-		return FileNotWritten{Path: file.path, Cause: cause}
-	}, func(error) Outcome { return writeEach(progress.next(append(progress.written, file.path))) })
-}
-
-func compareFiles(files []generatedFile) Outcome {
-	stale, current := []string{}, []string{}
-	for _, file := range files {
-		onDisk := mo.TupleToResult(os.ReadFile(file.path))
-		matches := mo.Fold(file.content, func(content []byte) bool {
-			return mo.Fold(onDisk, func(found []byte) bool { return bytes.Equal(found, content) }, func(error) bool { return false })
-		}, func(error) bool {
-			return mo.Fold(onDisk, func([]byte) bool { return false }, func(error) bool { return true })
-		})
-		if matches {
-			current = append(current, file.path)
-			continue
-		}
-		stale = append(stale, file.path)
-	}
-	if len(stale) > 0 {
-		return FilesStale{Paths: stale}
-	}
-	return FilesCurrent{Paths: current}
 }

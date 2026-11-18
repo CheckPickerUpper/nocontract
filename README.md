@@ -211,6 +211,10 @@ It also writes `nocontract_files_test.go` into the first package that declares a
 guard's refusal, in folder order, so `go test ./...` fails while any generated file differs from
 what `generate` writes, listing each one. `check` runs the same comparison on its own.
 
+A Go file is one NoContract wrote when its first line is Go's generated-code header naming
+`nocontract`, whatever the file is called. `generate` never overwrites a Go file you wrote: when one
+sits at a path it writes, it stops and names the file.
+
 The OpenAPI file lists each route's path and query parameters, its body, and every member it
 answers with under that member's status. Each member is its own schema, whose `_tag` and, for a
 failure, `code` each allow one value. A whole number is `integer`, and a `time.Time` is a string

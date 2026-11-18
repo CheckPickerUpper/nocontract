@@ -82,10 +82,12 @@ func (ServeHTTPDeclared) isProblem()        {}
 func (HandlerRegistered) isProblem()        {}
 
 // ServingRequest is what the serving judge reads: every package the project file lists, loaded
-// with its tests and with each file generate writes as generate writes it, and the server folder.
+// with its tests and with each file generate writes as generate writes it, the path of each Go
+// file generate writes, and the server folder.
 type ServingRequest struct {
-	Packages []*packages.Package
-	Server   string
+	Packages  []*packages.Package
+	Generated []string
+	Server    string
 }
 
 // JudgeServing is a refusal for each place a file the project wrote serves HTTP with anything but
@@ -103,16 +105,15 @@ func JudgeServing(request ServingRequest) []assembling.Refusal {
 				continue
 			}
 			judged[name] = struct{}{}
-			switch serverplan.SourceFileAt(name).(type) {
-			case serverplan.WrittenFile:
-				judge := servingJudge{
-					files: each.Fset, info: each.TypesInfo, apiFile: filepath.Join(request.Server, serverplan.ServerFileName),
-					called: map[*ast.Ident]struct{}{}, parents: []ast.Node{}, refusals: []assembling.Refusal{},
-				}
-				ast.Inspect(file, judge.judge)
-				refusals = append(refusals, judge.refusals...)
-			case serverplan.GeneratedFile, nil:
+			if slices.Contains(request.Generated, name) {
+				continue
 			}
+			judge := servingJudge{
+				files: each.Fset, info: each.TypesInfo, apiFile: filepath.Join(request.Server, serverplan.ServerFileName),
+				called: map[*ast.Ident]struct{}{}, parents: []ast.Node{}, refusals: []assembling.Refusal{},
+			}
+			ast.Inspect(file, judge.judge)
+			refusals = append(refusals, judge.refusals...)
 		}
 	}
 	return refusals

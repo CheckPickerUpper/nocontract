@@ -6,8 +6,6 @@ package serverplan
 
 import (
 	"go/types"
-	"path/filepath"
-	"slices"
 	"unicode"
 	"unicode/utf8"
 
@@ -26,11 +24,6 @@ const (
 	// only value that serves the routes.
 	ServerFileName = "nocontract_server.go"
 )
-
-// GeneratedFileNames is the name of every Go file NoContract writes.
-func GeneratedFileNames() []string {
-	return []string{RoutesFileName, FilesTestFileName, ServerFileName}
-}
 
 // Server is the server package NoContract writes: its folder, its name, and whether the project
 // wrote Go files of its own there.
@@ -84,32 +77,6 @@ const CheckingPackage = "checking"
 // NoContractPackage is the name of the Go package at NoContractPath, which every generated file
 // refers to it by.
 const NoContractPackage = "nocontract"
-
-// SourceFile is who wrote a Go file: NoContract, or the project.
-//
-//sumtype:decl
-type SourceFile interface{ isSourceFile() }
-
-// GeneratedFile is a file NoContract writes and rewrites, which no declaration is read from.
-//
-//ergo:not-an-error
-type GeneratedFile struct{}
-
-// WrittenFile is a file the project wrote.
-//
-//ergo:not-an-error
-type WrittenFile struct{}
-
-func (GeneratedFile) isSourceFile() {}
-func (WrittenFile) isSourceFile()   {}
-
-// SourceFileAt is who wrote the Go file at path.
-func SourceFileAt(path string) SourceFile {
-	if slices.Contains(GeneratedFileNames(), filepath.Base(path)) {
-		return GeneratedFile{}
-	}
-	return WrittenFile{}
-}
 
 // The prefixes of the exported names a generated file declares, which code outside it calls.
 const (

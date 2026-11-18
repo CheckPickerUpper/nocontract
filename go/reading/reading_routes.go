@@ -25,7 +25,8 @@ import (
 // Request is what the generator reads: the loaded packages, the project's own and nocontract's,
 // each with its syntax, the sizes Go type-checked them with, which give int, uint and uintptr their
 // width, the API's name and where it is given, and the absolute path of the folder the server
-// package is written into.
+// package is written into. The project's packages are loaded with every Go file NoContract wrote
+// left out of the build, so each file they hold is one the project wrote.
 type Request struct {
 	Packages []*packages.Package
 	Sizes    types.Sizes
@@ -138,12 +139,8 @@ func indexed(request Request) projectIndex {
 	own, ownTypes := []ownFile{}, []declaredType{}
 	for _, loaded := range project {
 		for _, file := range loaded.Syntax {
-			switch serverplan.SourceFileAt(files.Position(file.Pos()).Filename).(type) {
-			case serverplan.WrittenFile:
-				own = append(own, ownFile{loaded: loaded, file: file})
-				ownTypes = append(ownTypes, typeDeclarations(loaded, file)...)
-			case serverplan.GeneratedFile, nil:
-			}
+			own = append(own, ownFile{loaded: loaded, file: file})
+			ownTypes = append(ownTypes, typeDeclarations(loaded, file)...)
 		}
 	}
 	return projectIndex{

@@ -366,3 +366,91 @@ func (failure ProjectFileRefused) Report(language messages.Language) ergo.Report
 func (failure ProjectFileRefused) Causes() []error {
 	return nil
 }
+
+func (FolderUnreadable) ErrorCode() ergo.Code { return "NC-1127" }
+
+// FolderUnreadableArguments holds the arguments FolderUnreadable's message names, in the order the message first names them.
+type FolderUnreadableArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks FolderUnreadableArguments as the arguments of a report.
+func (FolderUnreadableArguments) ReportArguments() {}
+
+// Report is FolderUnreadable's code, its message in language and the arguments the message names.
+func (failure FolderUnreadable) Report(language messages.Language) ergo.Report {
+	arguments := FolderUnreadableArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The folder "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " could not be read."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1127", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error FolderUnreadable holds, then the causes of every failure it holds.
+func (failure FolderUnreadable) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}
+
+func (FileUnreadable) ErrorCode() ergo.Code { return "NC-1128" }
+
+// FileUnreadableArguments holds the arguments FileUnreadable's message names, in the order the message first names them.
+type FileUnreadableArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks FileUnreadableArguments as the arguments of a report.
+func (FileUnreadableArguments) ReportArguments() {}
+
+// Report is FileUnreadable's code, its message in language and the arguments the message names.
+func (failure FileUnreadable) Report(language messages.Language) ergo.Report {
+	arguments := FileUnreadableArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The file "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " could not be read."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1128", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error FileUnreadable holds, then the causes of every failure it holds.
+func (failure FileUnreadable) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}
+
+func (FilesNotGenerated) ErrorCode() ergo.Code { return "NC-1129" }
+
+// FilesNotGeneratedArguments holds the arguments FilesNotGenerated's message names, in the order the message first names them.
+type FilesNotGeneratedArguments struct {
+}
+
+// ReportArguments marks FilesNotGeneratedArguments as the arguments of a report.
+func (FilesNotGeneratedArguments) ReportArguments() {}
+
+// Report is FilesNotGenerated's code, its message in language and the arguments the message names.
+func (failure FilesNotGenerated) Report(language messages.Language) ergo.Report {
+	arguments := FilesNotGeneratedArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "These files are where nocontract generate writes its own, and NoContract did not write them; move or rename them:"}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1129", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error FilesNotGenerated holds, then the causes of every failure it holds.
+func (failure FilesNotGenerated) Causes() []error {
+	return nil
+}

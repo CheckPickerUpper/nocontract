@@ -1396,3 +1396,45 @@ Message: `{Path} is under the key "{Read}", which is not one of the keys it acce
 | `Path` | `string` |
 | `Read` | `string` |
 | `Keys` | `[]string` |
+
+## NC-1127 FolderUnreadable
+
+FolderUnreadable is a folder of the project the run could not list, with the operating system's
+error. A file NoContract wrote could be inside it, so the run stops.
+
+Declared in `internal/running/running_generated_files_on_disk.go`.
+
+Message: `The folder {Path} could not be read.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Cause` | `error` |
+
+## NC-1128 FileUnreadable
+
+FileUnreadable is a file the run could not read, with the operating system's error: a Go file of
+the project, whose first line says whether NoContract wrote it, or a file at a path generate
+writes.
+
+Declared in `internal/running/running_generated_files_on_disk.go`.
+
+Message: `The file {Path} could not be read.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Cause` | `error` |
+
+## NC-1129 FilesNotGenerated
+
+FilesNotGenerated is a run that found Go files the project wrote at paths generate writes: each
+begins with no generated header, so generate leaves it as it is.
+
+Declared in `internal/running/running_generated_files_on_disk.go`.
+
+Message: `These files are where nocontract generate writes its own, and NoContract did not write them; move or rename them:`
+
+| Field | Type |
+| --- | --- |
+| `Paths` | `[]string` |
