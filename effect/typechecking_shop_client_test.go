@@ -32,8 +32,9 @@ func readWebProject(t *testing.T, web string) {
 
 // The shop example's committed client, and the TypeScript calling it, type-check against the
 // effect release the web project pins: a failure a route never answers is a type error in
-// catchTag, and a decimal is a type error where the route reads a whole number.
-func TestTheShopsGeneratedClientTypeChecks(t *testing.T) {
+// catchTag, and a decimal is a type error where the route reads a whole number. Its tests then
+// pass under bun's test runner: the client decodes and encodes a 64-bit whole number whole.
+func TestTheShopsGeneratedClientTypeChecksAndPassesItsTests(t *testing.T) {
 	t.Parallel()
 	bun := outcome.Fold(outcome.TupleToResult(exec.LookPath("bun")), func(path string) string { return path }, func(cause error) string {
 		t.Fatalf("looked for bun on PATH to type-check the shop's web project: %v", cause)
@@ -41,7 +42,7 @@ func TestTheShopsGeneratedClientTypeChecks(t *testing.T) {
 	})
 	web := filepath.Join("..", "testdata", "go", "shop", "web")
 	readWebProject(t, web)
-	for _, arguments := range [][]string{{"install", "--frozen-lockfile"}, {"run", "typecheck"}} {
+	for _, arguments := range [][]string{{"install", "--frozen-lockfile"}, {"run", "typecheck"}, {"test"}} {
 		command := exec.CommandContext(t.Context(), bun, arguments...)
 		command.Dir = web
 		output, runError := command.CombinedOutput()
