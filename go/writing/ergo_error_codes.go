@@ -35,3 +35,31 @@ func (failure SharedFieldUnsupported) Report(language messages.Language) ergo.Re
 func (failure SharedFieldUnsupported) Causes() []error {
 	return nil
 }
+
+func (RouteNotDescribed) ErrorCode() ergo.Code { return "NC-1071" }
+
+// RouteNotDescribedArguments holds the arguments RouteNotDescribed's message names, in the order the message first names them.
+type RouteNotDescribedArguments struct {
+	Route   string `json:"Route"`
+	Package string `json:"Package"`
+}
+
+// ReportArguments marks RouteNotDescribedArguments as the arguments of a report.
+func (RouteNotDescribedArguments) ReportArguments() {}
+
+// Report is RouteNotDescribed's code, its message in language and the arguments the message names.
+func (failure RouteNotDescribed) Report(language messages.Language) ergo.Report {
+	arguments := RouteNotDescribedArguments{Route: string(failure.Route), Package: string(failure.Package)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The route "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " of the package "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " has no endpoint in the API's description."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1071", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Route}, messageformat.TextValue{Text: arguments.Package}}}), Arguments: arguments}
+}
+
+// Causes is every error RouteNotDescribed holds, then the causes of every failure it holds.
+func (failure RouteNotDescribed) Causes() []error {
+	return nil
+}

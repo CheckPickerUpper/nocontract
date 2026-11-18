@@ -247,7 +247,8 @@ A path segment written as text in one route is preferred over a `{name}` segment
 A `nocontract.Layer` runs around every request the API answers, matched or not, for logging,
 metrics, request ids or CORS headers. It is handed the request as a `nocontract.Visit`, which reads
 the method, URL, header and the route matched (`nocontract.RouteMatched` with the declared method
-and path, or `nocontract.NoRouteMatched`), and sets headers on the response. Its `next` runs the
+and path, `nocontract.NoRouteMatched`, or `nocontract.PathNotUnescaped` with the path segment that
+is not valid escaping), and sets headers on the response. Its `next` runs the
 route, once however often it is called, and returns the `nocontract.Answered`: the status, the
 `_tag` and the code of what the route answered. Only the API builds an `Answered`, and it sends the
 route's own answer whatever a layer returns, so a layer cannot change the status or body or answer

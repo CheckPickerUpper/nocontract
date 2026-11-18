@@ -808,3 +808,17 @@ Message: `No route at this path answers {Method}`
 | --- | --- |
 | `Method` | `string` |
 | `Allowed` | `[]string` |
+
+## NC-1071 RouteNotDescribed
+
+RouteNotDescribed is a route of the server plan the API's description holds no endpoint for, so
+its path's segments are not known.
+
+Declared in `go/writing/writing_server.go`.
+
+Message: `The route {Route} of the package {Package} has no endpoint in the API's description.`
+
+| Field | Type |
+| --- | --- |
+| `Package` | `string` |
+| `Route` | `string` |

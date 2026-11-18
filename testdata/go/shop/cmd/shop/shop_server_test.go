@@ -157,7 +157,7 @@ func TestALayerSeesEveryAnswerAndSetsAHeaderTheClientReceives(t *testing.T) {
 		switch matched := visit.Route().(type) {
 		case nocontract.RouteMatched:
 			route = matched.Method + " " + matched.Path
-		case nocontract.NoRouteMatched, nil:
+		case nocontract.NoRouteMatched, nocontract.PathNotUnescaped, nil:
 		}
 		code := mo.Fold(answered.Code(), func(code string) string { return code }, func(error) string { return "" })
 		visits = append(visits, seen{route: route, status: answered.Status(), code: code})

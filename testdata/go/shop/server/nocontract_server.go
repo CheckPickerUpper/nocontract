@@ -29,10 +29,10 @@ func (api API) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 func New(layers []nocontract.Layer, balanceLedger balance.Ledger, balanceShopper nocontract.Guard[shopperrefusal.Refusal]) mo.Result[API] {
 	return mo.Fold(balanceShopper.CheckRoute(nocontract.GuardedRoute{Method: "GET", Path: "/shoppers/{shopper_id}/balance", Argument: "read-balance"}), func(checkReadBalance nocontract.RequestCheck[shopperrefusal.Refusal]) mo.Result[API] {
 		return mo.Ok(API{layers: slices.Clone(layers), endpoints: []nocontract.Endpoint{
-			{Method: "GET", Path: "/shoppers/{shopper_id}/balance", Answer: func(request *http.Request) nocontract.Answer {
+			{Method: "GET", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "balance"}}, Answer: func(request *http.Request) nocontract.Answer {
 				return nocontract.Decided(checkReadBalance(request), shopperrefusal.NocontractAnswerRefusal, func() nocontract.Answer { return balance.NocontractRouteReadBalance(balanceLedger, request) })
 			}},
-			{Method: "POST", Path: "/shoppers/{shopper_id}/top-ups", Answer: func(request *http.Request) nocontract.Answer { return balance.NocontractRouteTopUp(request) }},
+			{Method: "POST", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "top-ups"}}, Answer: func(request *http.Request) nocontract.Answer { return balance.NocontractRouteTopUp(request) }},
 		}})
 	}, mo.Err[API])
 }

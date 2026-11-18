@@ -12,13 +12,56 @@ import (
 	"github.com/samber/mo"
 )
 
-// Endpoint is one declared route as a generated server's table holds it: its method, its path as
-// its //nocontract:route line declares it, and the answer it gives a request. Only generated code
-// builds one, and it serves nothing on its own.
+// Endpoint is one declared route as a generated server's table holds it: its method, which is
+// only compared with a request's, the segments of its path between slashes, and the answer it
+// gives a request. Only generated code builds one, and it serves nothing on its own.
 type Endpoint struct {
 	Method string
-	Path   string
+	Path   []PathSegment
 	Answer func(request *http.Request) Answer
+}
+
+// PathSegment is one part of a declared path between two slashes: text a request's path must hold
+// there, or a parameter that takes whatever the request holds there.
+//
+//sumtype:decl
+type PathSegment interface {
+	isPathSegment()
+	// parameters is how many parameters the segment is: where two declared paths match one
+	// request, the one with fewer parameters at the first segment they differ takes it.
+	parameters() int
+}
+
+// PathText is a segment a request's path must hold as Text.
+//
+//ergo:not-an-error
+type PathText struct{ Text string }
+
+// PathParameter is a segment that takes any text a request's path holds there, read as the
+// parameter Name.
+//
+//ergo:not-an-error
+type PathParameter struct{ Name string }
+
+func (PathText) isPathSegment()      {}
+func (PathParameter) isPathSegment() {}
+
+func (PathText) parameters() int      { return 0 }
+func (PathParameter) parameters() int { return 1 }
+
+// declaredPath is a path as its //nocontract:route line writes it, each parameter as {name}.
+func declaredPath(segments []PathSegment) string {
+	written := []string{}
+	for _, segment := range segments {
+		switch each := segment.(type) {
+		case PathText:
+			written = append(written, each.Text)
+		case PathParameter:
+			written = append(written, "{"+each.Name+"}")
+		case nil:
+		}
+	}
+	return "/" + strings.Join(written, "/")
 }
 
 // Layer runs around every request a server answers, such as to log it, count it, tag it with a
@@ -79,8 +122,19 @@ type RouteMatched struct {
 //ergo:not-an-error
 type NoRouteMatched struct{}
 
-func (RouteMatched) isVisitedRoute()   {}
-func (NoRouteMatched) isVisitedRoute() {}
+// PathNotUnescaped is a request whose path holds a segment that is not valid escaping, so no
+// declared path can be compared with it, and why it could not be unescaped. It is answered with
+// RouteNotFound.
+//
+//ergo:not-an-error
+type PathNotUnescaped struct {
+	Segment string
+	Reason  string
+}
+
+func (RouteMatched) isVisitedRoute()     {}
+func (NoRouteMatched) isVisitedRoute()   {}
+func (PathNotUnescaped) isVisitedRoute() {}
 
 // Answered is what the server answered a request with. Only the server builds it, from the answer
 // it sends, so a layer reads it and cannot make one up.
@@ -217,15 +271,26 @@ type pathMatched struct{ allowed []string }
 //ergo:not-an-error
 type nothingMatched struct{}
 
+// pathUnreadable is a request whose path holds a segment that is not valid escaping, and why.
+//
+//ergo:not-an-error
+type pathUnreadable struct {
+	segment string
+	reason  string
+}
+
 func (endpointMatched) isRequestMatch() {}
 func (pathMatched) isRequestMatch()     {}
 func (nothingMatched) isRequestMatch()  {}
+func (pathUnreadable) isRequestMatch()  {}
 
 // visitedRoute is the route a layer is told the request matched.
 func visitedRoute(matched requestMatch) VisitedRoute {
 	switch match := matched.(type) {
 	case endpointMatched:
-		return RouteMatched{Method: match.candidate.endpoint.Method, Path: match.candidate.endpoint.Path}
+		return RouteMatched{Method: match.candidate.endpoint.Method, Path: declaredPath(match.candidate.endpoint.Path)}
+	case pathUnreadable:
+		return PathNotUnescaped{Segment: match.segment, Reason: match.reason}
 	case pathMatched, nothingMatched, nil:
 	}
 	return NoRouteMatched{}
@@ -246,47 +311,54 @@ func answerMatched(matched requestMatch, request *http.Request) Answered {
 		}
 		refused := NocontractAnswerSharedFailure(MethodNotDeclared{Method: request.Method, Allowed: match.allowed})
 		return Answered{response: methodResponse{answer: sent(refused), allowed: match.allowed}}
-	case nothingMatched, nil:
+	case nothingMatched, pathUnreadable, nil:
 	}
 	return Answered{response: answerResponse{answer: sent(NocontractAnswerSharedFailure(RouteNotFound{Method: request.Method, Path: request.URL.Path}))}}
 }
 
-// pathValue is one {name} segment of a declared path and the request's segment in its place.
+// pathValue is one parameter of a declared path and the request's text in its place.
 type pathValue struct {
 	name  string
 	value string
 }
 
-// candidate is an endpoint whose path matches a request's: the endpoint, which of its segments are
-// text ('0') and which are parameters ('1'), and the parameters' values.
+// candidate is an endpoint whose path matches a request's, and the request's text in place of each
+// of its parameters.
 type candidate struct {
 	endpoint Endpoint
-	shape    string
 	values   []pathValue
 }
 
-// matchRequest is the endpoint a request matches. Of the declared paths matching the request's
-// path, the one with text where another has a parameter, at the first segment they differ, is the
-// request's path; its routes are matched by method.
+// matchRequest is the endpoint a request matches.
 func matchRequest(endpoints []Endpoint, request *http.Request) requestMatch {
-	candidates := mo.Fold(requestSegments(request.URL.EscapedPath()), func(segments []string) []candidate {
-		found := []candidate{}
-		for _, endpoint := range endpoints {
-			candidateFor(endpoint, segments).ForEach(func(matched candidate) { found = append(found, matched) })
-		}
-		return found
-	}, func(error) []candidate { return []candidate{} })
+	switch read := readRequestPath(request.URL.EscapedPath()).(type) {
+	case pathRead:
+		return matchSegments(endpoints, request.Method, read.segments)
+	case pathUnreadable:
+		return read
+	case nil:
+	}
+	return nothingMatched{}
+}
+
+// matchSegments is the endpoint a request's method and path segments match. Of the declared paths
+// matching the segments, the one that comes first by precedence is the request's path, and its
+// routes are matched by method.
+func matchSegments(endpoints []Endpoint, method string, segments []string) requestMatch {
+	candidates := []candidate{}
+	for _, endpoint := range endpoints {
+		candidateFor(endpoint, segments).ForEach(func(matched candidate) { candidates = append(candidates, matched) })
+	}
 	if len(candidates) == 0 {
 		return nothingMatched{}
 	}
-	// '0' sorts before '1', so the least shape has text first where the shapes differ.
-	shape := slices.MinFunc(candidates, func(left, right candidate) int { return cmp.Compare(left.shape, right.shape) }).shape
+	first := slices.MinFunc(candidates, precedence)
 	allowed := []string{}
 	for _, each := range candidates {
-		if each.shape != shape {
+		if precedence(each, first) != 0 {
 			continue
 		}
-		if each.endpoint.Method == request.Method {
+		if each.endpoint.Method == method {
 			return endpointMatched{candidate: each}
 		}
 		allowed = append(allowed, each.endpoint.Method)
@@ -295,44 +367,68 @@ func matchRequest(endpoints []Endpoint, request *http.Request) requestMatch {
 	return pathMatched{allowed: slices.Compact(allowed)}
 }
 
-// requestSegments is a request's escaped path split at each slash, each segment unescaped, absent
-// when a segment is not valid escaping.
-func requestSegments(escaped string) mo.Option[[]string] {
-	segments := mo.Some([]string{})
-	for segment := range strings.SplitSeq(escaped, "/") {
-		segments = mo.Fold(segments, func(read []string) mo.Option[[]string] {
-			return mo.Fold(mo.TupleToResult(url.PathUnescape(segment)), func(unescaped string) mo.Option[[]string] {
-				return mo.Some(append(read, unescaped))
-			}, func(error) mo.Option[[]string] { return mo.None[[]string]() })
-		}, func(error) mo.Option[[]string] { return mo.None[[]string]() })
+// precedence orders two candidates for one request's path, which hold as many segments: at the
+// first segment where one holds text and the other a parameter, the one holding text comes first.
+// Two candidates equal by precedence are one declared path.
+func precedence(left, right candidate) int {
+	for i, segment := range left.endpoint.Path {
+		if order := cmp.Compare(segment.parameters(), right.endpoint.Path[i].parameters()); order != 0 {
+			return order
+		}
 	}
-	return segments
+	return 0
+}
+
+// requestPath is a request's path read into segments, or the segment that could not be read.
+//
+//sumtype:decl
+type requestPath interface{ isRequestPath() }
+
+// pathRead is a request's path split at each slash after the first, each segment unescaped.
+//
+//ergo:not-an-error
+type pathRead struct{ segments []string }
+
+func (pathRead) isRequestPath()       {}
+func (pathUnreadable) isRequestPath() {}
+
+// readRequestPath is a request's escaped path split at each slash after the first, each segment
+// unescaped, or the first segment that is not valid escaping.
+func readRequestPath(escaped string) requestPath {
+	read := requestPath(pathRead{segments: []string{}})
+	for segment := range strings.SplitSeq(strings.TrimPrefix(escaped, "/"), "/") {
+		switch sofar := read.(type) {
+		case pathRead:
+			read = mo.Fold(mo.TupleToResult(url.PathUnescape(segment)), func(unescaped string) requestPath {
+				return pathRead{segments: append(sofar.segments, unescaped)}
+			}, func(cause error) requestPath { return pathUnreadable{segment: segment, reason: cause.Error()} })
+		case pathUnreadable, nil:
+		}
+	}
+	return read
 }
 
 // candidateFor is the endpoint as a candidate for a request's path segments, absent when its path
-// does not match them: each text segment equal, and each {name} segment not empty.
+// does not match them: as many segments, each text segment equal, and each parameter not empty.
 func candidateFor(endpoint Endpoint, segments []string) mo.Option[candidate] {
-	declared := strings.Split(endpoint.Path, "/")
-	if len(declared) != len(segments) {
+	if len(endpoint.Path) != len(segments) {
 		return mo.None[candidate]()
 	}
-	shape, values := &strings.Builder{}, []pathValue{}
-	for i, pattern := range declared {
-		segment := segments[i]
-		inner, opens := strings.CutPrefix(pattern, "{")
-		name, closes := strings.CutSuffix(inner, "}")
-		switch {
-		case opens && closes:
-			if segment == "" {
+	values := []pathValue{}
+	for i, declared := range endpoint.Path {
+		switch segment := declared.(type) {
+		case PathText:
+			if segment.Text != segments[i] {
 				return mo.None[candidate]()
 			}
-			shape.WriteString("1")
-			values = append(values, pathValue{name: name, value: segment})
-		case pattern == segment:
-			shape.WriteString("0")
-		default:
+		case PathParameter:
+			if segments[i] == "" {
+				return mo.None[candidate]()
+			}
+			values = append(values, pathValue{name: segment.Name, value: segments[i]})
+		case nil:
 			return mo.None[candidate]()
 		}
 	}
-	return mo.Some(candidate{endpoint: endpoint, shape: shape.String(), values: values})
+	return mo.Some(candidate{endpoint: endpoint, values: values})
 }

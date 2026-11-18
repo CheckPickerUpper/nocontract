@@ -459,7 +459,7 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 // renderedFiles is the TypeScript file, the OpenAPI file, each package's Go file, the server file,
 // the test of them all, and every generated Go file this run no longer writes, which must go.
 func renderedFiles(api description.API, plan serverplan.Plan, paths projectPaths, existing map[string][]byte) outcome.Result[[]generatedFile] {
-	return outcome.Fold(servedFiles(plan, paths.projectFile), func(served []generatedFile) outcome.Result[[]generatedFile] {
+	return outcome.Fold(servedFiles(api, plan, paths.projectFile), func(served []generatedFile) outcome.Result[[]generatedFile] {
 		return outcome.Fold(openapi.Render(api, paths.openAPI.Version), func(document []byte) outcome.Result[[]generatedFile] {
 			// Every existing generated file goes unless this run writes it again.
 			contents := map[string]mo.Option[[]byte]{paths.typeScript: mo.Some(effect.Render(api)), paths.openAPI.File: mo.Some(document)}
