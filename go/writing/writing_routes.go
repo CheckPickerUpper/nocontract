@@ -6,13 +6,8 @@
 package writing
 
 import (
-	"bytes"
 	"fmt"
-	"go/ast"
 	"go/format"
-	"go/parser"
-	"go/printer"
-	"go/token"
 	"maps"
 	"slices"
 	"strconv"
@@ -21,71 +16,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 )
-
-// Stubbed is an existing generated file as it is read while the routes are read again: its imports,
-// types and exported functions, each function's body only a panic. Code calling what the file
-// declares still type-checks, and the file's own code, which may no longer compile, is not read.
-func Stubbed(existing []byte) mo.Result[[]byte] {
-	files := token.NewFileSet()
-	return mo.Fold(mo.TupleToResult(parser.ParseFile(files, serverplan.RoutesFileName, existing, parser.SkipObjectResolution)), func(file *ast.File) mo.Result[[]byte] {
-		kept := []ast.Decl{}
-		for _, declaration := range file.Decls {
-			switch declared := declaration.(type) {
-			case *ast.GenDecl:
-				if declared.Tok != token.IMPORT {
-					kept = append(kept, declared)
-				}
-			case *ast.FuncDecl:
-				if declared.Name.IsExported() && declared.Recv.NumFields() == 0 {
-					declared.Body = stubBody()
-					kept = append(kept, declared)
-				}
-			case *ast.BadDecl, nil:
-			}
-		}
-		file.Decls = append([]ast.Decl{usedImports(file, kept)}, kept...)
-		file.Comments = []*ast.CommentGroup{}
-		printed := &bytes.Buffer{}
-		return mo.Fold(mo.EmptyableToOption(printer.Fprint(printed, files, file)), mo.Err[[]byte], func(error) mo.Result[[]byte] { return mo.Ok(printed.Bytes()) })
-	}, mo.Err[[]byte])
-}
-
-// stubBody is the body every function of a stub has: a panic saying the routes are being read.
-// The stub is only type-checked, never run.
-func stubBody() *ast.BlockStmt {
-	message := &ast.BasicLit{ValuePos: token.NoPos, ValueEnd: token.NoPos, Kind: token.STRING, Value: strconv.Quote("nocontract is reading the routes again")}
-	call := &ast.CallExpr{Fun: ast.NewIdent("panic"), Lparen: token.NoPos, Args: []ast.Expr{message}, Ellipsis: token.NoPos, Rparen: token.NoPos}
-	return &ast.BlockStmt{Lbrace: token.NoPos, List: []ast.Stmt{&ast.ExprStmt{X: call}}, Rbrace: token.NoPos}
-}
-
-// usedImports is the file's imports that the kept declarations refer to, each by the alias every
-// generated import is written with, so the stub has no unused import.
-func usedImports(file *ast.File, kept []ast.Decl) *ast.GenDecl {
-	used := map[string]struct{}{}
-	for _, declaration := range kept {
-		ast.Inspect(declaration, func(node ast.Node) bool {
-			if selector, isSelector := node.(*ast.SelectorExpr); isSelector {
-				if qualifier, isIdentifier := selector.X.(*ast.Ident); isIdentifier {
-					used[qualifier.Name] = struct{}{}
-				}
-			}
-			return true
-		})
-	}
-	specs := []ast.Spec{}
-	for _, spec := range file.Imports {
-		mo.EmptyableToOption(spec.Name).ForEach(func(alias *ast.Ident) {
-			outcome.ForEachOption(keyed.Entry(used, alias.Name), func(struct{}) { specs = append(specs, spec) })
-		})
-	}
-	return &ast.GenDecl{Doc: &ast.CommentGroup{List: []*ast.Comment{}}, TokPos: token.NoPos, Tok: token.IMPORT, Lparen: 1, Specs: specs, Rparen: 1}
-}
 
 // Render is the formatted Go file of the package.
 func Render(served serverplan.Package) outcome.Result[[]byte] {

@@ -430,7 +430,7 @@ func generated(ctx context.Context, projectFile string, finish func([]generatedF
 func generatedGo(ctx context.Context, projectFile string, project Project, finish func([]generatedFile) Outcome) Outcome {
 	directory := filepath.Dir(projectFile)
 	existing := existingGenerated(directory)
-	return mo.Fold(loadPackages(ctx, directory, project.Packages, existing), func(loaded []*packages.Package) Outcome {
+	return outcome.Fold(loadPackages(ctx, directory, project.Packages, existing), func(loaded []*packages.Package) Outcome {
 		// The API's name is given in the project file, which is where a name it repeats is refused.
 		named := assembling.NamedAPI{Name: project.API, Position: assembling.Position{File: projectFile, Line: 1, Column: 1}}
 		read := reading.ReadRoutes(reading.Request{Packages: loaded, API: named})
@@ -597,24 +597,29 @@ func existingGenerated(directory string) map[string][]byte {
 	})), func(error) map[string][]byte { return found }, func(error) map[string][]byte { return found })
 }
 
+// setAsideFile is what the loader reads in place of every existing generated file: a file no build
+// includes. What NoContract wrote earlier, against whatever runtime, never decides whether the
+// project can be read, and no declaration is read from it.
+const setAsideFile = "//go:build ignore\n\npackage ignored\n"
+
 // loadPackages loads the project's packages and nocontract's, each with its syntax and types, with
-// each existing generated file read as its stub.
-func loadPackages(ctx context.Context, directory string, patterns []string, existing map[string][]byte) mo.Result[[]*packages.Package] {
+// every existing generated file left out of the build.
+func loadPackages(ctx context.Context, directory string, patterns []string, existing map[string][]byte) outcome.Result[[]*packages.Package] {
 	overlay := map[string][]byte{}
-	for path, content := range existing {
-		// A file too broken to stub is read as it is; its own errors are set aside like a stub's.
-		overlay[path] = mo.Fold(writing.Stubbed(content), func(stub []byte) []byte { return stub }, func(error) []byte { return content })
+	for path := range existing {
+		overlay[path] = []byte(setAsideFile)
 	}
 	config := &packages.Config{
 		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports,
 		Context: ctx, Logf: func(string, ...any) {}, Dir: directory, Env: os.Environ(), BuildFlags: []string{}, Fset: token.NewFileSet(),
 		ParseFile: nil, Tests: false, Overlay: overlay,
 	}
-	return mo.TupleToResult(packages.Load(config, append(patterns, serverplan.NoContractPath)...))
+	return outcome.TupleToResult(packages.Load(config, append(patterns, serverplan.NoContractPath)...))
 }
 
-// loadProblems is every problem Go reported in a package whose declarations were read, except a
-// type error inside a generated file, which is read as its stub and written again by this run.
+// loadProblems is every problem Go reported in a package whose declarations were read. No
+// generated file is built, so each problem is in a file the project wrote, and a package NoContract
+// reads never names a declaration NoContract writes.
 func loadProblems(loaded []*packages.Package, read []string) []error {
 	problems := []error{}
 	for _, each := range loaded {
@@ -622,16 +627,7 @@ func loadProblems(loaded []*packages.Package, read []string) []error {
 			continue
 		}
 		for _, problem := range each.Errors {
-			if problem.Kind != packages.TypeError {
-				problems = append(problems, problem)
-			}
-		}
-		for _, problem := range each.TypeErrors {
-			switch serverplan.SourceFileAt(problem.Fset.Position(problem.Pos).Filename).(type) {
-			case serverplan.WrittenFile:
-				problems = append(problems, problem)
-			case serverplan.GeneratedFile, nil:
-			}
+			problems = append(problems, problem)
 		}
 	}
 	return problems
