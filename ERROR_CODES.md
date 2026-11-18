@@ -918,3 +918,16 @@ Message: `{Function} registers a handler outside the generated API; declare the 
 | Field | Type |
 | --- | --- |
 | `Function` | `string` |
+
+## NC-1080 ZeroServerMade
+
+ZeroServerMade is an http.Server made at its zero value, whose nil Handler serves
+http.DefaultServeMux and whatever any imported package registered on it, and how it is made.
+
+Declared in `go/reading/reading_serving_zero_server.go`.
+
+Message: `An http.Server is made at its zero value, which serves http.DefaultServeMux: {Way, select, ServerDeclaredWithoutValue {it is declared with no value} ServerAllocatedWithNew {new allocates it} ServerHeldByValue {a struct field, or an array, slice, map or channel element, holds it by value} ServerTypeDefined {a type is defined as it} ServerTypeArgument {it is a type argument} ServerNamedResult {it is a named result}}; write an http.Server literal with the generated API as its Handler, and hold it by pointer.`
+
+| Field | Type |
+| --- | --- |
+| `Way` | `reading.ZeroServerWay` |

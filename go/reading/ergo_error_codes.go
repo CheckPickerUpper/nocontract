@@ -1051,3 +1051,46 @@ func (failure HandlerRegistered) Report(language messages.Language) ergo.Report 
 func (failure HandlerRegistered) Causes() []error {
 	return nil
 }
+
+func (ZeroServerMade) ErrorCode() ergo.Code { return "NC-1080" }
+
+// ZeroServerMadeArguments holds the arguments ZeroServerMade's message names, in the order the message first names them.
+type ZeroServerMadeArguments struct {
+	Way string `json:"Way"`
+}
+
+// ReportArguments marks ZeroServerMadeArguments as the arguments of a report.
+func (ZeroServerMadeArguments) ReportArguments() {}
+
+// Report is ZeroServerMade's code, its message in language and the arguments the message names.
+func (failure ZeroServerMade) Report(language messages.Language) ergo.Report {
+	argumentWay := ""
+	switch failure.Way.(type) {
+	case ServerDeclaredWithoutValue:
+		argumentWay = "ServerDeclaredWithoutValue"
+	case ServerAllocatedWithNew:
+		argumentWay = "ServerAllocatedWithNew"
+	case ServerHeldByValue:
+		argumentWay = "ServerHeldByValue"
+	case ServerTypeDefined:
+		argumentWay = "ServerTypeDefined"
+	case ServerTypeArgument:
+		argumentWay = "ServerTypeArgument"
+	case ServerNamedResult:
+		argumentWay = "ServerNamedResult"
+	case nil:
+	}
+	arguments := ZeroServerMadeArguments{Way: argumentWay}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "An http.Server is made at its zero value, which serves http.DefaultServeMux: "}, messageformat.Select{Index: 0, Forms: []messageformat.SelectForm{{Member: "ServerDeclaredWithoutValue", Parts: []messageformat.Part{messageformat.Literal{Text: "it is declared with no value"}}}, {Member: "ServerAllocatedWithNew", Parts: []messageformat.Part{messageformat.Literal{Text: "new allocates it"}}}, {Member: "ServerHeldByValue", Parts: []messageformat.Part{messageformat.Literal{Text: "a struct field, or an array, slice, map or channel element, holds it by value"}}}, {Member: "ServerTypeDefined", Parts: []messageformat.Part{messageformat.Literal{Text: "a type is defined as it"}}}, {Member: "ServerTypeArgument", Parts: []messageformat.Part{messageformat.Literal{Text: "it is a type argument"}}}, {Member: "ServerNamedResult", Parts: []messageformat.Part{messageformat.Literal{Text: "it is a named result"}}}}}, messageformat.Literal{Text: "; write an http.Server literal with the generated API as its Handler, and hold it by pointer."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1080", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.ChoiceMember{Name: arguments.Way}}}), Arguments: arguments}
+}
+
+// Causes is every error ZeroServerMade holds, then the causes of every failure it holds.
+func (failure ZeroServerMade) Causes() []error {
+	return nil
+}

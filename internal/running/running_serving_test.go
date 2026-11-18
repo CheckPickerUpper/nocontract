@@ -96,6 +96,35 @@ func servingFiles() []servingFile {
 			refused: []servingRefusal{{marker: "HandleFunc", problem: reading.HandlerRegistered{Function: "net/http.HandleFunc"}}},
 		},
 		{
+			path: "cmd/ledger/zero_servers.go",
+			content: "package main\n\nimport \"net/http\"\n\n" +
+				"func declareServer() { var declared http.Server; _ = declared.ListenAndServe() }\n\n" +
+				"func allocateServer() { _ = new((http.Server)).ListenAndServe() }\n\n" +
+				"type serverHolder struct{ held http.Server }\n\n" +
+				"func makeServers() { _ = make([]http.Server, 1) }\n\n" +
+				"type definedServer http.Server\n\n" +
+				"func zeroOf[T any]() (zero T) { return zero }\n\n" +
+				"func instantiateServer() { _ = zeroOf[http.Server]() }\n\n" +
+				"func nameServerResult() (named http.Server) { return named }\n",
+			refused: []servingRefusal{
+				{marker: "http.Server; _", problem: reading.ZeroServerMade{Way: reading.ServerDeclaredWithoutValue{}}},
+				{marker: "http.Server)).", problem: reading.ZeroServerMade{Way: reading.ServerAllocatedWithNew{}}},
+				{marker: "http.Server }", problem: reading.ZeroServerMade{Way: reading.ServerHeldByValue{}}},
+				{marker: "http.Server, 1", problem: reading.ZeroServerMade{Way: reading.ServerHeldByValue{}}},
+				{marker: "http.Server\n\nfunc zeroOf", problem: reading.ZeroServerMade{Way: reading.ServerTypeDefined{}}},
+				{marker: "http.Server]", problem: reading.ZeroServerMade{Way: reading.ServerTypeArgument{}}},
+				{marker: "http.Server) { return named", problem: reading.ZeroServerMade{Way: reading.ServerNamedResult{}}},
+			},
+		},
+		{
+			path: "cmd/ledger/served_servers.go",
+			content: "package main\n\nimport (\n\t\"net/http\"\n\n\t\"example.com/shop/server\"\n)\n\n" +
+				"type serverPointer struct{ held *http.Server }\n\n" +
+				"func copyServer(given http.Server) http.Server {\n\tvar unset *http.Server\n\t_ = unset\n" +
+				"\tvar written http.Server = http.Server{Handler: server.API{}}\n\t_ = written\n\treturn given\n}\n",
+			refused: []servingRefusal{},
+		},
+		{
 			path: "cmd/ledger/served_api.go",
 			content: "package main\n\nimport (\n\t\"net/http\"\n\t\"net/http/httptest\"\n\n\t\"example.com/shop/server\"\n)\n\n" +
 				"func serveAPI(api server.API) {\n\tserved := &http.Server{Handler: api}\n\tserved.Handler = api\n\t_ = served.ListenAndServe()\n\thttptest.NewServer(api).Close()\n}\n",

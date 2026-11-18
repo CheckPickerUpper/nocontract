@@ -250,6 +250,10 @@ project wrote, tests included, each with its file, line and code:
   one of them without calling it;
 - an `http.Server` written without a `Handler` or with one that is not the API, and setting a
   server's `Handler` to anything else;
+- making an `http.Server` at its zero value, which serves `http.DefaultServeMux`: a variable
+  declared with no value, `new(http.Server)`, a struct field or an array, slice, map or channel
+  element holding one by value, a type defined as one, a type argument, or a named result. Hold a
+  server by pointer;
 - making a handler of its own: `http.HandlerFunc`, a `ServeHTTP` method, or registering on a
   `ServeMux` with `Handle` or `HandleFunc`.
 

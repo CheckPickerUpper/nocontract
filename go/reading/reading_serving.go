@@ -107,7 +107,7 @@ func JudgeServing(request ServingRequest) []assembling.Refusal {
 			case serverplan.WrittenFile:
 				judge := servingJudge{
 					files: each.Fset, info: each.TypesInfo, apiFile: filepath.Join(request.Server, serverplan.ServerFileName),
-					called: map[*ast.Ident]struct{}{}, refusals: []assembling.Refusal{},
+					called: map[*ast.Ident]struct{}{}, parents: []ast.Node{}, refusals: []assembling.Refusal{},
 				}
 				ast.Inspect(file, judge.judge)
 				refusals = append(refusals, judge.refusals...)
@@ -119,12 +119,14 @@ func JudgeServing(request ServingRequest) []assembling.Refusal {
 }
 
 // servingJudge judges one file: the positions and types it was loaded with, the file declaring the
-// generated API, each serving function's name it saw called, and what it refused.
+// generated API, each serving function's name it saw called, the nodes enclosing the one it
+// judges, innermost last, and what it refused.
 type servingJudge struct {
 	files    *token.FileSet
 	info     *types.Info
 	apiFile  string
 	called   map[*ast.Ident]struct{}
+	parents  []ast.Node
 	refusals []assembling.Refusal
 }
 
@@ -187,8 +189,16 @@ func (judge *servingJudge) refuse(pos token.Pos, problem Problem) {
 	judge.refusals = append(judge.refusals, assembling.Refusal{Position: placedAt(judge.files.Position(pos)), Problem: problem})
 }
 
-// judge refuses the node when it serves or makes a handler, and goes on into its children.
+// judge refuses the node when it serves, makes a handler or makes a server at its zero value, and
+// goes on into its children. Inspect calls it with nil once it has judged a node's children.
 func (judge *servingJudge) judge(node ast.Node) bool {
+	switch written := node.(type) {
+	case nil:
+		judge.parents = judge.parents[:len(judge.parents)-1]
+		return true
+	case ast.Expr:
+		judge.judgeServerType(written)
+	}
 	switch written := node.(type) {
 	case *ast.CallExpr:
 		judge.judgeCall(written)
@@ -202,6 +212,7 @@ func (judge *servingJudge) judge(node ast.Node) bool {
 		judge.judgeHandlerAssignment(written)
 	case nil:
 	}
+	judge.parents = append(judge.parents, node)
 	return true
 }
 
