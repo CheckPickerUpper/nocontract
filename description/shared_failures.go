@@ -78,9 +78,9 @@ func SharedFailures() []SharedFailure {
 		{
 			Name: "RequestRefused", Status: FailureStatus{code: http.StatusBadRequest}, Code: "NC-1001",
 			Fields: []Field{
-				{Name: "part", Schema: Literals{Values: []string{"path", "query", "body"}}},
-				{Name: "name", Schema: Text{}},
-				{Name: "reason", Schema: Text{}},
+				{Name: FieldName{text: "part"}, Schema: Literals{Values: []string{"path", "query", "body"}}},
+				{Name: FieldName{text: "name"}, Schema: Text{}},
+				{Name: FieldName{text: "reason"}, Schema: Text{}},
 			},
 			Answers: AnsweredWhenRequestRead{},
 			Doc: "RequestRefused is a request whose path segment, query parameter or body the route's input could " +
@@ -96,7 +96,7 @@ func SharedFailures() []SharedFailure {
 		},
 		{
 			Name: "AnswerNotWritten", Status: FailureStatus{code: http.StatusInternalServerError}, Code: "NC-1002",
-			Fields:  []Field{{Name: "answer", Schema: Text{}}, {Name: "reason", Schema: Text{}}},
+			Fields:  []Field{{Name: FieldName{text: "answer"}, Schema: Text{}}, {Name: FieldName{text: "reason"}, Schema: Text{}}},
 			Answers: AnsweredByEveryRoute{},
 			Doc: "AnswerNotWritten is a route whose outcome could not be written as JSON, or that answered no " +
 				"outcome at all. Every route can answer it.",
@@ -104,7 +104,7 @@ func SharedFailures() []SharedFailure {
 		},
 		{
 			Name: "RouteNotFound", Status: FailureStatus{code: http.StatusNotFound}, Code: "NC-1069",
-			Fields:  []Field{{Name: "method", Schema: Text{}}, {Name: "path", Schema: Text{}}},
+			Fields:  []Field{{Name: FieldName{text: "method"}, Schema: Text{}}, {Name: FieldName{text: "path"}, Schema: Text{}}},
 			Answers: AnsweredWithoutRoute{},
 			Doc:     "RouteNotFound is a request to a path no route declares.",
 			Message: []MessagePart{
@@ -116,7 +116,7 @@ func SharedFailures() []SharedFailure {
 		},
 		{
 			Name: "MethodNotDeclared", Status: FailureStatus{code: http.StatusMethodNotAllowed}, Code: "NC-1070",
-			Fields:  []Field{{Name: "method", Schema: Text{}}, {Name: "allowed", Schema: List{Item: Text{}}}},
+			Fields:  []Field{{Name: FieldName{text: "method"}, Schema: Text{}}, {Name: FieldName{text: "allowed"}, Schema: List{Item: Text{}}}},
 			Answers: AnsweredWithoutRoute{},
 			Doc: "MethodNotDeclared is a request to a declared path with a method no route at that path declares, " +
 				"and the methods the path's routes declare.",

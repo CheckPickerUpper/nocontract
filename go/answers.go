@@ -112,12 +112,12 @@ func (answer Answer) body() mo.Result[[]byte] {
 			return mo.Err[[]byte](FieldsNotObject{Tag: answer.tag})
 		}
 		object := bytes.NewBufferString("{")
-		object.Write(quoted(description.TagField))
+		object.Write(quoted(description.TagField().Text()))
 		object.WriteString(":")
 		object.Write(quoted(answer.tag))
 		answer.code.ForEach(func(code string) {
 			object.WriteString(",")
-			object.Write(quoted(description.CodeField))
+			object.Write(quoted(description.CodeField().Text()))
 			object.WriteString(":")
 			object.Write(quoted(code))
 		})

@@ -68,7 +68,7 @@ func writtenPath(segments []description.PathSegment) string {
 		case description.PathText:
 			parts = append(parts, written.Text)
 		case description.PathParameter:
-			parts = append(parts, "{"+written.Field.Name+"}")
+			parts = append(parts, "{"+written.Field.Name.Text()+"}")
 		case nil:
 		}
 	}
@@ -82,12 +82,12 @@ func routeOperation(groupName string, endpoint description.Endpoint) operation {
 	for _, segment := range endpoint.Path {
 		switch written := segment.(type) {
 		case description.PathParameter:
-			parameters = append(parameters, parameter{Name: written.Field.Name, In: "path", Required: true, Schema: fieldSchema(written.Field.Schema)})
+			parameters = append(parameters, parameter{Name: written.Field.Name.Text(), In: "path", Required: true, Schema: fieldSchema(written.Field.Schema)})
 		case description.PathText, nil:
 		}
 	}
 	for _, query := range endpoint.Query {
-		parameters = append(parameters, parameter{Name: query.Name, In: "query", Required: true, Schema: fieldSchema(query.Schema)})
+		parameters = append(parameters, parameter{Name: query.Name.Text(), In: "query", Required: true, Schema: fieldSchema(query.Schema)})
 	}
 	tags := []string{groupName}
 	// Endpoint names are unique within a group, so the group's name makes the id unique.
@@ -153,7 +153,7 @@ func answerSchema(names []string) schema {
 	if len(references) == 1 {
 		return references[0]
 	}
-	return oneOfSchema{OneOf: references, Discriminator: discriminator{PropertyName: description.TagField, Mapping: mapping}}
+	return oneOfSchema{OneOf: references, Discriminator: discriminator{PropertyName: description.TagField().Text(), Mapping: mapping}}
 }
 
 func reference(name string) referenceSchema { return referenceSchema{Ref: schemaPrefix + name} }
@@ -166,10 +166,10 @@ func componentSchemas(api description.API) map[string]schema {
 		written[named.Name] = structSchema(named.Fields)
 	}
 	for _, member := range api.Members {
-		fields := []description.Field{{Name: description.TagField, Schema: description.Literals{Values: []string{member.Name}}}}
+		fields := []description.Field{{Name: description.TagField(), Schema: description.Literals{Values: []string{member.Name}}}}
 		switch answer := member.Answer.(type) {
 		case description.Fails:
-			fields = append(fields, description.Field{Name: description.CodeField, Schema: description.Literals{Values: []string{answer.Code.String()}}})
+			fields = append(fields, description.Field{Name: description.CodeField(), Schema: description.Literals{Values: []string{answer.Code.String()}}})
 		case description.Succeeds, nil:
 		}
 		written[member.Name] = structSchema(append(fields, member.Fields...))
@@ -181,8 +181,8 @@ func componentSchemas(api description.API) map[string]schema {
 func structSchema(fields []description.Field) objectSchema {
 	properties, required := map[string]schema{}, []string{}
 	for _, field := range fields {
-		properties[field.Name] = fieldSchema(field.Schema)
-		required = append(required, field.Name)
+		properties[field.Name.Text()] = fieldSchema(field.Schema)
+		required = append(required, field.Name.Text())
 	}
 	return objectSchema{Type: "object", Properties: properties, Required: required, AdditionalProperties: false}
 }

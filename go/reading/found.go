@@ -134,3 +134,16 @@ func collected[Item, T any](items []Item, read func(Item) reading[T]) reading[[]
 	}
 	return gathered
 }
+
+// valuesRead is the value of each reading that has one, in order, so a step reading across items
+// sees every one that was read even when another was refused.
+func valuesRead[T any](reads []reading[T]) []T {
+	values := []T{}
+	for _, read := range reads {
+		read.value.ForEach(func(value T) { values = append(values, value) })
+	}
+	return values
+}
+
+// itself is a reading as it is.
+func itself[T any](read reading[T]) reading[T] { return read }

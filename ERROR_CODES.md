@@ -1155,3 +1155,56 @@ Message: `{Member} is marked //ergo:code more than once, with {Codes}; a failure
 | --- | --- |
 | `Member` | `string` |
 | `Codes` | `string` |
+
+## NC-1108 FieldNameEmpty
+
+FieldNameEmpty is a field given an empty name.
+
+Declared in `description/field_name_parsing.go`.
+
+Message: `The field is given an empty name.`
+
+## NC-1109 FieldNameUnwritable
+
+FieldNameUnwritable is a field name holding a character encoding/json does not write in a name,
+which makes it write the field under its Go name instead.
+
+Declared in `description/field_name_parsing.go`.
+
+Message: `The field name {Name} holds {Character}, which encoding/json does not write in a name; a name holds letters, digits, spaces and ASCII punctuation other than quotes, backquotes, backslashes and commas.`
+
+| Field | Type |
+| --- | --- |
+| `Name` | `string` |
+| `Character` | `string` |
+
+## NC-1110 StructTagMalformed
+
+StructTagMalformed is a field whose tag does not follow Go's key:"value" convention, so
+reflect, and encoding/json with it, reads no key of it.
+
+Declared in `go/reading/reading_field_tags.go`.
+
+Message: `The tag of the field {Field}, {Tag}, is not written key:"value" with a space between pairs.`
+
+| Field | Type |
+| --- | --- |
+| `Field` | `string` |
+| `Tag` | `string` |
+| `Cause` | `error` |
+
+## NC-1111 FieldNameRepeated
+
+FieldNameRepeated is a field written under a name an earlier field of its struct takes. Two JSON
+fields under one name make encoding/json write neither; two parameters under one name read one
+value twice.
+
+Declared in `go/reading/reading_field_tags.go`.
+
+Message: `The field {Field} is written under the name {Name}, which the field {First} already takes.`
+
+| Field | Type |
+| --- | --- |
+| `Field` | `string` |
+| `Name` | `string` |
+| `First` | `string` |

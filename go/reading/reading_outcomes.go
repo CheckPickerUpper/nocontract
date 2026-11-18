@@ -10,7 +10,6 @@ import (
 	ergo "github.com/CheckPickerUpper/ErGo"
 	"github.com/CheckPickerUpper/ErGo/declarations"
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
 
 	"github.com/CheckPickerUpper/nocontract/description"
@@ -189,25 +188,14 @@ func readMember(index projectIndex, member declaredType) reading[description.Mem
 	if !isStruct {
 		return notRead[description.Member](index.refused(member.spec.Pos(), MemberNotStruct{Member: name}))
 	}
-	read := collected(indexedFields(fields), func(field indexedField) reading[mo.Option[description.Field]] {
-		return readField(index, field, []typeKey{})
-	})
+	read := structFields(index, fields, []typeKey{})
 	answer := andThen(readStatus(index, member), func(status description.Status) reading[description.Answer] { return readAnswer(index, member, status) })
-	return andThen(read, func(written []mo.Option[description.Field]) reading[description.Member] {
+	return andThen(read, func(written []description.Field) reading[description.Member] {
 		return andThen(answer, func(decided description.Answer) reading[description.Member] {
-			whole := description.Member{Name: name, Answer: decided, Fields: present(written)}
+			whole := description.Member{Name: name, Answer: decided, Fields: written}
 			return readAs(whole, memberRead(foundMember{key: typeKeyFor(member.object), position: index.placed(member.spec.Pos()), member: whole}))
 		})
 	})
-}
-
-// present is every field that is written, in order.
-func present(fields []mo.Option[description.Field]) []description.Field {
-	written := []description.Field{}
-	for _, field := range fields {
-		field.ForEach(func(value description.Field) { written = append(written, value) })
-	}
-	return written
 }
 
 // readStatus is the one status a member's //nocontract:status line declares: a success that

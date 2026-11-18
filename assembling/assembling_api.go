@@ -313,7 +313,7 @@ func reservedFields(members []DeclaredMember) []Refusal {
 	for _, member := range members {
 		for _, field := range member.Member.Fields {
 			if slices.Contains(description.ReservedFields(), field.Name) {
-				refusals = append(refusals, Refusal{Position: member.Position, Problem: FieldNameReserved{Member: member.Member.Name, Field: field.Name}})
+				refusals = append(refusals, Refusal{Position: member.Position, Problem: FieldNameReserved{Member: member.Member.Name, Field: field.Name.Text()}})
 			}
 		}
 	}

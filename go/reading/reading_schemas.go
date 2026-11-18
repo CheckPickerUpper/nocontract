@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/fatih/structtag"
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/description"
@@ -33,7 +33,7 @@ func indexedFields(fields *types.Struct) []indexedField {
 //sumtype:decl
 type jsonTag interface{ isJSONTag() }
 
-// jsonNamed is a field written under name, its Go name when the tag names none.
+// jsonNamed is a field written under the name its tag gives, or its Go name when the tag gives none.
 //
 //ergo:not-an-error
 type jsonNamed struct{ name string }
@@ -52,52 +52,76 @@ func (jsonNamed) isJSONTag()    {}
 func (jsonOmitted) isJSONTag()  {}
 func (jsonOptioned) isJSONTag() {}
 
-func readJSONTag(field indexedField) jsonTag {
-	goName := field.variable.Name()
-	return mo.Fold(mo.TupleToResult(structtag.Parse(field.tag)), func(tags *structtag.Tags) jsonTag {
-		return mo.Fold(mo.TupleToResult(tags.Get("json")), func(found *structtag.Tag) jsonTag {
-			switch {
-			case len(found.Options) > 0:
-				return jsonOptioned{options: strings.Join(found.Options, ",")}
-			case found.Name == "-":
-				return jsonOmitted{}
-			case found.Name == "":
-				return jsonNamed{name: goName}
-			}
-			return jsonNamed{name: found.Name}
-		}, func(error) jsonTag { return jsonNamed{name: goName} })
-	}, func(error) jsonTag { return jsonNamed{name: goName} })
+// parsedJSONTag is how encoding/json writes a field whose tags are tags.
+func parsedJSONTag(field indexedField, tags fieldTags) jsonTag {
+	return outcome.FoldOption(tags.lookup("json"), func(found tagValue) jsonTag {
+		switch {
+		case len(found.options) > 0:
+			return jsonOptioned{options: strings.Join(found.options, ",")}
+		case found.name == "-":
+			return jsonOmitted{}
+		case found.name == "":
+			return jsonNamed{name: field.variable.Name()}
+		}
+		return jsonNamed{name: found.name}
+	}, func() jsonTag { return jsonNamed{name: field.variable.Name()} })
+}
+
+// fieldWritten is a struct field encoding/json writes, and the Go field it is written from.
+type fieldWritten struct {
+	field    description.Field
+	variable *types.Var
 }
 
 // readField reads one struct field under encoding/json's naming: nothing for an unexported field or
-// one tagged json:"-", which encoding/json never writes. An embedded field and a tag option such as
-// omitempty are refused. open is every named struct whose fields are being read.
-func readField(index projectIndex, field indexedField, open []typeKey) reading[mo.Option[description.Field]] {
+// one tagged json:"-", which encoding/json never writes. An embedded field, a tag reflect cannot
+// read, a name encoding/json would not write and a tag option such as omitempty are refused. open is
+// every named struct whose fields are being read.
+func readField(index projectIndex, field indexedField, open []typeKey) reading[outcome.Option[fieldWritten]] {
 	position := field.variable.Pos()
 	if field.variable.Embedded() {
-		return notRead[mo.Option[description.Field]](index.refused(position, EmbeddedFieldUnsupported{Field: field.variable.Name()}))
+		return notRead[outcome.Option[fieldWritten]](index.refused(position, EmbeddedFieldUnsupported{Field: field.variable.Name()}))
 	}
 	if !field.variable.Exported() {
-		return readAs(mo.None[description.Field](), nothingFound())
+		return readAs(outcome.None[fieldWritten](), nothingFound())
 	}
-	switch tag := readJSONTag(field).(type) {
-	case jsonNamed:
-		return mapped(readSchema(index, field.variable.Type(), position, open), func(schema description.Schema) mo.Option[description.Field] {
-			return mo.Some(description.Field{Name: tag.name, Schema: schema})
-		})
-	case jsonOmitted:
-		return readAs(mo.None[description.Field](), nothingFound())
-	case jsonOptioned:
-		return notRead[mo.Option[description.Field]](index.refused(position, FieldOptionUnsupported{Field: field.variable.Name(), Option: tag.options}))
-	case nil:
-	}
-	return readAs(mo.None[description.Field](), nothingFound())
+	return andThen(readFieldTags(index, field), func(tags fieldTags) reading[outcome.Option[fieldWritten]] {
+		switch tag := parsedJSONTag(field, tags).(type) {
+		case jsonNamed:
+			read := paired(readFieldName(index, position, tag.name), readSchema(index, field.variable.Type(), position, open))
+			return mapped(read, func(read pair[description.FieldName, description.Schema]) outcome.Option[fieldWritten] {
+				return outcome.Some(fieldWritten{field: description.Field{Name: read.first, Schema: read.second}, variable: field.variable})
+			})
+		case jsonOmitted:
+			return readAs(outcome.None[fieldWritten](), nothingFound())
+		case jsonOptioned:
+			return notRead[outcome.Option[fieldWritten]](index.refused(position, FieldOptionUnsupported{Field: field.variable.Name(), Option: tag.options}))
+		case nil:
+		}
+		return readAs(outcome.None[fieldWritten](), nothingFound())
+	})
 }
 
-// structFields reads every written field of a struct that is not an outcome member.
+// structFields reads every field encoding/json writes of a struct, each under its own name.
 func structFields(index projectIndex, fields *types.Struct, open []typeKey) reading[[]description.Field] {
-	read := collected(indexedFields(fields), func(field indexedField) reading[mo.Option[description.Field]] { return readField(index, field, open) })
-	return mapped(read, present)
+	reads := []reading[outcome.Option[fieldWritten]]{}
+	for _, field := range indexedFields(fields) {
+		reads = append(reads, readField(index, field, open))
+	}
+	written := []fieldWritten{}
+	for _, each := range valuesRead(reads) {
+		outcome.ForEachOption(each, func(field fieldWritten) { written = append(written, field) })
+	}
+	once := namedOnce(index, written, func(field fieldWritten) writtenName {
+		return writtenName{name: field.field.Name, variable: field.variable}
+	})
+	return mapped(paired(collected(reads, itself), once), func(read pair[[]outcome.Option[fieldWritten], []fieldWritten]) []description.Field {
+		fields := []description.Field{}
+		for _, each := range read.second {
+			fields = append(fields, each.field)
+		}
+		return fields
+	})
 }
 
 func unsupported(index projectIndex, position token.Pos, written types.Type, flaw TypeFlaw) reading[description.Schema] {

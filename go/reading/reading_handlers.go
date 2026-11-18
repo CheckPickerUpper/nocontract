@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/fatih/structtag"
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
 
@@ -275,10 +274,17 @@ func goName(declared declaredType) serverplan.GoName {
 	return serverplan.GoName{Package: declared.loaded.PkgPath, Name: declared.object.Name()}
 }
 
-// parameter is one path or query field: its JSON field and how the generated code reads it.
+// parameter is one path or query field: its JSON field, how the generated code reads it, and the Go
+// field it is read into.
 type parameter struct {
-	field description.Field
-	plan  serverplan.Param
+	field    description.Field
+	plan     serverplan.Param
+	variable *types.Var
+}
+
+// parameterName is the name a parameter is read under, and the Go field it is read into.
+func parameterName(param parameter) writtenName {
+	return writtenName{name: param.field.Name, variable: param.variable}
 }
 
 // parameterFields is each parameter's JSON field.
@@ -312,12 +318,12 @@ type inputShape struct {
 //sumtype:decl
 type inputField interface{ isInputField() }
 
-// pathField reads the path segment it names.
+// pathField reads the path segment its tag names.
 //
 //ergo:not-an-error
 type pathField struct{ name string }
 
-// queryField reads the query parameter it names.
+// queryField reads the query parameter its tag names.
 //
 //ergo:not-an-error
 type queryField struct{ name string }
@@ -343,27 +349,16 @@ func (bodyField) isInputField()          {}
 func (embeddedInputField) isInputField() {}
 func (unplacedField) isInputField()      {}
 
-// fieldTag is a struct field's tag, as Go's type checker gives it.
-type fieldTag string
-
-// value is the tag's value for key, when the tag carries it.
-func (tag fieldTag) value(key string) mo.Option[string] {
-	return mo.Fold(mo.TupleToResult(structtag.Parse(string(tag))), func(tags *structtag.Tags) mo.Option[string] {
-		return mo.Fold(mo.TupleToResult(tags.Get(key)), func(found *structtag.Tag) mo.Option[string] { return mo.Some(found.Value()) },
-			func(error) mo.Option[string] { return mo.None[string]() })
-	}, func(error) mo.Option[string] { return mo.None[string]() })
-}
-
-// inputFieldPlace is where the generated code reads an input field from.
-func inputFieldPlace(field indexedField) inputField {
+// inputFieldPlace is where the generated code reads an input field whose tags are tags from.
+func inputFieldPlace(field indexedField, tags fieldTags) inputField {
 	switch {
 	case field.variable.Embedded():
 		return embeddedInputField{}
 	case !field.variable.Exported():
 		return unplacedField{}
 	}
-	return mo.Fold(fieldTag(field.tag).value("path"), func(name string) inputField { return pathField{name: name} }, func(error) inputField {
-		return mo.Fold(fieldTag(field.tag).value("query"), func(name string) inputField { return queryField{name: name} }, func(error) inputField {
+	return outcome.FoldOption(tags.lookup("path"), func(path tagValue) inputField { return pathField{name: path.text} }, func() inputField {
+		return outcome.FoldOption(tags.lookup("query"), func(query tagValue) inputField { return queryField{name: query.text} }, func() inputField {
 			if field.variable.Name() == "Body" {
 				return bodyField{}
 			}
@@ -408,19 +403,34 @@ func readInput(index projectIndex, loaded *packages.Package, input types.Type, p
 		return notRead[inputShape](index.refused(position, InputNotStruct{Input: types.TypeString(input, nil)}))
 	}
 	return alongside(andThen(reachableName(index, named.Obj(), loaded.PkgPath, position), func(name serverplan.GoName) reading[inputShape] {
-		placed := collected(indexedFields(fields), func(field indexedField) reading[placedField] { return readPlacedField(index, loaded, field) })
-		return mapped(placed, func(placed []placedField) inputShape { return sortedInput(name, placed) })
+		reads := []reading[placedField]{}
+		for _, field := range indexedFields(fields) {
+			reads = append(reads, readPlacedField(index, loaded, field))
+		}
+		// Names are compared across every field read, so a repeat is refused beside any other refusal.
+		read := sortedInput(name, valuesRead(reads))
+		once := paired(namedOnce(index, read.params, parameterName), namedOnce(index, read.query, parameterName))
+		return mapped(paired(collected(reads, itself), once), func(pair[[]placedField, pair[[]parameter, []parameter]]) inputShape { return read })
 	}), packageRead(packagePath(named.Obj())))
 }
 
 // readPlacedField reads one input field where it is placed.
 func readPlacedField(index projectIndex, loaded *packages.Package, field indexedField) reading[placedField] {
+	return andThen(readFieldTags(index, field), func(tags fieldTags) reading[placedField] { return readPlacedFieldTagged(index, loaded, field, tags) })
+}
+
+// readPlacedFieldTagged reads one input field whose tags are tags where it is placed.
+func readPlacedFieldTagged(index projectIndex, loaded *packages.Package, field indexedField, tags fieldTags) reading[placedField] {
 	position := field.variable.Pos()
-	switch place := inputFieldPlace(field).(type) {
+	switch place := inputFieldPlace(field, tags).(type) {
 	case pathField:
-		return mapped(readParameter(index, loaded, field.variable, place.name), func(read parameter) placedField { return pathRead{read: read} })
+		return andThen(readFieldName(index, position, place.name), func(name description.FieldName) reading[placedField] {
+			return mapped(readParameter(index, loaded, field.variable, name), func(read parameter) placedField { return pathRead{read: read} })
+		})
 	case queryField:
-		return mapped(readParameter(index, loaded, field.variable, place.name), func(read parameter) placedField { return queryRead{read: read} })
+		return andThen(readFieldName(index, position, place.name), func(name description.FieldName) reading[placedField] {
+			return mapped(readParameter(index, loaded, field.variable, name), func(read parameter) placedField { return queryRead{read: read} })
+		})
 	case bodyField:
 		return mapped(readSchema(index, field.variable.Type(), position, []typeKey{}), func(schema description.Schema) placedField { return bodyFieldRead{schema: schema} })
 	case embeddedInputField:
@@ -448,7 +458,7 @@ func sortedInput(name serverplan.GoName, placed []placedField) inputShape {
 }
 
 // readParameter reads a path or query field, whose text the generated code parses by its type.
-func readParameter(index projectIndex, loaded *packages.Package, field *types.Var, name string) reading[parameter] {
+func readParameter(index projectIndex, loaded *packages.Package, field *types.Var, name description.FieldName) reading[parameter] {
 	unsupported := notRead[parameter](index.refused(field.Pos(), ParameterTypeUnsupported{Field: field.Name(), Type: types.TypeString(field.Type(), nil)}))
 	basic, isBasic := field.Type().Underlying().(*types.Basic)
 	if !isBasic {
@@ -464,8 +474,9 @@ func readParameter(index projectIndex, loaded *packages.Package, field *types.Va
 		return andThen(readSchema(index, field.Type(), field.Pos(), []typeKey{}), func(schema description.Schema) reading[parameter] {
 			return mo.Fold(textKind(basic, schema), func(kind serverplan.TextKind) reading[parameter] {
 				return readAs(parameter{
-					field: description.Field{Name: name, Schema: schema},
-					plan:  serverplan.Param{Name: name, GoField: field.Name(), Text: kind, GoType: goType},
+					field:    description.Field{Name: name, Schema: schema},
+					plan:     serverplan.Param{Name: name.Text(), GoField: field.Name(), Text: kind, GoType: goType},
+					variable: field,
 				}, nothingFound())
 			}, func(error) reading[parameter] { return unsupported })
 		})

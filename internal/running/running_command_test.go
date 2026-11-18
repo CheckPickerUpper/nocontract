@@ -71,6 +71,7 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 		"NC-1051", "NC-1051", "NC-1052", "NC-1056", "NC-1090", "NC-1091", "NC-1092", "NC-1093", "NC-1094", "NC-1095",
 		"NC-1096", "NC-1097", "NC-1096", "NC-1098", "NC-1099", "NC-1100", "NC-1101", "NC-1102", "NC-1103", "NC-1104",
 		"NC-1007", "NC-1014", "NC-1105", "NC-1106", "NC-1107",
+		"NC-1108", "NC-1108", "NC-1109", "NC-1110", "NC-1110", "NC-1111", "NC-1111",
 	}
 	slices.Sort(want)
 	if !slices.Equal(codes, want) {
@@ -82,6 +83,7 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 	}{
 		{file: "refused_directives.go", want: wrongDirectiveRefusals()},
 		{file: "refused_markings.go", want: undecidedMarkingRefusals()},
+		{file: "refused_fields.go", want: misnamedFieldRefusals()},
 	} {
 		placed := filepath.Join(filepath.Dir(project(t, "refused")), "routes", each.file) + ":"
 		read := []string{}
@@ -91,6 +93,20 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 		if !slices.Equal(read, each.want) {
 			t.Errorf("%s was refused as\n%s\nwant\n%s", each.file, strings.Join(read, "\n"), strings.Join(each.want, "\n"))
 		}
+	}
+}
+
+// misnamedFieldRefusals is each field of the refused project whose tag or name is refused, each for
+// its own cause, and never under a name nothing checked.
+func misnamedFieldRefusals() []string {
+	return []string{
+		`19:2: NC-1110 The tag of the field Unquoted, json:item, is not written key:"value" with a space between pairs.`,
+		`20:2: NC-1109 The field name it's holds ', which encoding/json does not write in a name; a name holds letters, digits, spaces and ASCII punctuation other than quotes, backquotes, backslashes and commas.`,
+		`22:2: NC-1111 The field Second is written under the name twin, which the field First already takes.`,
+		`30:2: NC-1108 The field is given an empty name.`,
+		`31:2: NC-1108 The field is given an empty name.`,
+		`33:2: NC-1111 The field Order is written under the name sort, which the field Sort already takes.`,
+		`34:2: NC-1110 The tag of the field Bare, query:page, is not written key:"value" with a space between pairs.`,
 	}
 }
 

@@ -43,6 +43,20 @@ func routePath(t *testing.T, text string) description.RoutePath {
 	return description.RoutePath{}
 }
 
+// fieldName is text read as a field's name.
+func fieldName(t *testing.T, text string) description.FieldName {
+	t.Helper()
+	switch read := description.ParseFieldName(text).(type) {
+	case description.FieldNameRead:
+		return read.Name
+	case description.FieldNameRefused:
+		t.Fatalf("%q is not a field's name: %#v", text, read.Problem)
+	case nil:
+	}
+	t.Fatalf("%q was read as no field's name", text)
+	return description.FieldName{}
+}
+
 // apiName is text read as the name of the API's class.
 func apiName(t *testing.T, text string) description.APIName {
 	t.Helper()
@@ -88,7 +102,7 @@ func refusedCodes(t *testing.T, declared assembling.Declared) []string {
 
 func TestEachRuleSpanningRoutesRefusesWithItsCode(t *testing.T) {
 	t.Parallel()
-	text := description.Field{Name: "item_id", Schema: description.Text{}}
+	text := description.Field{Name: fieldName(t, "item_id"), Schema: description.Text{}}
 	withParams := func(endpoint assembling.DeclaredEndpoint, params ...description.Field) assembling.DeclaredEndpoint {
 		endpoint.Params = params
 		return endpoint
@@ -100,7 +114,7 @@ func TestEachRuleSpanningRoutesRefusesWithItsCode(t *testing.T) {
 		Member: description.Member{Name: "RequestRefused", Answer: description.Succeeds{Status: description.SuccessStatus{}}, Fields: []description.Field{}}, Position: at(101),
 	})
 	reservedField := api(t, route(t, "list", "/items", 2))
-	reservedField.Members[0].Member.Fields = []description.Field{{Name: "code", Schema: description.Text{}}}
+	reservedField.Members[0].Member.Fields = []description.Field{{Name: description.CodeField(), Schema: description.Text{}}}
 	for _, each := range []struct {
 		name     string
 		declared assembling.Declared
@@ -113,7 +127,7 @@ func TestEachRuleSpanningRoutesRefusesWithItsCode(t *testing.T) {
 		{
 			name: "two routes on one path whose parameters are named apart",
 			declared: api(t, withParams(route(t, "first", "/items/{item_id}", 2), text),
-				withParams(route(t, "second", "/items/{id}", 3), description.Field{Name: "id", Schema: description.Text{}})),
+				withParams(route(t, "second", "/items/{id}", 3), description.Field{Name: fieldName(t, "id"), Schema: description.Text{}})),
 			want: []string{"NC-1026"},
 		},
 		{name: "a member field named code", declared: reservedField, want: []string{"NC-1033"}},
@@ -138,7 +152,7 @@ func memberAnswers(members []description.Member) []string {
 
 func TestARouteIsDescribedWithItsBoundPathAndTheMembersItAnswersWith(t *testing.T) {
 	t.Parallel()
-	item := description.Field{Name: "item_id", Schema: description.Text{}}
+	item := description.Field{Name: fieldName(t, "item_id"), Schema: description.Text{}}
 	notFound := description.FoldStatus(404, func(status description.Status) description.FailureStatus {
 		failure, isFailure := status.(description.FailureStatus)
 		if !isFailure {

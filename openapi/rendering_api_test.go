@@ -46,14 +46,28 @@ func answered(t *testing.T, number int, code ergo.Code) description.Answer {
 	return parsed
 }
 
-func field(name string, schema description.Schema) description.Field {
-	return description.Field{Name: name, Schema: schema}
+// fieldMaker makes a field of a name read as a field's name and a schema.
+func fieldMaker(t *testing.T) func(name string, schema description.Schema) description.Field {
+	t.Helper()
+	return func(name string, schema description.Schema) description.Field {
+		t.Helper()
+		switch read := description.ParseFieldName(name).(type) {
+		case description.FieldNameRead:
+			return description.Field{Name: read.Name, Schema: schema}
+		case description.FieldNameRefused:
+			t.Fatalf("%q is not a field's name: %#v", name, read.Problem)
+		case nil:
+		}
+		t.Fatalf("%q was read as no field's name", name)
+		return description.Field{Name: description.FieldName{}, Schema: schema}
+	}
 }
 
 // itemAPI is one group of three routes, two sharing a path and one reading a body, two failures
 // sharing a status, and a named struct holding every schema.
 func itemAPI(t *testing.T) description.API {
 	t.Helper()
+	field := fieldMaker(t)
 	itemID := field("item_id", description.Integer{})
 	itemRead := description.Member{Name: "ItemRead", Answer: answered(t, 200, ""), Fields: []description.Field{field("item", description.StructRef{Name: "Item"})}}
 	itemAdded := description.Member{Name: "ItemAdded", Answer: answered(t, 201, ""), Fields: []description.Field{field("id", description.Integer{})}}

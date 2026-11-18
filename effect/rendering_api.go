@@ -84,7 +84,7 @@ func memberText(member description.Member) string {
 		}
 		return fmt.Sprintf("export const %s = %s\nexport type %s = typeof %s.Type\n", member.Name, declared, member.Name, member.Name)
 	case description.Fails:
-		fields := append([]description.Field{{Name: description.CodeField, Schema: description.Literals{Values: []string{answer.Code.String()}}}}, member.Fields...)
+		fields := append([]description.Field{{Name: description.CodeField(), Schema: description.Literals{Values: []string{answer.Code.String()}}}}, member.Fields...)
 		return fmt.Sprintf("export class %s extends Schema.TaggedError<%s>()(%s, %s, { httpApiStatus: %d }) {}\n",
 			member.Name, member.Name, quoted(member.Name), fieldsText(fields, ""), answer.Status.Code())
 	case nil:
@@ -106,7 +106,7 @@ func writtenPath(segments []description.PathSegment) pathText {
 		case description.PathText:
 			parts = append(parts, written.Text)
 		case description.PathParameter:
-			parts = append(parts, ":"+written.Field.Name)
+			parts = append(parts, ":"+written.Field.Name.Text())
 			params = append(params, written.Field)
 		case nil:
 		}
@@ -148,7 +148,7 @@ func fieldsText(fields []description.Field, indent string) string {
 	}
 	lines := []string{}
 	for _, field := range fields {
-		name := field.Name
+		name := field.Name.Text()
 		if !identifier().MatchString(name) {
 			name = quoted(name)
 		}

@@ -34,7 +34,7 @@ func (pathRefused) isPathBinding() {}
 func boundPath(declared DeclaredEndpoint) pathBinding {
 	unbound := map[string]description.Field{}
 	for _, field := range declared.Params {
-		unbound[field.Name] = field
+		unbound[field.Name.Text()] = field
 	}
 	segments, refusals := []description.PathSegment{}, []Refusal{}
 	refused := func(problem Problem) {

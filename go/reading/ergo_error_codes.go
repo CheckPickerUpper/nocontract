@@ -1372,3 +1372,64 @@ func (failure CodeRepeated) Report(language messages.Language) ergo.Report {
 func (failure CodeRepeated) Causes() []error {
 	return nil
 }
+
+func (StructTagMalformed) ErrorCode() ergo.Code { return "NC-1110" }
+
+// StructTagMalformedArguments holds the arguments StructTagMalformed's message names, in the order the message first names them.
+type StructTagMalformedArguments struct {
+	Field string `json:"Field"`
+	Tag   string `json:"Tag"`
+}
+
+// ReportArguments marks StructTagMalformedArguments as the arguments of a report.
+func (StructTagMalformedArguments) ReportArguments() {}
+
+// Report is StructTagMalformed's code, its message in language and the arguments the message names.
+func (failure StructTagMalformed) Report(language messages.Language) ergo.Report {
+	arguments := StructTagMalformedArguments{Field: string(failure.Field), Tag: string(failure.Tag)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The tag of the field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: ", "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", is not written key:\"value\" with a space between pairs."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1110", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Field}, messageformat.TextValue{Text: arguments.Tag}}}), Arguments: arguments}
+}
+
+// Causes is every error StructTagMalformed holds, then the causes of every failure it holds.
+func (failure StructTagMalformed) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}
+
+func (FieldNameRepeated) ErrorCode() ergo.Code { return "NC-1111" }
+
+// FieldNameRepeatedArguments holds the arguments FieldNameRepeated's message names, in the order the message first names them.
+type FieldNameRepeatedArguments struct {
+	Field string `json:"Field"`
+	Name  string `json:"Name"`
+	First string `json:"First"`
+}
+
+// ReportArguments marks FieldNameRepeatedArguments as the arguments of a report.
+func (FieldNameRepeatedArguments) ReportArguments() {}
+
+// Report is FieldNameRepeated's code, its message in language and the arguments the message names.
+func (failure FieldNameRepeated) Report(language messages.Language) ergo.Report {
+	arguments := FieldNameRepeatedArguments{Field: string(failure.Field), Name: string(failure.Name), First: string(failure.First)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is written under the name "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", which the field "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: " already takes."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1111", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Field}, messageformat.TextValue{Text: arguments.Name}, messageformat.TextValue{Text: arguments.First}}}), Arguments: arguments}
+}
+
+// Causes is every error FieldNameRepeated holds, then the causes of every failure it holds.
+func (failure FieldNameRepeated) Causes() []error {
+	return nil
+}

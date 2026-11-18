@@ -239,3 +239,57 @@ func (failure PathBraceInText) Report(language messages.Language) ergo.Report {
 func (failure PathBraceInText) Causes() []error {
 	return nil
 }
+
+func (FieldNameEmpty) ErrorCode() ergo.Code { return "NC-1108" }
+
+// FieldNameEmptyArguments holds the arguments FieldNameEmpty's message names, in the order the message first names them.
+type FieldNameEmptyArguments struct {
+}
+
+// ReportArguments marks FieldNameEmptyArguments as the arguments of a report.
+func (FieldNameEmptyArguments) ReportArguments() {}
+
+// Report is FieldNameEmpty's code, its message in language and the arguments the message names.
+func (failure FieldNameEmpty) Report(language messages.Language) ergo.Report {
+	arguments := FieldNameEmptyArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The field is given an empty name."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1108", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error FieldNameEmpty holds, then the causes of every failure it holds.
+func (failure FieldNameEmpty) Causes() []error {
+	return nil
+}
+
+func (FieldNameUnwritable) ErrorCode() ergo.Code { return "NC-1109" }
+
+// FieldNameUnwritableArguments holds the arguments FieldNameUnwritable's message names, in the order the message first names them.
+type FieldNameUnwritableArguments struct {
+	Name      string `json:"Name"`
+	Character string `json:"Character"`
+}
+
+// ReportArguments marks FieldNameUnwritableArguments as the arguments of a report.
+func (FieldNameUnwritableArguments) ReportArguments() {}
+
+// Report is FieldNameUnwritable's code, its message in language and the arguments the message names.
+func (failure FieldNameUnwritable) Report(language messages.Language) ergo.Report {
+	arguments := FieldNameUnwritableArguments{Name: string(failure.Name), Character: string(failure.Character)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The field name "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", which encoding/json does not write in a name; a name holds letters, digits, spaces and ASCII punctuation other than quotes, backquotes, backslashes and commas."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1109", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Name}, messageformat.TextValue{Text: arguments.Character}}}), Arguments: arguments}
+}
+
+// Causes is every error FieldNameUnwritable holds, then the causes of every failure it holds.
+func (failure FieldNameUnwritable) Causes() []error {
+	return nil
+}

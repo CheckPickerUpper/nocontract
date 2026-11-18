@@ -144,16 +144,6 @@ func ParseMethod(text string) outcome.Option[Method] {
 	return outcome.None[Method]()
 }
 
-// TagField is the field every answer names its member in.
-const TagField = "_tag"
-
-// CodeField is the field a failure carries its permanent code in.
-const CodeField = "code"
-
-// ReservedFields is every field name an answer writes before its member's own fields, which a
-// member therefore cannot declare.
-func ReservedFields() []string { return []string{TagField, CodeField} }
-
 // Endpoint is one route: its name, its method and path, with {name} path segments, what it reads
 // from the request, the members it succeeds with, and every member it can fail with: its outcome's
 // failures, then its guard's refusals and nocontract's own failures, which answer outside its
@@ -327,7 +317,7 @@ func (Fails) isAnswer()    {}
 
 // Field is one JSON field: its name on the wire and its schema.
 type Field struct {
-	Name   string
+	Name   FieldName
 	Schema Schema
 }
 

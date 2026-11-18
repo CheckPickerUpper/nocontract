@@ -66,15 +66,16 @@ func RenderRuntime(failures []description.SharedFailure) mo.Result[[]byte] {
 func sharedFailureText(failure description.SharedFailure) mo.Result[string] {
 	fields, literals := []string{}, &strings.Builder{}
 	for _, field := range failure.Fields {
-		goField := goFieldName(field.Name)
+		name := field.Name.Text()
+		goField := goFieldName(name)
 		switch schema := field.Schema.(type) {
 		case description.Text:
-			fields = append(fields, fmt.Sprintf("\t%s string `json:%q`\n", goField, field.Name))
+			fields = append(fields, fmt.Sprintf("\t%s string `json:%q`\n", goField, name))
 		case description.Literals:
 			literalType := failure.Name + goField
-			fields = append(fields, fmt.Sprintf("\t%s %s `json:%q`\n", goField, literalType, field.Name))
+			fields = append(fields, fmt.Sprintf("\t%s %s `json:%q`\n", goField, literalType, name))
 			fmt.Fprintf(literals, "\n// %s is which of its values a %s's %s field holds.\ntype %s string\n\n// The values a %s's %s field holds.\nconst (\n",
-				literalType, failure.Name, field.Name, literalType, failure.Name, field.Name)
+				literalType, failure.Name, name, literalType, failure.Name, name)
 			for _, value := range schema.Values {
 				fmt.Fprintf(literals, "\t%s%s %s = %s\n", literalType, goFieldName(value), literalType, strconv.Quote(value))
 			}
@@ -82,14 +83,14 @@ func sharedFailureText(failure description.SharedFailure) mo.Result[string] {
 		case description.List:
 			switch schema.Item.(type) {
 			case description.Text:
-				fields = append(fields, fmt.Sprintf("\t%s []string `json:%q`\n", goField, field.Name))
+				fields = append(fields, fmt.Sprintf("\t%s []string `json:%q`\n", goField, name))
 			case description.Integer, description.Finite, description.Truth, description.Instant, description.Literals, description.List,
 				description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
-				return mo.Err[string](SharedFieldUnsupported{Failure: failure.Name, Field: field.Name})
+				return mo.Err[string](SharedFieldUnsupported{Failure: failure.Name, Field: name})
 			}
 		case description.Integer, description.Finite, description.Truth, description.Instant, description.Dictionary,
 			description.Nullable, description.StructRef, description.InlineStruct, nil:
-			return mo.Err[string](SharedFieldUnsupported{Failure: failure.Name, Field: field.Name})
+			return mo.Err[string](SharedFieldUnsupported{Failure: failure.Name, Field: name})
 		}
 	}
 	return mo.Ok(fmt.Sprintf("\n// %s\n//\n//ergo:code %s\n//ergo:message %s\ntype %s struct {\n%s}\n%s\nfunc (%s) is%s() {}\n",
