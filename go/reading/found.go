@@ -48,7 +48,7 @@ func (finding found) with(other found) found {
 }
 
 // refusedAt is a step that refused one declaration.
-func refusedAt(position assembling.Position, problem Problem) found {
+func refusedAt(position assembling.Position, problem assembling.Problem) found {
 	return found{refusals: []assembling.Refusal{{Position: position, Problem: problem}}, members: []foundMember{}, structs: []foundStruct{}, packages: []string{}}
 }
 

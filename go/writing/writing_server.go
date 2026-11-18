@@ -13,44 +13,11 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
-	"github.com/CheckPickerUpper/nocontract/internal/keyed"
-	"github.com/CheckPickerUpper/nocontract/messages"
 )
 
-// RouteNotDescribed is a route of the server plan the API's description holds no endpoint for, so
-// its path's segments are not known.
-//
-//ergo:code NC-1071
-//ergo:message The route {Route} of the package {Package} has no endpoint in the API's description.
-type RouteNotDescribed struct {
-	Package string
-	Route   string
-}
-
-// Error is the failure's message in the source language.
-func (missing RouteNotDescribed) Error() string { return missing.Report(messages.Match("")).Message }
-
-// endpointKey names an endpoint of the description by its group and its name.
-type endpointKey struct {
-	group string
-	name  string
-}
-
-// describedPaths is each endpoint's path segments, by its group and its name.
-func describedPaths(api description.API) map[endpointKey][]description.PathSegment {
-	paths := map[endpointKey][]description.PathSegment{}
-	for _, group := range api.Groups {
-		for _, endpoint := range group.Endpoints {
-			paths[endpointKey{group: group.Name, name: endpoint.Name}] = endpoint.Path
-		}
-	}
-	return paths
-}
-
 // RenderServer is the formatted Go file of the server package: the API type, the only value that
-// serves the plan's routes, and New, the only function that builds one. Each route's path is
-// written from the segments the API's description holds for it.
-func RenderServer(plan serverplan.Plan, api description.API) outcome.Result[[]byte] {
+// serves the plan's routes, and New, the only function that builds one.
+func RenderServer(plan serverplan.Plan) outcome.Result[[]byte] {
 	names := serverImports(plan.Server.Home)
 	routed := routePackages(plan.Packages)
 	// Every package the file names takes its alias before any parameter takes a name.
@@ -81,49 +48,21 @@ func (api %[1]s) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	%[5]s(writer, request, api.endpoints, api.layers)
 }
 `, serverplan.ServerType, serverplan.ServerFunction, names.runtime("Endpoint"), names.runtime("Layer"), names.runtime("Respond"))
-	return outcome.Fold(routePaths(routed, describedPaths(api), names), func(paths map[routeKey]string) outcome.Result[[]byte] {
-		body.WriteString(newFunctionText(routed, parameters, paths, names, locals))
-		file := description.GeneratedHeader + "\npackage " + plan.Server.Name + "\n\n" + names.declaration() + "\n" + body.String()
-		return outcome.TupleToResult(format.Source([]byte(file)))
-	}, outcome.Err[[]byte])
+	body.WriteString(newFunctionText(routed, parameters, names, locals))
+	file := description.GeneratedHeader + "\npackage " + plan.Server.Name + "\n\n" + names.declaration() + "\n" + body.String()
+	return outcome.TupleToResult(format.Source([]byte(file)))
 }
 
-// routeKey names a route by its package's import path and its endpoint name.
-type routeKey struct {
-	path string
-	name string
-}
-
-// routePaths is each route's path as the server file writes it, a list of the runtime's path
-// segments, or the first route the description holds no endpoint for.
-func routePaths(routed []routedPackage, described map[endpointKey][]description.PathSegment, names *imports) outcome.Result[map[routeKey]string] {
-	paths := outcome.Ok(map[routeKey]string{})
-	for _, each := range routed {
-		for _, route := range each.routes.Routes {
-			paths = outcome.Fold(paths, func(written map[routeKey]string) outcome.Result[map[routeKey]string] {
-				return outcome.FoldOption(keyed.Entry(described, endpointKey{group: each.served.Name, name: route.Name}),
-					func(segments []description.PathSegment) outcome.Result[map[routeKey]string] {
-						written[routeKey{path: each.served.Path, name: route.Name}] = segmentsText(segments, names)
-						return outcome.Ok(written)
-					}, func() outcome.Result[map[routeKey]string] {
-						return outcome.Err[map[routeKey]string](RouteNotDescribed{Package: each.served.Path, Route: route.Name})
-					})
-			}, outcome.Err[map[routeKey]string])
-		}
-	}
-	return paths
-}
-
-// segmentsText is a path's segments as the server file writes them: a list of the runtime's
-// PathText and PathParameter.
-func segmentsText(segments []description.PathSegment, names *imports) string {
+// segmentsText is a route's path as the server file writes it: a list of the runtime's PathText and
+// PathParameter.
+func segmentsText(path description.RoutePath, names *imports) string {
 	written := []string{}
-	for _, segment := range segments {
+	for _, segment := range path.Segments() {
 		switch each := segment.(type) {
-		case description.PathText:
-			written = append(written, fmt.Sprintf("%s{Text: %s}", names.runtime("PathText"), strconv.Quote(each.Text)))
-		case description.PathParameter:
-			written = append(written, fmt.Sprintf("%s{Name: %s}", names.runtime("PathParameter"), strconv.Quote(each.Field.Name)))
+		case description.RouteText:
+			written = append(written, fmt.Sprintf("%s{Text: %s}", names.runtime("PathText"), strconv.Quote(each.Text())))
+		case description.RouteParameter:
+			written = append(written, fmt.Sprintf("%s{Name: %s}", names.runtime("PathParameter"), strconv.Quote(each.Name())))
 		case nil:
 		}
 	}
@@ -233,7 +172,7 @@ type guardCheck struct {
 
 // newFunctionText is New: each guard asked to check its route, then the API holding every route
 // behind its guard's check.
-func newFunctionText(routed []routedPackage, parameters map[packageNeed]serverParameter, paths map[routeKey]string, names *imports, locals *serverLocals) string {
+func newFunctionText(routed []routedPackage, parameters map[packageNeed]serverParameter, names *imports, locals *serverLocals) string {
 	text := &strings.Builder{}
 	signature := []string{"layers []" + names.runtime("Layer")}
 	for _, each := range routed {
@@ -262,12 +201,12 @@ func newFunctionText(routed []routedPackage, parameters map[packageNeed]serverPa
 			case serverplan.Unguarded, nil:
 			}
 			endpoints = append(endpoints, fmt.Sprintf("{Method: %s, Path: %s, Answer: func(request *http.Request) %s { %s }},",
-				strconv.Quote(route.Method.Name()), paths[routeKey{path: each.served.Path, name: route.Name}], names.runtime("Answer"), call))
+				strconv.Quote(route.Method.Name()), segmentsText(route.Path, names), names.runtime("Answer"), call))
 		}
 	}
 	for _, check := range checks {
 		fmt.Fprintf(text, "return mo.Fold(%s.CheckRoute(%s{Method: %s, Path: %s, Argument: %s}), func(%s %s[%s]) mo.Result[%s] {\n",
-			check.guard.name, names.runtime("GuardedRoute"), strconv.Quote(check.route.Method.Name()), strconv.Quote(check.route.Path),
+			check.guard.name, names.runtime("GuardedRoute"), strconv.Quote(check.route.Method.Name()), segmentsText(check.route.Path, names),
 			strconv.Quote(check.argument), check.name, names.runtime("RequestCheck"), names.qualified(check.refusal), serverplan.ServerType)
 	}
 	fmt.Fprintf(text, "return mo.Ok(%s{layers: slices.Clone(layers), endpoints: []%s{\n%s\n}})\n", serverplan.ServerType, names.runtime("Endpoint"), strings.Join(endpoints, "\n"))

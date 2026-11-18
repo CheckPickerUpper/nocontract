@@ -69,13 +69,6 @@ type PathParameterUndeclared struct{ Parameter string }
 //ergo:message An input field reads the path segment named {Parameter}, which the path does not have.
 type PathFieldUnused struct{ Parameter string }
 
-// PathSegmentUnsupported is a path segment with no Effect HttpApi form: a {name...} or {$}
-// wildcard, or a brace that does not enclose the whole segment.
-//
-//ergo:code NC-1024
-//ergo:message The path segment {Segment} has no Effect HttpApi form.
-type PathSegmentUnsupported struct{ Segment string }
-
 // BodyWithoutRequestBody is a route reading a body although its method's request carries none.
 //
 //ergo:code NC-1025

@@ -5,8 +5,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/CheckPickerUpper/outcome"
-
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
 )
@@ -17,11 +15,26 @@ func at(line int) assembling.Position {
 }
 
 // route is a GET route that reads nothing and succeeds with Found.
-func route(name string, path string, line int) assembling.DeclaredEndpoint {
+func route(t *testing.T, name string, path string, line int) assembling.DeclaredEndpoint {
+	t.Helper()
 	return assembling.DeclaredEndpoint{
-		Name: name, Method: description.Get{}, Path: path, Params: []description.Field{}, Query: []description.Field{},
+		Name: name, Method: description.Get{}, Path: routePath(t, path), Params: []description.Field{}, Query: []description.Field{},
 		Body: description.NoBody{}, Successes: []string{"Found"}, Failures: []string{}, Position: at(line),
 	}
+}
+
+// routePath is text read as a route's path.
+func routePath(t *testing.T, text string) description.RoutePath {
+	t.Helper()
+	switch read := description.ParseRoutePath(text).(type) {
+	case description.RoutePathRead:
+		return read.Path
+	case description.RoutePathRefused:
+		t.Fatalf("%q is not a route's path: %#v", text, read.Problem)
+	case nil:
+	}
+	t.Fatalf("%q was read as no route's path", text)
+	return description.RoutePath{}
 }
 
 // apiName is text read as the name of the API's class.
@@ -76,41 +89,39 @@ func TestEachRuleSpanningRoutesRefusesWithItsCode(t *testing.T) {
 		endpoint.Params = params
 		return endpoint
 	}
-	withBody := route("readBody", "/body", 5)
+	withBody := route(t, "readBody", "/body", 5)
 	withBody.Body = description.JSONBody{Schema: description.Text{}}
-	succeedsNever := route("never", "/never", 6)
+	succeedsNever := route(t, "never", "/never", 6)
 	succeedsNever.Successes = []string{}
-	repeatsShared := api(t, route("list", "/items", 2))
+	repeatsShared := api(t, route(t, "list", "/items", 2))
 	repeatsShared.Members = append(repeatsShared.Members, assembling.DeclaredMember{
 		Member: description.Member{Name: "RequestRefused", Answer: description.Succeeds{Status: description.SuccessStatus{}}, Fields: []description.Field{}}, Position: at(101),
 	})
-	reservedField := api(t, route("list", "/items", 2))
+	reservedField := api(t, route(t, "list", "/items", 2))
 	reservedField.Members[0].Member.Fields = []description.Field{{Name: "code", Schema: description.Text{}}}
-	answersUndeclared := route("read", "/items", 2)
+	answersUndeclared := route(t, "read", "/items", 2)
 	answersUndeclared.Failures = []string{"Missing"}
 	for _, each := range []struct {
 		name     string
 		declared assembling.Declared
 		want     []string
 	}{
-		{name: "a path segment no field reads", declared: api(t, route("read", "/items/{item_id}", 2)), want: []string{"NC-1022"}},
-		{name: "a field reading no path segment", declared: api(t, withParams(route("read", "/items", 2), text)), want: []string{"NC-1023"}},
-		{name: "a wildcard segment", declared: api(t, route("read", "/files/{rest...}", 2)), want: []string{"NC-1024"}},
-		{name: "a brace inside a segment", declared: api(t, route("read", "/files/a{b}", 2)), want: []string{"NC-1024"}},
+		{name: "a path segment no field reads", declared: api(t, route(t, "read", "/items/{item_id}", 2)), want: []string{"NC-1022"}},
+		{name: "a field reading no path segment", declared: api(t, withParams(route(t, "read", "/items", 2), text)), want: []string{"NC-1023"}},
 		{name: "a body on a GET route", declared: api(t, withBody), want: []string{"NC-1025"}},
-		{name: "two routes on one pattern", declared: api(t, route("first", "/items", 2), route("second", "/items", 3)), want: []string{"NC-1026"}},
+		{name: "two routes on one pattern", declared: api(t, route(t, "first", "/items", 2), route(t, "second", "/items", 3)), want: []string{"NC-1026"}},
 		{
 			name: "two routes on one path whose parameters are named apart",
-			declared: api(t, withParams(route("first", "/items/{item_id}", 2), text),
-				withParams(route("second", "/items/{id}", 3), description.Field{Name: "id", Schema: description.Text{}})),
+			declared: api(t, withParams(route(t, "first", "/items/{item_id}", 2), text),
+				withParams(route(t, "second", "/items/{id}", 3), description.Field{Name: "id", Schema: description.Text{}})),
 			want: []string{"NC-1026"},
 		},
 		{name: "a route with no success", declared: api(t, succeedsNever), want: []string{"NC-1028"}},
 		{name: "a member field named code", declared: reservedField, want: []string{"NC-1033"}},
-		{name: "two routes of a group with one name", declared: api(t, route("read", "/a", 2), route("read", "/b", 3)), want: []string{"NC-1050"}},
+		{name: "two routes of a group with one name", declared: api(t, route(t, "read", "/a", 2), route(t, "read", "/b", 3)), want: []string{"NC-1050"}},
 		{name: "a member taking a shared failure's name", declared: repeatsShared, want: []string{"NC-1018"}},
 		{name: "a route answering a member nothing declares", declared: api(t, answersUndeclared), want: []string{"NC-1067"}},
-		{name: "a path parameter its field reads", declared: api(t, withParams(route("read", "/items/{item_id}", 2), text)), want: []string{}},
+		{name: "a path parameter its field reads", declared: api(t, withParams(route(t, "read", "/items/{item_id}", 2), text)), want: []string{}},
 	} {
 		if got := refusedCodes(t, each.declared); !slices.Equal(got, each.want) {
 			t.Errorf("%s was refused with %v; want %v", each.name, got, each.want)
@@ -130,17 +141,17 @@ func memberAnswers(members []description.Member) []string {
 func TestARouteIsDescribedWithItsBoundPathAndTheMembersItAnswersWith(t *testing.T) {
 	t.Parallel()
 	item := description.Field{Name: "item_id", Schema: description.Text{}}
-	reads := route("read", "/items/{item_id}", 2)
+	reads := route(t, "read", "/items/{item_id}", 2)
 	reads.Params = []description.Field{item}
 	reads.Failures = []string{"Missing"}
-	declared := api(t, reads, route("list", "/items", 3))
-	notFound := outcome.Fold(description.ParseStatus(404), func(status description.Status) description.FailureStatus {
+	declared := api(t, reads, route(t, "list", "/items", 3))
+	notFound := description.FoldStatus(404, func(status description.Status) description.FailureStatus {
 		failure, isFailure := status.(description.FailureStatus)
 		if !isFailure {
 			t.Fatalf("404 parsed as %#v; want a failure status", status)
 		}
 		return failure
-	}, func(cause error) description.FailureStatus {
+	}, func(cause description.StatusUnanswerable) description.FailureStatus {
 		t.Fatalf("404: %v", cause)
 		return description.FailureStatus{}
 	})

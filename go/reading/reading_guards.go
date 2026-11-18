@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"go/token"
 	"slices"
-	"strings"
 
 	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
@@ -25,19 +24,19 @@ type guardTable struct {
 	found  found
 }
 
-// guardName is text read as a guard's name: one exported Go identifier, the form it takes as a
-// field of what routes are served with.
-func guardName(text string) mo.Option[string] {
-	if !token.IsIdentifier(text) || !token.IsExported(text) {
-		return mo.None[string]()
+// readGuardName reads word of a guard line as a guard's name: one exported Go identifier, the form
+// it takes as a field of what routes are served with.
+func readGuardName(index projectIndex, text directiveText, word string) reading[string] {
+	if !token.IsIdentifier(word) || !token.IsExported(word) {
+		return notRead[string](index.refused(text.position, GuardNameInvalid{Text: text.written, Name: word}))
 	}
-	return mo.Some(text)
+	return readAs(word, nothingFound())
 }
 
-// guardDeclaration is a type declaration marked //nocontract:guard, with its one line.
+// guardDeclaration is a type declaration marked //nocontract:guard, with each of its guard lines.
 type guardDeclaration struct {
 	declared declaredType
-	line     directiveLines
+	lines    []directiveText
 }
 
 // readGuards reads every sealed refusal marked //nocontract:guard in the project's packages, in
@@ -45,10 +44,8 @@ type guardDeclaration struct {
 func readGuards(index projectIndex) guardTable {
 	marked := []guardDeclaration{}
 	for _, each := range index.ownTypes {
-		switch line := writtenLines(each.comment, guardKind{}).(type) {
-		case oneLine, repeatedLines:
-			marked = append(marked, guardDeclaration{declared: each, line: line})
-		case noLine, nil:
+		if lines := directiveTexts(each.comment, guardKind{}); len(lines) > 0 {
+			marked = append(marked, guardDeclaration{declared: each, lines: lines})
 		}
 	}
 	slices.SortFunc(marked, func(left, right guardDeclaration) int {
@@ -73,24 +70,21 @@ type namedGuard struct {
 // name or one an earlier declaration took. Its refusal is read even when refused, so routes naming
 // the guard are not refused again for it.
 func readGuardDeclaration(index projectIndex, guards map[string]guardEntry, marked guardDeclaration) reading[namedGuard] {
-	malformed := func(line directive) reading[namedGuard] {
-		return notRead[namedGuard](index.refused(line.position, GuardDirectiveMalformed{Text: line.argument}))
-	}
-	switch lines := marked.line.(type) {
-	case oneLine:
-		return mo.Fold(guardName(lines.line.argument), func(name string) reading[namedGuard] {
+	return readOnce(marked.lines, func() reading[namedGuard] { return notRead[namedGuard](nothingFound()) }, func(text directiveText) reading[namedGuard] {
+		if len(text.words) != 1 {
+			return notRead[namedGuard](index.refused(text.position, GuardDirectiveWordCount{Text: text.written}))
+		}
+		return andThen(readGuardName(index, text, text.words[0]), func(name string) reading[namedGuard] {
 			return outcome.FoldOption(keyed.Entry(guards, name), func(first guardEntry) reading[namedGuard] {
 				return notRead[namedGuard](index.refused(marked.declared.spec.Pos(), GuardRepeated{Guard: name, First: index.position(first.declared.spec.Pos()).String()}))
 			}, func() reading[namedGuard] {
 				read := readGuardRefusal(index, marked.declared)
 				return readAs(namedGuard{name: name, entry: guardEntry{declared: marked.declared, members: read.value}}, read.found)
 			})
-		}, func(error) reading[namedGuard] { return malformed(lines.line) })
-	case repeatedLines:
-		return malformed(lines.second)
-	case noLine, nil:
-	}
-	return notRead[namedGuard](nothingFound())
+		})
+	}, func(second directiveText) reading[namedGuard] {
+		return notRead[namedGuard](index.refused(second.position, GuardDirectiveRepeated{Text: second.written}))
+	})
 }
 
 // readGuardRefusal reads a guard's sealed refusal, refusing each member that succeeds: a refusal
@@ -113,25 +107,22 @@ type routeGuard struct {
 
 // readRouteGuard reads a handler's //nocontract:guard line, naming a declared guard and the one
 // argument it is handed.
-func readRouteGuard(index projectIndex, guards guardTable, lines directiveLines) reading[routeGuard] {
-	switch read := lines.(type) {
-	case oneLine:
-		return readNamedRouteGuard(index, guards, read.line)
-	case repeatedLines:
-		return notRead[routeGuard](index.refused(read.second.position, GuardDirectiveMalformed{Text: read.second.argument}))
-	case noLine, nil:
-	}
-	return readAs(routeGuard{plan: serverplan.Unguarded{}, members: []string{}}, nothingFound())
+func readRouteGuard(index projectIndex, guards guardTable, texts []directiveText) reading[routeGuard] {
+	return readOnce(texts, func() reading[routeGuard] {
+		return readAs(routeGuard{plan: serverplan.Unguarded{}, members: []string{}}, nothingFound())
+	}, func(text directiveText) reading[routeGuard] { return readNamedRouteGuard(index, guards, text) }, func(second directiveText) reading[routeGuard] {
+		return notRead[routeGuard](index.refused(second.position, GuardDirectiveRepeated{Text: second.written}))
+	})
 }
 
-func readNamedRouteGuard(index projectIndex, guards guardTable, line directive) reading[routeGuard] {
-	malformed := notRead[routeGuard](index.refused(line.position, GuardDirectiveMalformed{Text: line.argument}))
-	words := strings.Fields(line.argument)
-	if len(words) != 2 {
-		return malformed
+// readNamedRouteGuard reads a handler's guard line as the declared guard it names and the
+// argument the guard is handed.
+func readNamedRouteGuard(index projectIndex, guards guardTable, line directiveText) reading[routeGuard] {
+	if len(line.words) != 2 {
+		return notRead[routeGuard](index.refused(line.position, RouteGuardWordCount{Text: line.written}))
 	}
-	name, argument := words[0], words[1]
-	return mo.Fold(guardName(name), func(name string) reading[routeGuard] {
+	argument := line.words[1]
+	return andThen(readGuardName(index, line, line.words[0]), func(name string) reading[routeGuard] {
 		return outcome.FoldOption(keyed.Entry(guards.guards, name), func(guard guardEntry) reading[routeGuard] {
 			return mo.Fold(guard.members, func(members []sealedMember) reading[routeGuard] {
 				names := []string{}
@@ -148,5 +139,5 @@ func readNamedRouteGuard(index projectIndex, guards guardTable, line directive) 
 		}, func() reading[routeGuard] {
 			return notRead[routeGuard](index.refused(line.position, GuardUndeclared{Guard: name}))
 		})
-	}, func(error) reading[routeGuard] { return malformed })
+	})
 }

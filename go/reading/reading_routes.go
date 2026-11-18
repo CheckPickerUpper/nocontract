@@ -174,7 +174,8 @@ func placedAt(position token.Position) assembling.Position {
 	return assembling.Position{File: position.Filename, Line: position.Line, Column: position.Column}
 }
 
-// refused is a step refusing the declaration at pos.
-func (index projectIndex) refused(pos token.Pos, problem Problem) found {
+// refused is a step refusing the declaration at pos, for one of the reader's own problems or for a
+// problem a parser of the description found in what the declaration writes.
+func (index projectIndex) refused(pos token.Pos, problem assembling.Problem) found {
 	return refusedAt(index.placed(pos), problem)
 }

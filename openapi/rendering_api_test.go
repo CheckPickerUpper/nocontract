@@ -30,7 +30,7 @@ func apiName(t *testing.T, text string) description.APIName {
 // failure status.
 func answered(t *testing.T, number int, code ergo.Code) description.Answer {
 	t.Helper()
-	parsed := outcome.Fold(description.ParseStatus(number), func(status description.Status) description.Answer {
+	parsed := description.FoldStatus(number, func(status description.Status) description.Answer {
 		switch typed := status.(type) {
 		case description.SuccessStatus:
 			return description.Succeeds{Status: typed}
@@ -39,7 +39,7 @@ func answered(t *testing.T, number int, code ergo.Code) description.Answer {
 		case nil:
 		}
 		return description.Succeeds{Status: description.SuccessStatus{}}
-	}, func(cause error) description.Answer {
+	}, func(cause description.StatusUnanswerable) description.Answer {
 		t.Fatalf("status %d: %v", number, cause)
 		return description.Succeeds{Status: description.SuccessStatus{}}
 	})

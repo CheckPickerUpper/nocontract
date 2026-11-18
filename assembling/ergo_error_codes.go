@@ -90,33 +90,6 @@ func (failure PathFieldUnused) Causes() []error {
 	return nil
 }
 
-func (PathSegmentUnsupported) ErrorCode() ergo.Code { return "NC-1024" }
-
-// PathSegmentUnsupportedArguments holds the arguments PathSegmentUnsupported's message names, in the order the message first names them.
-type PathSegmentUnsupportedArguments struct {
-	Segment string `json:"Segment"`
-}
-
-// ReportArguments marks PathSegmentUnsupportedArguments as the arguments of a report.
-func (PathSegmentUnsupportedArguments) ReportArguments() {}
-
-// Report is PathSegmentUnsupported's code, its message in language and the arguments the message names.
-func (failure PathSegmentUnsupported) Report(language messages.Language) ergo.Report {
-	arguments := PathSegmentUnsupportedArguments{Segment: string(failure.Segment)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The path segment "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " has no Effect HttpApi form."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1024", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Segment}}}), Arguments: arguments}
-}
-
-// Causes is every error PathSegmentUnsupported holds, then the causes of every failure it holds.
-func (failure PathSegmentUnsupported) Causes() []error {
-	return nil
-}
-
 func (BodyWithoutRequestBody) ErrorCode() ergo.Code { return "NC-1025" }
 
 // BodyWithoutRequestBodyArguments holds the arguments BodyWithoutRequestBody's message names, in the order the message first names them.

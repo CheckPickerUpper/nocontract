@@ -24,11 +24,6 @@ type Read struct {
 
 func (Read) isReadOutcome() {}
 
-// Malformed names no path.
-//
-//nocontract:route GET
-func Malformed(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
-
 // Contextless takes no context.
 //
 //nocontract:route GET /contextless
@@ -38,11 +33,6 @@ func Contextless(nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
 //
 //nocontract:route GET /items/{item_id}
 func Unread(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
-
-// Wildcard serves a {path...} segment.
-//
-//nocontract:route GET /files/{path...}
-func Wildcard(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
 
 // BodyInput reads a body, which a GET route cannot.
 type BodyInput struct {
@@ -131,12 +121,6 @@ type Recoded struct {
 //ergo:code RF-1003
 type Statusless struct{}
 
-// Teapot declares a status that carries no body.
-//
-//ergo:not-an-error
-//nocontract:status 204
-type Teapot struct{}
-
 // Detail is a struct only Embedding embeds.
 type Detail struct {
 	Note string `json:"note"`
@@ -158,7 +142,6 @@ func (Optional) isFlawedOutcome()          {}
 func (Pointed) isFlawedOutcome()           {}
 func (Recoded) isFlawedOutcome()           {}
 func (Statusless) isFlawedOutcome()        {}
-func (Teapot) isFlawedOutcome()            {}
 func (Embedding) isFlawedOutcome()         {}
 
 // ReadFlawed answers with the flawed outcome.
@@ -187,12 +170,6 @@ func (Welcome) isStaffRefusal() {}
 //nocontract:route GET /unknown-guard
 //nocontract:guard Nobody admin
 func UnknownGuard(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
-
-// BareGuard names its guard without an argument.
-//
-//nocontract:route GET /bare-guard
-//nocontract:guard Staff
-func BareGuard(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
 
 // hidden is a receiver type code mounting the routes cannot name.
 type hidden struct{}

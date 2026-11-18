@@ -8,7 +8,6 @@ package assembling
 import (
 	"cmp"
 	"slices"
-	"strings"
 
 	"github.com/CheckPickerUpper/outcome"
 
@@ -40,14 +39,14 @@ type DeclaredGroup struct {
 	Endpoints []DeclaredEndpoint
 }
 
-// DeclaredEndpoint is one route as its reader read it: its name, method and path text, the fields
+// DeclaredEndpoint is one route as its reader read it: its name, method and path, the fields
 // that read its path's parameters, by name, and its query and body, the members its outcome
 // succeeds with, every member it fails with outside nocontract's own failures, and where it is
 // written.
 type DeclaredEndpoint struct {
 	Name      string
 	Method    description.Method
-	Path      string
+	Path      description.RoutePath
 	Params    []description.Field
 	Query     []description.Field
 	Body      description.Body
@@ -281,19 +280,8 @@ func sharedFailureMembers(declared DeclaredEndpoint, shared []description.Shared
 // repeatedRoutes refuses every route serving a method and path an earlier route serves. Two paths
 // differing only in their parameters' names match the same requests, so they are one path.
 func repeatedRoutes(endpoints []DeclaredEndpoint) []Refusal {
-	pattern := func(declared DeclaredEndpoint) string { return declared.Method.Name() + " " + declared.Path }
-	served := func(declared DeclaredEndpoint) string {
-		segments := []string{}
-		for segment := range strings.SplitSeq(declared.Path, "/") {
-			switch parsedSegment(segment).(type) {
-			case parameterSegment:
-				segments = append(segments, "{}")
-			case literalSegment, unsupportedSegment, nil:
-				segments = append(segments, segment)
-			}
-		}
-		return declared.Method.Name() + " " + strings.Join(segments, "/")
-	}
+	pattern := func(declared DeclaredEndpoint) string { return declared.Method.Name() + " " + declared.Path.Text() }
+	served := func(declared DeclaredEndpoint) string { return declared.Method.Name() + " " + declared.Path.Matched() }
 	refusals := []Refusal{}
 	for _, repeat := range keyed.Repeats(endpoints, served) {
 		refusals = append(refusals, Refusal{Position: repeat.Item.Position, Problem: RouteRepeated{Pattern: pattern(repeat.Item), First: repeat.First.Position.String()}})

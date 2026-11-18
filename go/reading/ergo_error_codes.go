@@ -8,33 +8,6 @@ import (
 	messages "github.com/CheckPickerUpper/nocontract/messages"
 )
 
-func (RouteDirectiveMalformed) ErrorCode() ergo.Code { return "NC-1004" }
-
-// RouteDirectiveMalformedArguments holds the arguments RouteDirectiveMalformed's message names, in the order the message first names them.
-type RouteDirectiveMalformedArguments struct {
-	Text string `json:"Text"`
-}
-
-// ReportArguments marks RouteDirectiveMalformedArguments as the arguments of a report.
-func (RouteDirectiveMalformedArguments) ReportArguments() {}
-
-// Report is RouteDirectiveMalformed's code, its message in language and the arguments the message names.
-func (failure RouteDirectiveMalformed) Report(language messages.Language) ergo.Report {
-	arguments := RouteDirectiveMalformedArguments{Text: string(failure.Text)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The route directive \""}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "\" is not a method (GET, POST, PUT, PATCH or DELETE) and a path starting with /."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1004", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Text}}}), Arguments: arguments}
-}
-
-// Causes is every error RouteDirectiveMalformed holds, then the causes of every failure it holds.
-func (failure RouteDirectiveMalformed) Causes() []error {
-	return nil
-}
-
 func (HandlerSignatureUnsupported) ErrorCode() ergo.Code { return "NC-1005" }
 
 // HandlerSignatureUnsupportedArguments holds the arguments HandlerSignatureUnsupported's message names, in the order the message first names them.
@@ -582,61 +555,6 @@ func (failure ParameterTypeUnsupported) Causes() []error {
 	return nil
 }
 
-func (StatusDirectiveMalformed) ErrorCode() ergo.Code { return "NC-1032" }
-
-// StatusDirectiveMalformedArguments holds the arguments StatusDirectiveMalformed's message names, in the order the message first names them.
-type StatusDirectiveMalformedArguments struct {
-	Text   string `json:"Text"`
-	Member string `json:"Member"`
-}
-
-// ReportArguments marks StatusDirectiveMalformedArguments as the arguments of a report.
-func (StatusDirectiveMalformedArguments) ReportArguments() {}
-
-// Report is StatusDirectiveMalformed's code, its message in language and the arguments the message names.
-func (failure StatusDirectiveMalformed) Report(language messages.Language) ergo.Report {
-	arguments := StatusDirectiveMalformedArguments{Text: string(failure.Text), Member: string(failure.Member)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The status \""}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "\" of "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " is not one known HTTP status, written once."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1032", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Text}, messageformat.TextValue{Text: arguments.Member}}}), Arguments: arguments}
-}
-
-// Causes is every error StatusDirectiveMalformed holds, then the causes of every failure it holds.
-func (failure StatusDirectiveMalformed) Causes() []error {
-	return nil
-}
-
-func (GuardDirectiveMalformed) ErrorCode() ergo.Code { return "NC-1045" }
-
-// GuardDirectiveMalformedArguments holds the arguments GuardDirectiveMalformed's message names, in the order the message first names them.
-type GuardDirectiveMalformedArguments struct {
-	Text string `json:"Text"`
-}
-
-// ReportArguments marks GuardDirectiveMalformedArguments as the arguments of a report.
-func (GuardDirectiveMalformedArguments) ReportArguments() {}
-
-// Report is GuardDirectiveMalformed's code, its message in language and the arguments the message names.
-func (failure GuardDirectiveMalformed) Report(language messages.Language) ergo.Report {
-	arguments := GuardDirectiveMalformedArguments{Text: string(failure.Text)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The guard directive \""}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "\" is not one guard name and one argument."}}}
-	locale := messages.EnLocale()
-	switch language.(type) {
-	case messages.En:
-	case nil:
-	}
-	return ergo.Report{Code: "NC-1045", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Text}}}), Arguments: arguments}
-}
-
-// Causes is every error GuardDirectiveMalformed holds, then the causes of every failure it holds.
-func (failure GuardDirectiveMalformed) Causes() []error {
-	return nil
-}
-
 func (GuardUndeclared) ErrorCode() ergo.Code { return "NC-1046" }
 
 // GuardUndeclaredArguments holds the arguments GuardUndeclared's message names, in the order the message first names them.
@@ -1092,5 +1010,254 @@ func (failure ZeroServerMade) Report(language messages.Language) ergo.Report {
 
 // Causes is every error ZeroServerMade holds, then the causes of every failure it holds.
 func (failure ZeroServerMade) Causes() []error {
+	return nil
+}
+
+func (RouteDirectiveWordCount) ErrorCode() ergo.Code { return "NC-1096" }
+
+// RouteDirectiveWordCountArguments holds the arguments RouteDirectiveWordCount's message names, in the order the message first names them.
+type RouteDirectiveWordCountArguments struct {
+	Text string `json:"Text"`
+}
+
+// ReportArguments marks RouteDirectiveWordCountArguments as the arguments of a report.
+func (RouteDirectiveWordCountArguments) ReportArguments() {}
+
+// Report is RouteDirectiveWordCount's code, its message in language and the arguments the message names.
+func (failure RouteDirectiveWordCount) Report(language messages.Language) ergo.Report {
+	arguments := RouteDirectiveWordCountArguments{Text: string(failure.Text)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The line "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is not one method and one path."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1096", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Text}}}), Arguments: arguments}
+}
+
+// Causes is every error RouteDirectiveWordCount holds, then the causes of every failure it holds.
+func (failure RouteDirectiveWordCount) Causes() []error {
+	return nil
+}
+
+func (RouteMethodUnknown) ErrorCode() ergo.Code { return "NC-1097" }
+
+// RouteMethodUnknownArguments holds the arguments RouteMethodUnknown's message names, in the order the message first names them.
+type RouteMethodUnknownArguments struct {
+	Method string `json:"Method"`
+	Text   string `json:"Text"`
+}
+
+// ReportArguments marks RouteMethodUnknownArguments as the arguments of a report.
+func (RouteMethodUnknownArguments) ReportArguments() {}
+
+// Report is RouteMethodUnknown's code, its message in language and the arguments the message names.
+func (failure RouteMethodUnknown) Report(language messages.Language) ergo.Report {
+	arguments := RouteMethodUnknownArguments{Method: string(failure.Method), Text: string(failure.Text)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " in the line "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " is not a method a route answers: GET, POST, PUT, PATCH or DELETE."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1097", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Method}, messageformat.TextValue{Text: arguments.Text}}}), Arguments: arguments}
+}
+
+// Causes is every error RouteMethodUnknown holds, then the causes of every failure it holds.
+func (failure RouteMethodUnknown) Causes() []error {
+	return nil
+}
+
+func (StatusDirectiveWordCount) ErrorCode() ergo.Code { return "NC-1098" }
+
+// StatusDirectiveWordCountArguments holds the arguments StatusDirectiveWordCount's message names, in the order the message first names them.
+type StatusDirectiveWordCountArguments struct {
+	Text   string `json:"Text"`
+	Member string `json:"Member"`
+}
+
+// ReportArguments marks StatusDirectiveWordCountArguments as the arguments of a report.
+func (StatusDirectiveWordCountArguments) ReportArguments() {}
+
+// Report is StatusDirectiveWordCount's code, its message in language and the arguments the message names.
+func (failure StatusDirectiveWordCount) Report(language messages.Language) ergo.Report {
+	arguments := StatusDirectiveWordCountArguments{Text: string(failure.Text), Member: string(failure.Member)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The line "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " on "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " is not one status."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1098", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Text}, messageformat.TextValue{Text: arguments.Member}}}), Arguments: arguments}
+}
+
+// Causes is every error StatusDirectiveWordCount holds, then the causes of every failure it holds.
+func (failure StatusDirectiveWordCount) Causes() []error {
+	return nil
+}
+
+func (StatusNotNumber) ErrorCode() ergo.Code { return "NC-1099" }
+
+// StatusNotNumberArguments holds the arguments StatusNotNumber's message names, in the order the message first names them.
+type StatusNotNumberArguments struct {
+	Status string `json:"Status"`
+	Text   string `json:"Text"`
+	Member string `json:"Member"`
+}
+
+// ReportArguments marks StatusNotNumberArguments as the arguments of a report.
+func (StatusNotNumberArguments) ReportArguments() {}
+
+// Report is StatusNotNumber's code, its message in language and the arguments the message names.
+func (failure StatusNotNumber) Report(language messages.Language) ergo.Report {
+	arguments := StatusNotNumberArguments{Status: string(failure.Status), Text: string(failure.Text), Member: string(failure.Member)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " in the line "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " on "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: " is not a number."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1099", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Status}, messageformat.TextValue{Text: arguments.Text}, messageformat.TextValue{Text: arguments.Member}}}), Arguments: arguments}
+}
+
+// Causes is every error StatusNotNumber holds, then the causes of every failure it holds.
+func (failure StatusNotNumber) Causes() []error {
+	return nil
+}
+
+func (StatusDirectiveRepeated) ErrorCode() ergo.Code { return "NC-1100" }
+
+// StatusDirectiveRepeatedArguments holds the arguments StatusDirectiveRepeated's message names, in the order the message first names them.
+type StatusDirectiveRepeatedArguments struct {
+	Member string `json:"Member"`
+	Text   string `json:"Text"`
+}
+
+// ReportArguments marks StatusDirectiveRepeatedArguments as the arguments of a report.
+func (StatusDirectiveRepeatedArguments) ReportArguments() {}
+
+// Report is StatusDirectiveRepeated's code, its message in language and the arguments the message names.
+func (failure StatusDirectiveRepeated) Report(language messages.Language) ergo.Report {
+	arguments := StatusDirectiveRepeatedArguments{Member: string(failure.Member), Text: string(failure.Text)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " has a second status line, "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "; a member answers one status."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1100", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Member}, messageformat.TextValue{Text: arguments.Text}}}), Arguments: arguments}
+}
+
+// Causes is every error StatusDirectiveRepeated holds, then the causes of every failure it holds.
+func (failure StatusDirectiveRepeated) Causes() []error {
+	return nil
+}
+
+func (GuardDirectiveWordCount) ErrorCode() ergo.Code { return "NC-1101" }
+
+// GuardDirectiveWordCountArguments holds the arguments GuardDirectiveWordCount's message names, in the order the message first names them.
+type GuardDirectiveWordCountArguments struct {
+	Text string `json:"Text"`
+}
+
+// ReportArguments marks GuardDirectiveWordCountArguments as the arguments of a report.
+func (GuardDirectiveWordCountArguments) ReportArguments() {}
+
+// Report is GuardDirectiveWordCount's code, its message in language and the arguments the message names.
+func (failure GuardDirectiveWordCount) Report(language messages.Language) ergo.Report {
+	arguments := GuardDirectiveWordCountArguments{Text: string(failure.Text)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The line "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " on a guard's refusal is not one guard name."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1101", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Text}}}), Arguments: arguments}
+}
+
+// Causes is every error GuardDirectiveWordCount holds, then the causes of every failure it holds.
+func (failure GuardDirectiveWordCount) Causes() []error {
+	return nil
+}
+
+func (RouteGuardWordCount) ErrorCode() ergo.Code { return "NC-1102" }
+
+// RouteGuardWordCountArguments holds the arguments RouteGuardWordCount's message names, in the order the message first names them.
+type RouteGuardWordCountArguments struct {
+	Text string `json:"Text"`
+}
+
+// ReportArguments marks RouteGuardWordCountArguments as the arguments of a report.
+func (RouteGuardWordCountArguments) ReportArguments() {}
+
+// Report is RouteGuardWordCount's code, its message in language and the arguments the message names.
+func (failure RouteGuardWordCount) Report(language messages.Language) ergo.Report {
+	arguments := RouteGuardWordCountArguments{Text: string(failure.Text)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The line "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " on a handler is not one guard name and one argument."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1102", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Text}}}), Arguments: arguments}
+}
+
+// Causes is every error RouteGuardWordCount holds, then the causes of every failure it holds.
+func (failure RouteGuardWordCount) Causes() []error {
+	return nil
+}
+
+func (GuardNameInvalid) ErrorCode() ergo.Code { return "NC-1103" }
+
+// GuardNameInvalidArguments holds the arguments GuardNameInvalid's message names, in the order the message first names them.
+type GuardNameInvalidArguments struct {
+	Name string `json:"Name"`
+	Text string `json:"Text"`
+}
+
+// ReportArguments marks GuardNameInvalidArguments as the arguments of a report.
+func (GuardNameInvalidArguments) ReportArguments() {}
+
+// Report is GuardNameInvalid's code, its message in language and the arguments the message names.
+func (failure GuardNameInvalid) Report(language messages.Language) ergo.Report {
+	arguments := GuardNameInvalidArguments{Name: string(failure.Name), Text: string(failure.Text)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " in the line "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " is not an exported Go identifier, the form a guard's name takes."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1103", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Name}, messageformat.TextValue{Text: arguments.Text}}}), Arguments: arguments}
+}
+
+// Causes is every error GuardNameInvalid holds, then the causes of every failure it holds.
+func (failure GuardNameInvalid) Causes() []error {
+	return nil
+}
+
+func (GuardDirectiveRepeated) ErrorCode() ergo.Code { return "NC-1104" }
+
+// GuardDirectiveRepeatedArguments holds the arguments GuardDirectiveRepeated's message names, in the order the message first names them.
+type GuardDirectiveRepeatedArguments struct {
+	Text string `json:"Text"`
+}
+
+// ReportArguments marks GuardDirectiveRepeatedArguments as the arguments of a report.
+func (GuardDirectiveRepeatedArguments) ReportArguments() {}
+
+// Report is GuardDirectiveRepeated's code, its message in language and the arguments the message names.
+func (failure GuardDirectiveRepeated) Report(language messages.Language) ergo.Report {
+	arguments := GuardDirectiveRepeatedArguments{Text: string(failure.Text)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The line "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is a second guard line; a declaration names one guard."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1104", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Text}}}), Arguments: arguments}
+}
+
+// Causes is every error GuardDirectiveRepeated holds, then the causes of every failure it holds.
+func (failure GuardDirectiveRepeated) Causes() []error {
 	return nil
 }

@@ -74,3 +74,168 @@ func (failure APINameNotIdentifier) Report(language messages.Language) ergo.Repo
 func (failure APINameNotIdentifier) Causes() []error {
 	return nil
 }
+
+func (PathNotRooted) ErrorCode() ergo.Code { return "NC-1090" }
+
+// PathNotRootedArguments holds the arguments PathNotRooted's message names, in the order the message first names them.
+type PathNotRootedArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks PathNotRootedArguments as the arguments of a report.
+func (PathNotRootedArguments) ReportArguments() {}
+
+// Report is PathNotRooted's code, its message in language and the arguments the message names.
+func (failure PathNotRooted) Report(language messages.Language) ergo.Report {
+	arguments := PathNotRootedArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The route's path "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " does not start with /."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1090", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error PathNotRooted holds, then the causes of every failure it holds.
+func (failure PathNotRooted) Causes() []error {
+	return nil
+}
+
+func (PathParameterUnnamed) ErrorCode() ergo.Code { return "NC-1091" }
+
+// PathParameterUnnamedArguments holds the arguments PathParameterUnnamed's message names, in the order the message first names them.
+type PathParameterUnnamedArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks PathParameterUnnamedArguments as the arguments of a report.
+func (PathParameterUnnamedArguments) ReportArguments() {}
+
+// Report is PathParameterUnnamed's code, its message in language and the arguments the message names.
+func (failure PathParameterUnnamed) Report(language messages.Language) ergo.Report {
+	arguments := PathParameterUnnamedArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The route's path "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds a parameter without a name."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1091", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error PathParameterUnnamed holds, then the causes of every failure it holds.
+func (failure PathParameterUnnamed) Causes() []error {
+	return nil
+}
+
+func (PathEndMatched) ErrorCode() ergo.Code { return "NC-1092" }
+
+// PathEndMatchedArguments holds the arguments PathEndMatched's message names, in the order the message first names them.
+type PathEndMatchedArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks PathEndMatchedArguments as the arguments of a report.
+func (PathEndMatchedArguments) ReportArguments() {}
+
+// Report is PathEndMatched's code, its message in language and the arguments the message names.
+func (failure PathEndMatched) Report(language messages.Language) ergo.Report {
+	arguments := PathEndMatchedArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The route's path "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds the end-of-path wildcard $; a route's path ends where its last segment does."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1092", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error PathEndMatched holds, then the causes of every failure it holds.
+func (failure PathEndMatched) Causes() []error {
+	return nil
+}
+
+func (PathRestMatched) ErrorCode() ergo.Code { return "NC-1093" }
+
+// PathRestMatchedArguments holds the arguments PathRestMatched's message names, in the order the message first names them.
+type PathRestMatchedArguments struct {
+	Path    string `json:"Path"`
+	Segment string `json:"Segment"`
+}
+
+// ReportArguments marks PathRestMatchedArguments as the arguments of a report.
+func (PathRestMatchedArguments) ReportArguments() {}
+
+// Report is PathRestMatched's code, its message in language and the arguments the message names.
+func (failure PathRestMatched) Report(language messages.Language) ergo.Report {
+	arguments := PathRestMatchedArguments{Path: string(failure.Path), Segment: string(failure.Segment)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The route's path "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", which takes every segment left; a parameter takes one segment."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1093", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Segment}}}), Arguments: arguments}
+}
+
+// Causes is every error PathRestMatched holds, then the causes of every failure it holds.
+func (failure PathRestMatched) Causes() []error {
+	return nil
+}
+
+func (PathBraceInName) ErrorCode() ergo.Code { return "NC-1094" }
+
+// PathBraceInNameArguments holds the arguments PathBraceInName's message names, in the order the message first names them.
+type PathBraceInNameArguments struct {
+	Path    string `json:"Path"`
+	Segment string `json:"Segment"`
+}
+
+// ReportArguments marks PathBraceInNameArguments as the arguments of a report.
+func (PathBraceInNameArguments) ReportArguments() {}
+
+// Report is PathBraceInName's code, its message in language and the arguments the message names.
+func (failure PathBraceInName) Report(language messages.Language) ergo.Report {
+	arguments := PathBraceInNameArguments{Path: string(failure.Path), Segment: string(failure.Segment)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The route's path "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", a parameter whose name holds a brace."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1094", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Segment}}}), Arguments: arguments}
+}
+
+// Causes is every error PathBraceInName holds, then the causes of every failure it holds.
+func (failure PathBraceInName) Causes() []error {
+	return nil
+}
+
+func (PathBraceInText) ErrorCode() ergo.Code { return "NC-1095" }
+
+// PathBraceInTextArguments holds the arguments PathBraceInText's message names, in the order the message first names them.
+type PathBraceInTextArguments struct {
+	Path    string `json:"Path"`
+	Segment string `json:"Segment"`
+}
+
+// ReportArguments marks PathBraceInTextArguments as the arguments of a report.
+func (PathBraceInTextArguments) ReportArguments() {}
+
+// Report is PathBraceInText's code, its message in language and the arguments the message names.
+func (failure PathBraceInText) Report(language messages.Language) ergo.Report {
+	arguments := PathBraceInTextArguments{Path: string(failure.Path), Segment: string(failure.Segment)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The route's path "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "; a segment is text holding no brace, or one parameter name in braces."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1095", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Segment}}}), Arguments: arguments}
+}
+
+// Causes is every error PathBraceInText holds, then the causes of every failure it holds.
+func (failure PathBraceInText) Causes() []error {
+	return nil
+}

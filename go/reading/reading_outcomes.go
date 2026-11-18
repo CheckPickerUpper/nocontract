@@ -185,21 +185,31 @@ func present(fields []mo.Option[description.Field]) []description.Field {
 // carries a body, or a failure.
 func readStatus(index projectIndex, member declaredType) reading[description.Status] {
 	name := member.object.Name()
-	malformed := func(line directive) reading[description.Status] {
-		return notRead[description.Status](index.refused(line.position, StatusDirectiveMalformed{Member: name, Text: line.argument}))
+	return readOnce(directiveTexts(member.comment, statusKind{}), func() reading[description.Status] {
+		return notRead[description.Status](index.refused(member.spec.Pos(), StatusDirectiveMissing{Member: name}))
+	}, func(text directiveText) reading[description.Status] {
+		return readStatusLine(index, name, text)
+	}, func(second directiveText) reading[description.Status] {
+		return notRead[description.Status](index.refused(second.position, StatusDirectiveRepeated{Member: name, Text: second.written}))
+	})
+}
+
+// readStatusLine reads a member's //nocontract:status line as one number HTTP answers with,
+// refusing a wrong count of words, a word that is not a number and a number HTTP cannot answer
+// each on its own.
+func readStatusLine(index projectIndex, member string, text directiveText) reading[description.Status] {
+	if len(text.words) != 1 {
+		return notRead[description.Status](index.refused(text.position, StatusDirectiveWordCount{Member: member, Text: text.written}))
 	}
-	switch lines := writtenLines(member.comment, statusKind{}).(type) {
-	case oneLine:
-		return outcome.Fold(outcome.TupleToResult(strconv.Atoi(lines.line.argument)), func(number int) reading[description.Status] {
-			return outcome.Fold(description.ParseStatus(number), func(status description.Status) reading[description.Status] {
-				return readAs(status, nothingFound())
-			}, func(error) reading[description.Status] { return malformed(lines.line) })
-		}, func(error) reading[description.Status] { return malformed(lines.line) })
-	case repeatedLines:
-		return malformed(lines.second)
-	case noLine, nil:
-	}
-	return notRead[description.Status](index.refused(member.spec.Pos(), StatusDirectiveMissing{Member: name}))
+	return outcome.Fold(outcome.TupleToResult(strconv.Atoi(text.words[0])), func(number int) reading[description.Status] {
+		return description.FoldStatus(number, func(status description.Status) reading[description.Status] {
+			return readAs(status, nothingFound())
+		}, func(unanswerable description.StatusUnanswerable) reading[description.Status] {
+			return notRead[description.Status](index.refused(text.position, unanswerable))
+		})
+	}, func(error) reading[description.Status] {
+		return notRead[description.Status](index.refused(text.position, StatusNotNumber{Member: member, Text: text.written, Status: text.words[0]}))
+	})
 }
 
 // readAnswer joins a member's status with its ErGo decision, which must agree on whether it fails.

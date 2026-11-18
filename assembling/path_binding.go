@@ -3,10 +3,8 @@ package assembling
 import (
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
@@ -23,8 +21,8 @@ type pathBinding interface{ isPathBinding() }
 //ergo:not-an-error
 type pathBound struct{ segments []description.PathSegment }
 
-// pathRefused is a path with a segment nothing reads, a field reading a segment it does not have,
-// or a segment with no client form.
+// pathRefused is a path with a parameter nothing reads, or a field reading a parameter the path
+// does not have.
 //
 //ergo:not-an-error
 type pathRefused struct{ refusals []Refusal }
@@ -32,7 +30,7 @@ type pathRefused struct{ refusals []Refusal }
 func (pathBound) isPathBinding()   {}
 func (pathRefused) isPathBinding() {}
 
-// boundPath binds each {name} segment of the route's path to the field reading name.
+// boundPath binds each parameter of the route's path to the field reading it.
 func boundPath(declared DeclaredEndpoint) pathBinding {
 	unbound := map[string]description.Field{}
 	for _, field := range declared.Params {
@@ -42,21 +40,19 @@ func boundPath(declared DeclaredEndpoint) pathBinding {
 	refused := func(problem Problem) {
 		refusals = append(refusals, Refusal{Position: declared.Position, Problem: problem})
 	}
-	for _, text := range strings.Split(strings.TrimPrefix(declared.Path, "/"), "/") {
-		switch segment := parsedSegment(text).(type) {
-		case literalSegment:
-			segments = append(segments, description.PathText{Text: text})
-		case parameterSegment:
-			outcome.FoldOption(keyed.Entry(unbound, segment.name), func(field description.Field) struct{} {
-				delete(unbound, segment.name)
+	for _, segment := range declared.Path.Segments() {
+		switch each := segment.(type) {
+		case description.RouteText:
+			segments = append(segments, description.PathText{Text: each.Text()})
+		case description.RouteParameter:
+			outcome.FoldOption(keyed.Entry(unbound, each.Name()), func(field description.Field) struct{} {
+				delete(unbound, each.Name())
 				segments = append(segments, description.PathParameter{Field: field})
 				return struct{}{}
 			}, func() struct{} {
-				refused(PathParameterUndeclared{Parameter: segment.name})
+				refused(PathParameterUndeclared{Parameter: each.Name()})
 				return struct{}{}
 			})
-		case unsupportedSegment:
-			refused(PathSegmentUnsupported{Segment: text})
 		case nil:
 		}
 	}
@@ -67,52 +63,4 @@ func boundPath(declared DeclaredEndpoint) pathBinding {
 		return pathRefused{refusals: refusals}
 	}
 	return pathBound{segments: segments}
-}
-
-// segmentRead is one segment of a path read as text, a parameter, or a form the client cannot hold.
-//
-//sumtype:decl
-type segmentRead interface{ isSegmentRead() }
-
-// literalSegment is a segment holding no brace.
-//
-//ergo:not-an-error
-type literalSegment struct{}
-
-// parameterSegment is a segment that is one {name}, and the name.
-//
-//ergo:not-an-error
-type parameterSegment struct{ name string }
-
-// unsupportedSegment is a {name...} or {$} wildcard, or a brace that does not enclose the whole
-// segment.
-//
-//ergo:not-an-error
-type unsupportedSegment struct{}
-
-func (literalSegment) isSegmentRead()     {}
-func (parameterSegment) isSegmentRead()   {}
-func (unsupportedSegment) isSegmentRead() {}
-
-// parsedSegment reads one segment of a path: one {name}, text holding no brace, or neither.
-func parsedSegment(text string) segmentRead {
-	braced := mo.TupleToOption(strings.CutPrefix(text, "{")).FlatMap(func(inner string) mo.Option[string] {
-		return mo.TupleToOption(strings.CutSuffix(inner, "}"))
-	})
-	return mo.Fold(braced, parameterNamed, func(error) segmentRead {
-		if strings.ContainsAny(text, "{}") {
-			return unsupportedSegment{}
-		}
-		return literalSegment{}
-	})
-}
-
-// parameterNamed is a segment that is one {name}: a parameter, or a wildcard or empty name the
-// client has no form for.
-func parameterNamed(name string) segmentRead {
-	switch {
-	case name == "", name == "$", strings.HasSuffix(name, "..."), strings.ContainsAny(name, "{}"):
-		return unsupportedSegment{}
-	}
-	return parameterSegment{name: name}
 }

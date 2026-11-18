@@ -27,11 +27,12 @@ import (
 	"github.com/samber/mo"
 )
 
-// GuardedRoute is the route a guard is asked to check: its method, its path and the argument its
-// //nocontract:guard line gives the guard, such as the action a staff member must hold.
+// GuardedRoute is the route a guard is asked to check: its method, the segments of its path and
+// the argument its //nocontract:guard line gives the guard, such as the action a staff member must
+// hold.
 type GuardedRoute struct {
 	Method   string
-	Path     string
+	Path     []PathSegment
 	Argument string
 }
 

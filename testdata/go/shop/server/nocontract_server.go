@@ -27,7 +27,7 @@ func (api API) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 // the layers run around every request, the first outermost; or why a guard cannot check a route.
 // It takes the receiver of each method handler and each guard, by the package declaring the routes.
 func New(layers []nocontract.Layer, balanceLedger balance.Ledger, balanceShopper nocontract.Guard[shopperrefusal.Refusal]) mo.Result[API] {
-	return mo.Fold(balanceShopper.CheckRoute(nocontract.GuardedRoute{Method: "GET", Path: "/shoppers/{shopper_id}/balance", Argument: "read-balance"}), func(checkReadBalance nocontract.RequestCheck[shopperrefusal.Refusal]) mo.Result[API] {
+	return mo.Fold(balanceShopper.CheckRoute(nocontract.GuardedRoute{Method: "GET", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "balance"}}, Argument: "read-balance"}), func(checkReadBalance nocontract.RequestCheck[shopperrefusal.Refusal]) mo.Result[API] {
 		return mo.Ok(API{layers: slices.Clone(layers), endpoints: []nocontract.Endpoint{
 			{Method: "GET", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "balance"}}, Answer: func(request *http.Request) nocontract.Answer {
 				return nocontract.Decided(checkReadBalance(request), shopperrefusal.NocontractAnswerRefusal, func() nocontract.Answer { return balance.NocontractRouteReadBalance(balanceLedger, request) })

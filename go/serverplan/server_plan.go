@@ -311,7 +311,7 @@ func (Guarded) isRouteGuard()   {}
 type Route struct {
 	Name    string
 	Method  description.Method
-	Path    string
+	Path    description.RoutePath
 	Handler Handler
 	Guard   RouteGuard
 	Input   GoName

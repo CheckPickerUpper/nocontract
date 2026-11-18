@@ -5,10 +5,10 @@ import (
 	"go/token"
 	"go/types"
 	"slices"
-	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/fatih/structtag"
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
@@ -30,9 +30,10 @@ type routeEntry struct {
 
 // handlerDeclaration is a function declaration of the project carrying a //nocontract:route line.
 type handlerDeclaration struct {
-	loaded   *packages.Package
-	function *ast.FuncDecl
-	doc      *ast.CommentGroup
+	loaded     *packages.Package
+	function   *ast.FuncDecl
+	doc        *ast.CommentGroup
+	routeLines []directiveText
 }
 
 // routeHandlers is every function of the project's own files carrying a //nocontract:route line.
@@ -46,10 +47,8 @@ func routeHandlers(index projectIndex) []handlerDeclaration {
 			}
 			doc := mo.Fold(mo.EmptyableToOption(function.Doc), func(written *ast.CommentGroup) *ast.CommentGroup { return written },
 				func(error) *ast.CommentGroup { return emptyComment() })
-			switch writtenLines(doc, routeKind{}).(type) {
-			case oneLine, repeatedLines:
-				handlers = append(handlers, handlerDeclaration{loaded: own.loaded, function: function, doc: doc})
-			case noLine, nil:
+			if routeLines := directiveTexts(doc, routeKind{}); len(routeLines) > 0 {
+				handlers = append(handlers, handlerDeclaration{loaded: own.loaded, function: function, doc: doc, routeLines: routeLines})
 			}
 		}
 	}
@@ -68,16 +67,31 @@ func readRoutes(index projectIndex, guards guardTable) []reading[routeEntry] {
 // routeLine is a route directive read as its method and path.
 type routeLine struct {
 	method description.Method
-	path   string
+	path   description.RoutePath
 }
 
-// readRouteLine reads "METHOD /path", where METHOD is one a route may answer.
-func readRouteLine(text string) mo.Option[routeLine] {
-	words := strings.Fields(text)
-	if len(words) != 2 || !strings.HasPrefix(words[1], "/") {
-		return mo.None[routeLine]()
+// readRouteLine reads "METHOD /path", where METHOD is one a route may answer, refusing a wrong
+// count of words, and an unknown method and a malformed path each on its own.
+func readRouteLine(index projectIndex, text directiveText) reading[routeLine] {
+	if len(text.words) != 2 {
+		return notRead[routeLine](index.refused(text.position, RouteDirectiveWordCount{Text: text.written}))
 	}
-	return mapOption(description.ParseMethod(words[0]), func(method description.Method) routeLine { return routeLine{method: method, path: words[1]} })
+	method := outcome.FoldOption(description.ParseMethod(text.words[0]), func(method description.Method) reading[description.Method] {
+		return readAs(method, nothingFound())
+	}, func() reading[description.Method] {
+		return notRead[description.Method](index.refused(text.position, RouteMethodUnknown{Text: text.written, Method: text.words[0]}))
+	})
+	path := notRead[description.RoutePath](nothingFound())
+	switch read := description.ParseRoutePath(text.words[1]).(type) {
+	case description.RoutePathRead:
+		path = readAs(read.Path, nothingFound())
+	case description.RoutePathRefused:
+		path = notRead[description.RoutePath](index.refused(text.position, read.Problem))
+	case nil:
+	}
+	return mapped(paired(method, path), func(read pair[description.Method, description.RoutePath]) routeLine {
+		return routeLine{method: read.first, path: read.second}
+	})
 }
 
 // endpointName is a handler's name with its first letter in lower case.
@@ -177,7 +191,7 @@ func servedHandler(index projectIndex, loaded *packages.Package, handler handler
 // readRoute reads one handler's route whole: its line, signature, guard, input and outcome.
 func readRoute(index projectIndex, guards guardTable, handler handlerDeclaration) reading[routeEntry] {
 	position := handler.function.Name.Pos()
-	declared := paired(paired(readRouteDirective(index, handler), readHandlerTypes(index, handler)), readRouteGuard(index, guards, writtenLines(handler.doc, guardKind{})))
+	declared := paired(paired(readRouteDirective(index, handler), readHandlerTypes(index, handler)), readRouteGuard(index, guards, directiveTexts(handler.doc, guardKind{})))
 	return alongside(andThen(declared, func(read pair[pair[routeLine, handlerTypes], routeGuard]) reading[routeEntry] {
 		route, signature, guard := read.first.first, read.first.second, read.second
 		parts := paired(readInput(index, handler.loaded, signature.input, position), readOutcome(index, handler.loaded, signature.outcome, position))
@@ -218,18 +232,11 @@ func readEntry(index projectIndex, handler handlerDeclaration, parts routeParts)
 
 // readRouteDirective reads a handler's one //nocontract:route line.
 func readRouteDirective(index projectIndex, handler handlerDeclaration) reading[routeLine] {
-	switch lines := writtenLines(handler.doc, routeKind{}).(type) {
-	case oneLine:
-		return mo.Fold(readRouteLine(lines.line.argument), func(route routeLine) reading[routeLine] {
-			return readAs(route, nothingFound())
-		}, func(error) reading[routeLine] {
-			return notRead[routeLine](index.refused(lines.line.position, RouteDirectiveMalformed{Text: lines.line.argument}))
+	return readOnce(handler.routeLines, func() reading[routeLine] { return notRead[routeLine](nothingFound()) },
+		func(text directiveText) reading[routeLine] { return readRouteLine(index, text) },
+		func(second directiveText) reading[routeLine] {
+			return notRead[routeLine](index.refused(second.position, RouteDirectiveRepeated{Handler: handler.function.Name.Name}))
 		})
-	case repeatedLines:
-		return notRead[routeLine](index.refused(lines.second.position, RouteDirectiveRepeated{Handler: handler.function.Name.Name}))
-	case noLine, nil:
-	}
-	return notRead[routeLine](nothingFound())
 }
 
 // bodyRead is whether the generated code decodes the input's Body field.

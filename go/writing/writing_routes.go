@@ -97,7 +97,7 @@ func routeText(route serverplan.Route, names *imports) string {
 	name := serverplan.RouteFunction(route.Name)
 	text := &strings.Builder{}
 	fmt.Fprintf(text, "\n// %s answers one request to %s %s. Only the generated server calls it.\nfunc %s(%s) %s {\n\tvar input %s\n",
-		name, route.Method.Name(), route.Path, name, routeParameters(route.Handler), names.runtime("Answer"), names.qualified(route.Input))
+		name, route.Method.Name(), route.Path.Text(), name, routeParameters(route.Handler), names.runtime("Answer"), names.qualified(route.Input))
 	steps := []string{}
 	for _, param := range route.Params {
 		steps = append(steps, paramStep(param, names.runtime("Path")+"(request, "+strconv.Quote(param.Name)+")", names))

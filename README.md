@@ -50,7 +50,9 @@ The frontend needs `effect` 4.
 ## Declaring a route in Go
 
 A route is a function taking a `context.Context` and an input, returning a sealed outcome. Its
-`//nocontract:route` line names the method and the path:
+`//nocontract:route` line names the method (GET, POST, PUT, PATCH or DELETE) and the path. The
+path starts with `/`, and each segment between slashes is text holding no brace or one `{name}`
+parameter:
 
 ```go
 // ReadBalance reads one shopper's balance.

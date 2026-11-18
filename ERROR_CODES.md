@@ -42,18 +42,6 @@ Message: `The answer {Tag} is not written as a JSON object.`
 | --- | --- |
 | `Tag` | `string` |
 
-## NC-1004 RouteDirectiveMalformed
-
-RouteDirectiveMalformed is a //nocontract:route line that is not a method and a path.
-
-Declared in `go/reading/refusals.go`.
-
-Message: `The route directive "{Text}" is not a method (GET, POST, PUT, PATCH or DELETE) and a path starting with /.`
-
-| Field | Type |
-| --- | --- |
-| `Text` | `string` |
-
 ## NC-1005 HandlerSignatureUnsupported
 
 HandlerSignatureUnsupported is a route handler that is not func(context.Context, Input) Outcome.
@@ -288,19 +276,6 @@ Message: `An input field reads the path segment named {Parameter}, which the pat
 | --- | --- |
 | `Parameter` | `string` |
 
-## NC-1024 PathSegmentUnsupported
-
-PathSegmentUnsupported is a path segment with no Effect HttpApi form: a {name...} or {$}
-wildcard, or a brace that does not enclose the whole segment.
-
-Declared in `assembling/refusals.go`.
-
-Message: `The path segment {Segment} has no Effect HttpApi form.`
-
-| Field | Type |
-| --- | --- |
-| `Segment` | `string` |
-
 ## NC-1025 BodyWithoutRequestBody
 
 BodyWithoutRequestBody is a route reading a body although its method's request carries none.
@@ -377,20 +352,6 @@ Message: `The path or query field {Field} is a {Type}, not text, a whole number,
 | --- | --- |
 | `Field` | `string` |
 | `Type` | `string` |
-
-## NC-1032 StatusDirectiveMalformed
-
-StatusDirectiveMalformed is a //nocontract:status line that is not one known HTTP status, or a
-member with more than one.
-
-Declared in `go/reading/refusals.go`.
-
-Message: `The status "{Text}" of {Member} is not one known HTTP status, written once.`
-
-| Field | Type |
-| --- | --- |
-| `Member` | `string` |
-| `Text` | `string` |
 
 ## NC-1033 FieldNameReserved
 
@@ -510,19 +471,6 @@ BodyNotSingle is a body holding more than one JSON value.
 Declared in `go/request_reading.go`.
 
 Message: `The body holds more than one JSON value.`
-
-## NC-1045 GuardDirectiveMalformed
-
-GuardDirectiveMalformed is a //nocontract:guard line on a handler that is not a guard name and
-one argument, or a handler with more than one.
-
-Declared in `go/reading/refusals.go`.
-
-Message: `The guard directive "{Text}" is not one guard name and one argument.`
-
-| Field | Type |
-| --- | --- |
-| `Text` | `string` |
 
 ## NC-1046 GuardUndeclared
 
@@ -762,20 +710,6 @@ Message: `No route at this path answers {Method}`
 | `Method` | `string` |
 | `Allowed` | `[]string` |
 
-## NC-1071 RouteNotDescribed
-
-RouteNotDescribed is a route of the server plan the API's description holds no endpoint for, so
-its path's segments are not known.
-
-Declared in `go/writing/writing_server.go`.
-
-Message: `The route {Route} of the package {Package} has no endpoint in the API's description.`
-
-| Field | Type |
-| --- | --- |
-| `Package` | `string` |
-| `Route` | `string` |
-
 ## NC-1072 ValueServedNotAPI
 
 ValueServedNotAPI is a call that serves HTTP with a handler whose type is not the generated API,
@@ -999,3 +933,197 @@ Message: `The project file {Path} describes no project:`
 | --- | --- |
 | `Path` | `string` |
 | `Refusals` | `[]assembling.Refusal` |
+
+## NC-1090 PathNotRooted
+
+PathNotRooted is a route's path that does not start with /.
+
+Declared in `description/route_path_parsing.go`.
+
+Message: `The route's path {Path} does not start with /.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+
+## NC-1091 PathParameterUnnamed
+
+PathParameterUnnamed is a route's path holding {}, a parameter without a name.
+
+Declared in `description/route_path_parsing.go`.
+
+Message: `The route's path {Path} holds a parameter without a name.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+
+## NC-1092 PathEndMatched
+
+PathEndMatched is a route's path holding {$}, which ServeMux reads as the path's end and the
+client cannot write.
+
+Declared in `description/route_path_parsing.go`.
+
+Message: `The route's path {Path} holds the end-of-path wildcard $; a route's path ends where its last segment does.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+
+## NC-1093 PathRestMatched
+
+PathRestMatched is a route's path holding {name...}, a parameter taking every segment left, which
+the client cannot write.
+
+Declared in `description/route_path_parsing.go`.
+
+Message: `The route's path {Path} holds {Segment}, which takes every segment left; a parameter takes one segment.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Segment` | `string` |
+
+## NC-1094 PathBraceInName
+
+PathBraceInName is a route's path with a parameter whose name holds a brace.
+
+Declared in `description/route_path_parsing.go`.
+
+Message: `The route's path {Path} holds {Segment}, a parameter whose name holds a brace.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Segment` | `string` |
+
+## NC-1095 PathBraceInText
+
+PathBraceInText is a route's path with a segment holding a brace that does not enclose it whole.
+
+Declared in `description/route_path_parsing.go`.
+
+Message: `The route's path {Path} holds {Segment}; a segment is text holding no brace, or one parameter name in braces.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Segment` | `string` |
+
+## NC-1096 RouteDirectiveWordCount
+
+RouteDirectiveWordCount is a //nocontract:route line that is not one method and one path, as it
+is written.
+
+Declared in `go/reading/reading_directive_problems.go`.
+
+Message: `The line {Text} is not one method and one path.`
+
+| Field | Type |
+| --- | --- |
+| `Text` | `string` |
+
+## NC-1097 RouteMethodUnknown
+
+RouteMethodUnknown is a //nocontract:route line naming a method no route answers.
+
+Declared in `go/reading/reading_directive_problems.go`.
+
+Message: `{Method} in the line {Text} is not a method a route answers: GET, POST, PUT, PATCH or DELETE.`
+
+| Field | Type |
+| --- | --- |
+| `Text` | `string` |
+| `Method` | `string` |
+
+## NC-1098 StatusDirectiveWordCount
+
+StatusDirectiveWordCount is a //nocontract:status line that is not one status, as it is written.
+
+Declared in `go/reading/reading_directive_problems.go`.
+
+Message: `The line {Text} on {Member} is not one status.`
+
+| Field | Type |
+| --- | --- |
+| `Member` | `string` |
+| `Text` | `string` |
+
+## NC-1099 StatusNotNumber
+
+StatusNotNumber is a //nocontract:status line whose status is not a number.
+
+Declared in `go/reading/reading_directive_problems.go`.
+
+Message: `{Status} in the line {Text} on {Member} is not a number.`
+
+| Field | Type |
+| --- | --- |
+| `Member` | `string` |
+| `Text` | `string` |
+| `Status` | `string` |
+
+## NC-1100 StatusDirectiveRepeated
+
+StatusDirectiveRepeated is a member with a second //nocontract:status line, as it is written.
+
+Declared in `go/reading/reading_directive_problems.go`.
+
+Message: `{Member} has a second status line, {Text}; a member answers one status.`
+
+| Field | Type |
+| --- | --- |
+| `Member` | `string` |
+| `Text` | `string` |
+
+## NC-1101 GuardDirectiveWordCount
+
+GuardDirectiveWordCount is a //nocontract:guard line on a guard's refusal that is not one name,
+as it is written.
+
+Declared in `go/reading/reading_directive_problems.go`.
+
+Message: `The line {Text} on a guard's refusal is not one guard name.`
+
+| Field | Type |
+| --- | --- |
+| `Text` | `string` |
+
+## NC-1102 RouteGuardWordCount
+
+RouteGuardWordCount is a //nocontract:guard line on a handler that is not one guard name and one
+argument, as it is written.
+
+Declared in `go/reading/reading_directive_problems.go`.
+
+Message: `The line {Text} on a handler is not one guard name and one argument.`
+
+| Field | Type |
+| --- | --- |
+| `Text` | `string` |
+
+## NC-1103 GuardNameInvalid
+
+GuardNameInvalid is a //nocontract:guard line whose guard name is not an exported Go identifier.
+
+Declared in `go/reading/reading_directive_problems.go`.
+
+Message: `{Name} in the line {Text} is not an exported Go identifier, the form a guard's name takes.`
+
+| Field | Type |
+| --- | --- |
+| `Text` | `string` |
+| `Name` | `string` |
+
+## NC-1104 GuardDirectiveRepeated
+
+GuardDirectiveRepeated is a declaration with a second //nocontract:guard line, as it is written.
+
+Declared in `go/reading/reading_directive_problems.go`.
+
+Message: `The line {Text} is a second guard line; a declaration names one guard.`
+
+| Field | Type |
+| --- | --- |
+| `Text` | `string` |

@@ -10,7 +10,6 @@ import (
 
 	ergo "github.com/CheckPickerUpper/ErGo"
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/messages"
 )
@@ -129,20 +128,20 @@ func (Patch) Body() MethodBody { return BodyCarried{} }
 func (Delete) Body() MethodBody { return BodyCarried{} }
 
 // ParseMethod is the method a route may answer that text names.
-func ParseMethod(text string) mo.Option[Method] {
+func ParseMethod(text string) outcome.Option[Method] {
 	switch text {
 	case http.MethodGet:
-		return mo.Some[Method](Get{})
+		return outcome.Some[Method](Get{})
 	case http.MethodPost:
-		return mo.Some[Method](Post{})
+		return outcome.Some[Method](Post{})
 	case http.MethodPut:
-		return mo.Some[Method](Put{})
+		return outcome.Some[Method](Put{})
 	case http.MethodPatch:
-		return mo.Some[Method](Patch{})
+		return outcome.Some[Method](Patch{})
 	case http.MethodDelete:
-		return mo.Some[Method](Delete{})
+		return outcome.Some[Method](Delete{})
 	}
-	return mo.None[Method]()
+	return outcome.None[Method]()
 }
 
 // TagField is the field every answer names its member in.
@@ -280,16 +279,17 @@ func (unanswerable StatusUnanswerable) Error() string {
 	return unanswerable.Report(messages.Match("")).Message
 }
 
-// ParseStatus is the success or failure status number names.
-func ParseStatus(number int) outcome.Result[Status] {
+// FoldStatus is parsed applied to the success or failure status number names, or unanswerable
+// applied to why it names none.
+func FoldStatus[R any](number int, parsed func(Status) R, unanswerable func(StatusUnanswerable) R) R {
 	known := http.StatusText(number) != ""
 	switch {
 	case known && number >= http.StatusOK && number < http.StatusMultipleChoices && number != http.StatusNoContent && number != http.StatusResetContent:
-		return outcome.Ok[Status](SuccessStatus{code: number})
+		return parsed(SuccessStatus{code: number})
 	case known && number >= http.StatusBadRequest && number < 600:
-		return outcome.Ok[Status](FailureStatus{code: number})
+		return parsed(FailureStatus{code: number})
 	}
-	return outcome.Err[Status](StatusUnanswerable{Number: number})
+	return unanswerable(StatusUnanswerable{Number: number})
 }
 
 // Answer is whether a member answers as a success or as a failure with its permanent code.

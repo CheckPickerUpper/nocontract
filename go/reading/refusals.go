@@ -17,12 +17,6 @@ type Problem interface {
 	Causes() []error
 }
 
-// RouteDirectiveMalformed is a //nocontract:route line that is not a method and a path.
-//
-//ergo:code NC-1004
-//ergo:message The route directive "{Text}" is not a method (GET, POST, PUT, PATCH or DELETE) and a path starting with /.
-type RouteDirectiveMalformed struct{ Text string }
-
 // RouteDirectiveRepeated is a handler with more than one //nocontract:route line, which serves one
 // route.
 //
@@ -164,23 +158,6 @@ type ParameterTypeUnsupported struct {
 	Type  string
 }
 
-// StatusDirectiveMalformed is a //nocontract:status line that is not one known HTTP status, or a
-// member with more than one.
-//
-//ergo:code NC-1032
-//ergo:message The status "{Text}" of {Member} is not one known HTTP status, written once.
-type StatusDirectiveMalformed struct {
-	Member string
-	Text   string
-}
-
-// GuardDirectiveMalformed is a //nocontract:guard line on a handler that is not a guard name and
-// one argument, or a handler with more than one.
-//
-//ergo:code NC-1045
-//ergo:message The guard directive "{Text}" is not one guard name and one argument.
-type GuardDirectiveMalformed struct{ Text string }
-
 // GuardUndeclared is a route naming a guard no sealed refusal of the project declares.
 //
 //ergo:code NC-1046
@@ -228,7 +205,6 @@ type GeneratedNameTaken struct{ Name string }
 //ergo:message "{Text}" names no directive NoContract reads: route, status or guard.
 type DirectiveUnknown struct{ Text string }
 
-func (RouteDirectiveMalformed) isProblem()     {}
 func (RouteDirectiveRepeated) isProblem()      {}
 func (HandlerSignatureUnsupported) isProblem() {}
 func (OutcomeNotNamedInterface) isProblem()    {}
@@ -249,8 +225,6 @@ func (InputFieldUnread) isProblem()            {}
 func (TypeNotReachable) isProblem()            {}
 func (StatusDirectiveMissing) isProblem()      {}
 func (ParameterTypeUnsupported) isProblem()    {}
-func (StatusDirectiveMalformed) isProblem()    {}
-func (GuardDirectiveMalformed) isProblem()     {}
 func (GuardUndeclared) isProblem()             {}
 func (GuardRepeated) isProblem()               {}
 func (GuardMemberSucceeds) isProblem()         {}
