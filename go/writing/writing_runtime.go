@@ -15,10 +15,10 @@ import (
 )
 
 // SharedFieldUnsupported is a field of one of nocontract's own failures whose schema the Go runtime
-// declares no type for: only text and a set of string constants have one.
+// declares no type for: only text, a set of string constants and a list of text have one.
 //
 //ergo:code NC-1063
-//ergo:message The field {Field} of {Failure} has no Go runtime type: only text and a set of string constants have one.
+//ergo:message The field {Field} of {Failure} has no Go runtime type: only text, a set of string constants and a list of text have one.
 type SharedFieldUnsupported struct {
 	Failure string
 	Field   string
@@ -42,7 +42,7 @@ func RenderRuntime(failures []description.SharedFailure) mo.Result[[]byte] {
 		}, mo.Err[[]string])
 	}
 	return mo.Fold(declared, func(texts []string) mo.Result[[]byte] {
-		names := newImports(serverplan.NoContractPath, serverplan.ServesNoRoutes{})
+		names := newImports(serverplan.NoContractPath, routeFileImports(serverplan.ServesNoRoutes{}), []string{})
 		members := []serverplan.Member{}
 		for _, failure := range failures {
 			members = append(members, serverplan.Member{
@@ -50,10 +50,10 @@ func RenderRuntime(failures []description.SharedFailure) mo.Result[[]byte] {
 			})
 		}
 		name := serverplan.AnswerPrefix + serverplan.SharedFailureType
-		body := fmt.Sprintf("\n// %s is a failure nocontract answers on a route's behalf, outside its handler.\n//\n//sumtype:decl\ntype %s interface{ is%s() }\n",
+		body := fmt.Sprintf("\n// %s is a failure nocontract answers itself, outside any handler.\n//\n//sumtype:decl\ntype %s interface{ is%s() }\n",
 			serverplan.SharedFailureType, serverplan.SharedFailureType, serverplan.SharedFailureType) +
 			strings.Join(texts, "") +
-			fmt.Sprintf("\n// %s answers each failure nocontract answers on a route's behalf\n// with its status, tag and code.", name) +
+			fmt.Sprintf("\n// %s answers each failure nocontract answers itself\n// with its status, tag and code.", name) +
 			answerText(answerFunction{name: name, sealed: serverplan.SharedFailureType, members: members}, names)
 		file := description.GeneratedHeader + "\npackage " + serverplan.NoContractPackage + "\n\n" + names.declaration() + "\n" + body
 		return mo.TupleToResult(format.Source([]byte(file)))
@@ -79,7 +79,15 @@ func sharedFailureText(failure description.SharedFailure) mo.Result[string] {
 				fmt.Fprintf(literals, "\t%s%s %s = %s\n", literalType, goFieldName(value), literalType, strconv.Quote(value))
 			}
 			literals.WriteString(")\n")
-		case description.Integer, description.Finite, description.Truth, description.Instant, description.List, description.Dictionary,
+		case description.List:
+			switch schema.Item.(type) {
+			case description.Text:
+				fields = append(fields, fmt.Sprintf("\t%s []string `json:%q`\n", goField, field.Name))
+			case description.Integer, description.Finite, description.Truth, description.Instant, description.Literals, description.List,
+				description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
+				return mo.Err[string](SharedFieldUnsupported{Failure: failure.Name, Field: field.Name})
+			}
+		case description.Integer, description.Finite, description.Truth, description.Instant, description.Dictionary,
 			description.Nullable, description.StructRef, description.InlineStruct, nil:
 			return mo.Err[string](SharedFieldUnsupported{Failure: failure.Name, Field: field.Name})
 		}

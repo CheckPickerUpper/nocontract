@@ -8,6 +8,7 @@ package assembling
 import (
 	"cmp"
 	"slices"
+	"strings"
 
 	"github.com/CheckPickerUpper/outcome"
 
@@ -270,17 +271,31 @@ func sharedFailureMembers(declared DeclaredEndpoint, shared []description.Shared
 				members = append(members, failure.Member())
 			case requestUnread, nil:
 			}
+		case description.AnsweredWithoutRoute:
 		case nil:
 		}
 	}
 	return members
 }
 
-// repeatedRoutes refuses every route serving a method and path an earlier route serves.
+// repeatedRoutes refuses every route serving a method and path an earlier route serves. Two paths
+// differing only in their parameters' names match the same requests, so they are one path.
 func repeatedRoutes(endpoints []DeclaredEndpoint) []Refusal {
 	pattern := func(declared DeclaredEndpoint) string { return declared.Method.Name() + " " + declared.Path }
+	served := func(declared DeclaredEndpoint) string {
+		segments := []string{}
+		for segment := range strings.SplitSeq(declared.Path, "/") {
+			switch parsedSegment(segment).(type) {
+			case parameterSegment:
+				segments = append(segments, "{}")
+			case literalSegment, unsupportedSegment, nil:
+				segments = append(segments, segment)
+			}
+		}
+		return declared.Method.Name() + " " + strings.Join(segments, "/")
+	}
 	refusals := []Refusal{}
-	for _, repeat := range keyed.Repeats(endpoints, pattern) {
+	for _, repeat := range keyed.Repeats(endpoints, served) {
 		refusals = append(refusals, Refusal{Position: repeat.Item.Position, Problem: RouteRepeated{Pattern: pattern(repeat.Item), First: repeat.First.Position.String()}})
 	}
 	return refusals

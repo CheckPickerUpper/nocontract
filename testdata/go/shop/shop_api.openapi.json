@@ -293,6 +293,39 @@
         ],
         "additionalProperties": false
       },
+      "MethodNotDeclared": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "MethodNotDeclared"
+            ]
+          },
+          "allowed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "NC-1070"
+            ]
+          },
+          "method": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "method",
+          "allowed"
+        ],
+        "additionalProperties": false
+      },
       "Money": {
         "type": "object",
         "properties": {
@@ -375,6 +408,36 @@
           "part",
           "name",
           "reason"
+        ],
+        "additionalProperties": false
+      },
+      "RouteNotFound": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RouteNotFound"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "NC-1069"
+            ]
+          },
+          "method": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "method",
+          "path"
         ],
         "additionalProperties": false
       },

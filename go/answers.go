@@ -72,29 +72,37 @@ func (refused FieldsNotObject) Error() string {
 	return refused.Report(messages.Match("")).Message
 }
 
-// Write writes the answer with its status, as one JSON object holding its tag, a failure's code
-// and its fields, or AnswerNotWritten when its fields cannot be written.
-func Write(writer http.ResponseWriter, answer Answer) {
-	mo.Fold(answer.body(), func(body []byte) struct{} {
-		writeBody(writer, answer.status, body)
-		return struct{}{}
-	}, func(cause error) struct{} {
+// sentAnswer is an answer as it is sent: its status, its tag, a failure's code, and one JSON object
+// holding its tag, its code and its fields.
+type sentAnswer struct {
+	status int
+	tag    string
+	code   mo.Option[string]
+	body   []byte
+}
+
+// sent is the answer as it is sent, or AnswerNotWritten when its fields cannot be written.
+func sent(answer Answer) sentAnswer {
+	return mo.Fold(answer.body(), func(body []byte) sentAnswer {
+		return sentAnswer{status: answer.status, tag: answer.tag, code: answer.code, body: body}
+	}, func(cause error) sentAnswer {
 		failed := NocontractAnswerSharedFailure(AnswerNotWritten{Answer: answer.tag, Reason: cause.Error()})
 		fallback := Answer{status: failed.status, tag: failed.tag, code: failed.code, fields: mo.Ok([]byte(fallbackFields))}
 		// The fallback's fields are an object, so its body is always written; an empty body is never sent.
 		asIs := func(body []byte) []byte { return body }
-		writeBody(writer, failed.status, mo.Fold(failed.body(), asIs, func(error) []byte {
+		body := mo.Fold(failed.body(), asIs, func(error) []byte {
 			return mo.Fold(fallback.body(), asIs, func(error) []byte { return []byte{} })
-		}))
-		return struct{}{}
+		})
+		return sentAnswer{status: failed.status, tag: failed.tag, code: failed.code, body: body}
 	})
 }
 
-func writeBody(writer http.ResponseWriter, status int, body []byte) {
+// write writes the answer's status and its JSON body.
+func (answer sentAnswer) write(writer http.ResponseWriter) {
 	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(status)
+	writer.WriteHeader(answer.status)
 	// The status is already sent, so a body the client stopped reading has no one left to tell.
-	_, _ = writer.Write(body)
+	_, _ = writer.Write(answer.body)
 }
 
 // body is the answer's JSON object: its tag, a failure's code, then its own fields.

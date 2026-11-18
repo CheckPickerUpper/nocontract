@@ -32,7 +32,8 @@ it.
   [ErGo](https://github.com/CheckPickerUpper/ErGo) and sent in every response. A log line or a
   user's screenshot names the exact failure after its wording has changed.
 - The generated route code writes only the members of the handler's type, each with its declared
-  HTTP status. A route behind a guard cannot be mounted without that guard.
+  HTTP status. The server answers only the routes the client and the OpenAPI file list, and a
+  route behind a guard cannot be served without that guard.
 - Go, Odin and Gleam backends are read into the same description and checked by the same rules,
   so they produce the same client and the same JSON.
 
@@ -157,7 +158,7 @@ func (ledger Ledger) ReadBalance(ctx context.Context, input ReadInput) ReadOutco
 ```
 
 The guard implements `nocontract.Guard[refusal.Refusal]`, typed by its own refusal. It decides
-and never answers: `CheckRoute` is asked once for each route when the routes are built, and
+and never answers: `CheckRoute` is asked once for each route when the server is built, and
 returns how the guard decides each request to that route, or why it cannot check the route at all.
 Each request's decision is `nocontract.Admitted` or `nocontract.Refused` holding one member of
 the guard's refusal. The generated code writes the refusal with its status and code, or runs the
@@ -180,8 +181,9 @@ Every route behind a guard lists the guard's refusals among its failures in the 
 ## Generating
 
 A `nocontract.json` beside `go.mod` names the backend's language, the packages holding routes,
-the TypeScript file to write, the name of the API class, and the OpenAPI 3.1 file to write with the
-version of the API it declares. Each file's path is relative to `nocontract.json`:
+the TypeScript file to write, the name of the API class, the OpenAPI 3.1 file to write with the
+version of the API it declares, and the folder of the server package to write. Each path is
+relative to `nocontract.json`, and every field is required:
 
 ```json
 {
@@ -189,7 +191,8 @@ version of the API it declares. Each file's path is relative to `nocontract.json
   "packages": ["./..."],
   "typescript": "../web/src/shop_api.generated.ts",
   "api": "ShopApi",
-  "openapi": { "file": "shop_api.openapi.json", "version": "1.0.0" }
+  "openapi": { "file": "shop_api.openapi.json", "version": "1.0.0" },
+  "server": "server"
 }
 ```
 
@@ -199,9 +202,10 @@ go tool nocontract check      # exits 1 when a file differs from what generate w
 ```
 
 `generate` writes `nocontract_routes.go` into each package that declares a route or a guard's
-refusal, the TypeScript file and the OpenAPI file. It also writes `nocontract_files_test.go` into the first of those
-packages, in folder order, so `go test ./...` fails while any generated file differs from what
-`generate` writes, listing each one. `check` runs the same comparison on its own.
+refusal, `nocontract_server.go` into the server folder, the TypeScript file and the OpenAPI file.
+It also writes `nocontract_files_test.go` into the first package that declares a route or a
+guard's refusal, in folder order, so `go test ./...` fails while any generated file differs from
+what `generate` writes, listing each one. `check` runs the same comparison on its own.
 
 The OpenAPI file lists each route's path and query parameters, its body, and every member it
 answers with under that member's status. Each member is its own schema, whose `_tag` and, for a
@@ -210,26 +214,51 @@ of format `date-time`.
 
 ## Serving
 
-Each package's generated `Routes` takes its `Serving`: one field for each handler's receiver type and
-each guard its routes name. A route cannot be served without its guard or its receiver.
+The server package declares `API`, the only value that serves the routes, and `New`, the only
+function that builds one. `New` takes the layers, then one parameter for each handler's receiver
+type and each guard, by route package folder and then in the order the package's routes first
+need them, each named for its package and its type or guard. A route cannot be served without its
+guard or its receiver.
 
 ```go
-served := balance.Routes(balance.Serving{Ledger: balance.Ledger{Store: store}, Shopper: shopperauth.Check{}})
+built := server.New([]nocontract.Layer{logRequest}, balance.Ledger{Store: store}, shopperauth.Check{})
 ```
 
-`Routes` answers every route, or why a guard could not check one:
+`New` answers the API, or why a guard could not check one of its routes. The API is an
+`http.Handler`:
 
 ```go
-mux := http.NewServeMux()
-mo.Fold(served, func(routes []nocontract.Route) struct{} {
-	for _, route := range routes {
-		mux.Handle(route.Pattern(), route)
-	}
-	return struct{}{}
-}, func(cause error) struct{} {
-	// a guard refused a route it was asked to check
-	return struct{}{}
-})
+mo.Fold(built, func(api server.API) error {
+	return (&http.Server{Addr: ":8080", Handler: api, ReadHeaderTimeout: 10 * time.Second}).ListenAndServe()
+}, func(cause error) error { return cause })
+```
+
+The API answers a request no declared route takes on its own:
+
+- a path no route declares: 404 with `RouteNotFound` (`NC-1069`), naming the method and path;
+- an `OPTIONS` request to a declared path: 204 with `Allow` listing the path's declared methods;
+- any other method on a declared path: 405 with `MethodNotDeclared` (`NC-1070`), naming the
+  method and the allowed methods, and `Allow` listing them.
+
+A path segment written as text in one route is preferred over a `{name}` segment in another.
+
+## Layers
+
+A `nocontract.Layer` runs around every request the API answers, matched or not, for logging,
+metrics, request ids or CORS headers. It is handed the request as a `nocontract.Visit`, which reads
+the method, URL, header and the route matched (`nocontract.RouteMatched` with the declared method
+and path, or `nocontract.NoRouteMatched`), and sets headers on the response. Its `next` runs the
+route, once however often it is called, and returns the `nocontract.Answered`: the status, the
+`_tag` and the code of what the route answered. Only the API builds an `Answered`, and it sends the
+route's own answer whatever a layer returns, so a layer cannot change the status or body or answer
+in the route's place. Layers run in the order given, the first outermost.
+
+```go
+func logRequest(visit nocontract.Visit, next func() nocontract.Answered) nocontract.Answered {
+	answered := next()
+	fmt.Fprintf(os.Stderr, "%s %s %d %s\n", visit.Method(), visit.URL().Path, answered.Status(), answered.Code().OrElse(""))
+	return answered
+}
 ```
 
 ## Calling
@@ -261,7 +290,8 @@ member's `//nocontract:status`.
 
 Two failures can answer any route. `RequestRefused` (400, `NC-1001`) is a path segment, query
 parameter or body the input could not read, before the handler runs. `AnswerNotWritten`
-(500, `NC-1002`) is an outcome that could not be written as JSON.
+(500, `NC-1002`) is an outcome that could not be written as JSON. `RouteNotFound` and
+`MethodNotDeclared` answer requests no declared route takes, as [Serving](#serving) lists.
 
 ## Go field types
 

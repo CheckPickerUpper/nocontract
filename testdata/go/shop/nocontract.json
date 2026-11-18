@@ -3,5 +3,6 @@
   "packages": ["./..."],
   "typescript": "web/src/shop_api.generated.ts",
   "api": "ShopApi",
-  "openapi": { "file": "shop_api.openapi.json", "version": "1.0.0" }
+  "openapi": { "file": "shop_api.openapi.json", "version": "1.0.0" },
+  "server": "server"
 }

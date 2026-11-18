@@ -12,7 +12,7 @@ import (
 func written(t *testing.T, answer Answer) (int, string) {
 	t.Helper()
 	recorder := httptest.NewRecorder()
-	Write(recorder, answer)
+	sent(answer).write(recorder)
 	return recorder.Code, recorder.Body.String()
 }
 

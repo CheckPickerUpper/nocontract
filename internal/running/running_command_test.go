@@ -41,23 +41,24 @@ func TestTheRuntimesCommittedFileIsWhatGenerateWrites(t *testing.T) {
 	}
 }
 
-// A project file that names no OpenAPI file, or no version for it, is refused before any package
-// is read, each with its own code.
-func TestAProjectFileMissingItsOpenAPIFileOrVersionIsRefused(t *testing.T) {
+// A project file that names no OpenAPI file, no version for it, or no server folder, is refused
+// before any package is read, each with its own code.
+func TestAProjectFileMissingItsOpenAPIFileVersionOrServerFolderIsRefused(t *testing.T) {
 	t.Parallel()
 	for _, each := range []struct {
-		name    string
-		openAPI string
-		want    ergo.Code
+		name   string
+		fields string
+		want   ergo.Code
 	}{
-		{name: "no openapi object", openAPI: "", want: running.OpenAPIFileMissing{}.ErrorCode()},
-		{name: "no file", openAPI: `, "openapi": {"version": "1.0.0"}`, want: running.OpenAPIFileMissing{}.ErrorCode()},
-		{name: "no version", openAPI: `, "openapi": {"file": "shop_api.openapi.json"}`, want: running.OpenAPIVersionMissing{}.ErrorCode()},
+		{name: "no openapi object", fields: `, "server": "server"`, want: running.OpenAPIFileMissing{}.ErrorCode()},
+		{name: "no file", fields: `, "openapi": {"version": "1.0.0"}, "server": "server"`, want: running.OpenAPIFileMissing{}.ErrorCode()},
+		{name: "no version", fields: `, "openapi": {"file": "shop_api.openapi.json"}, "server": "server"`, want: running.OpenAPIVersionMissing{}.ErrorCode()},
+		{name: "no server folder", fields: `, "openapi": {"file": "shop_api.openapi.json", "version": "1.0.0"}`, want: running.ServerFolderMissing{}.ErrorCode()},
 	} {
 		t.Run(each.name, func(t *testing.T) {
 			t.Parallel()
 			project := filepath.Join(t.TempDir(), "nocontract.json")
-			content := `{"language": "go", "packages": ["./..."], "typescript": "shop_api.generated.ts", "api": "ShopApi"` + each.openAPI + "}"
+			content := `{"language": "go", "packages": ["./..."], "typescript": "shop_api.generated.ts", "api": "ShopApi"` + each.fields + "}"
 			outcome.ForEachOption(outcome.EmptyableToOption(os.WriteFile(project, []byte(content), 0o644)), func(cause error) { t.Fatalf("writing %s: %v", project, cause) })
 			checked := running.Run(running.Request{Arguments: []string{"check", "-project", project}, Context: t.Context()})
 			unreadable, isUnreadable := checked.(running.ProjectUnreadable)
@@ -89,8 +90,8 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 	slices.Sort(codes)
 	want := []string{
 		"NC-1004", "NC-1005", "NC-1007", "NC-1012", "NC-1013", "NC-1014", "NC-1015", "NC-1016", "NC-1017",
-		"NC-1022", "NC-1024", "NC-1025", "NC-1029", "NC-1032", "NC-1033", "NC-1045", "NC-1046", "NC-1048", "NC-1049", "NC-1050", "NC-1051",
-		"NC-1056",
+		"NC-1022", "NC-1024", "NC-1025", "NC-1027", "NC-1029", "NC-1032", "NC-1033", "NC-1045", "NC-1046", "NC-1048", "NC-1049", "NC-1050",
+		"NC-1051", "NC-1051", "NC-1056",
 	}
 	if !slices.Equal(codes, want) {
 		t.Fatalf("the refused project was refused with %v; want %v", codes, want)

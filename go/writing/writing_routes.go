@@ -1,8 +1,8 @@
-// Package writing writes the Go file of one package: a Serving struct naming every receiver and
-// guard its routes need, a Routes function that cannot be called without them, one function per
-// route that reads its input and runs its handler, one exhaustive switch per outcome that writes
-// each member with its tag, status and code, and the exported function each guard's refusal is
-// answered through.
+// Package writing writes the Go files NoContract generates. Each package declaring routes gets one
+// function per route that reads its input and runs its handler, one exhaustive switch per outcome
+// that answers each member with its tag, status and code, and the exported function each guard's
+// refusal is answered through. The server package gets the only type that serves the routes and
+// the only function that builds it.
 package writing
 
 import (
@@ -24,7 +24,7 @@ import (
 
 // Render is the formatted Go file of the package.
 func Render(served serverplan.Package) outcome.Result[[]byte] {
-	names := newImports(served.Path, served.Serves)
+	names := newImports(served.Path, routeFileImports(served.Serves), []string{})
 	body := &strings.Builder{}
 	switch serves := served.Serves.(type) {
 	case serverplan.ServesRoutes:
@@ -37,7 +37,7 @@ func Render(served serverplan.Package) outcome.Result[[]byte] {
 		case serverplan.GuardAnswers:
 			fmt.Fprintf(body, "\n// %s answers a refusal of the %s guard with its status, tag and code, in place of the route\n// the guard refused.", name, use.Guard)
 		case serverplan.RuntimeAnswers:
-			fmt.Fprintf(body, "\n// %s answers each failure nocontract answers on a route's behalf\n// with its status, tag and code.", name)
+			fmt.Fprintf(body, "\n// %s answers each failure nocontract answers itself\n// with its status, tag and code.", name)
 		case nil:
 		}
 		body.WriteString(answerText(answerFunction{name: name, sealed: sealed.Outcome.Name, members: sealed.Members}, names))
@@ -52,11 +52,10 @@ func exported(name string) string {
 	return string(unicode.ToUpper(first)) + name[size:]
 }
 
-// routesText is the Serving struct, the Routes function that needs it, and each route's handler,
-// every outcome's answer following the first route that answers it.
+// routesText is each route's function, every outcome's answer following the first route that
+// answers it.
 func routesText(served serverplan.ServesRoutes, names *imports) string {
 	text := &strings.Builder{}
-	text.WriteString(servingText(served, names))
 	unwritten := map[serverplan.GoName]serverplan.OutcomeAnswer{}
 	for _, outcome := range served.Outcomes {
 		unwritten[outcome.Outcome] = outcome
@@ -71,50 +70,34 @@ func routesText(served serverplan.ServesRoutes, names *imports) string {
 	return text.String()
 }
 
-// servingText is the Serving struct and the Routes function that needs it.
-func servingText(served serverplan.ServesRoutes, names *imports) string {
-	text := &strings.Builder{}
-	fmt.Fprintf(text, "// %s is what this package's routes are served with: the receiver of each method handler\n// and each guard its routes name.\ntype %s struct {\n", serverplan.ServingType, serverplan.ServingType)
-	for _, receiver := range served.Serving.Receivers {
-		fmt.Fprintf(text, "\t%s %s\n", receiver.Name, names.qualified(receiver))
-	}
-	for _, guard := range served.Serving.Guards {
-		fmt.Fprintf(text, "\t%s %s[%s]\n", guard.Name, names.runtime("Guard"), names.qualified(guard.Refusal))
-	}
-	fmt.Fprintf(text, "}\n\n// %s is every route this package declares, each behind the guard it names, or why a guard\n// cannot check one.\nfunc %s(serving %s) mo.Result[[]%s] {\n\treturn %s(\n",
-		serverplan.RoutesFunction, serverplan.RoutesFunction, serverplan.ServingType, names.runtime("Route"), names.runtime("Collect"))
-	for _, route := range served.Routes {
-		answer := fmt.Sprintf("func(request *http.Request) %s { return nocontractAnswer%s(serving, request) }", names.runtime("Answer"), exported(route.Name))
-		switch guard := route.Guard.(type) {
-		case serverplan.Guarded:
-			refused := names.qualified(serverplan.GoName{Package: guard.Guard.Refusal.Package, Name: serverplan.AnswerPrefix + guard.Guard.Refusal.Name})
-			fmt.Fprintf(text, "\t\t%s(serving.%s, %s{Method: %s, Path: %s, Argument: %s}, %s, %s),\n", names.runtime("GuardedBy"), guard.Guard.Name,
-				names.runtime("GuardedRoute"), strconv.Quote(route.Method.Name()), strconv.Quote(route.Path), strconv.Quote(guard.Argument), refused, answer)
-		case serverplan.Unguarded, nil:
-			fmt.Fprintf(text, "\t\t%s(%s{Method: %s, Path: %s}, %s),\n", names.runtime("Served"), names.runtime("RouteAt"),
-				strconv.Quote(route.Method.Name()), strconv.Quote(route.Path), answer)
-		}
-	}
-	text.WriteString("\t)\n}\n")
-	return text.String()
-}
-
 // handlerCall is the call that runs a route's handler on its input.
 func handlerCall(handler serverplan.Handler) string {
 	switch called := handler.(type) {
 	case serverplan.FunctionHandler:
 		return called.Name + "(request.Context(), input)"
 	case serverplan.MethodHandler:
-		return "serving." + called.Receiver + "." + called.Method + "(request.Context(), input)"
+		return "receiver." + called.Method + "(request.Context(), input)"
 	case nil:
 	}
 	return ""
 }
 
+// routeParameters is what a route's function takes: the receiver of its method handler, if it has
+// one, and the request.
+func routeParameters(handler serverplan.Handler) string {
+	switch called := handler.(type) {
+	case serverplan.MethodHandler:
+		return "receiver " + called.Receiver + ", request *http.Request"
+	case serverplan.FunctionHandler, nil:
+	}
+	return "request *http.Request"
+}
+
 func routeText(route serverplan.Route, names *imports) string {
-	name := exported(route.Name)
+	name := serverplan.RouteFunction(route.Name)
 	text := &strings.Builder{}
-	fmt.Fprintf(text, "\nfunc nocontractAnswer%s(serving %s, request *http.Request) %s {\n\tvar input %s\n", name, serverplan.ServingType, names.runtime("Answer"), names.qualified(route.Input))
+	fmt.Fprintf(text, "\n// %s answers one request to %s %s. Only the generated server calls it.\nfunc %s(%s) %s {\n\tvar input %s\n",
+		name, route.Method.Name(), route.Path, name, routeParameters(route.Handler), names.runtime("Answer"), names.qualified(route.Input))
 	steps := []string{}
 	for _, param := range route.Params {
 		steps = append(steps, paramStep(param, names.runtime("Path")+"(request, "+strconv.Quote(param.Name)+")", names))
@@ -211,16 +194,17 @@ func answerText(function answerFunction, names *imports) string {
 }
 
 // imports names every package the generated file refers to, each foreign package by an alias of
-// its own.
+// its own that no name declared in the package takes.
 type imports struct {
-	home    string
-	aliases map[string]string
-	order   []string
+	home     string
+	aliases  map[string]string
+	order    []string
+	declared []string
 }
 
-// fixedImports are the packages a generated file imports by the names it uses: net/http only when
-// it serves routes.
-func fixedImports(serves serverplan.Routing) [][2]string {
+// routeFileImports are the packages a package's generated file imports by the names it uses:
+// net/http only when it serves routes.
+func routeFileImports(serves serverplan.Routing) [][2]string {
 	fixed := [][2]string{{"encoding/json", "json"}, {"github.com/samber/mo", "mo"}, {serverplan.NoContractPath, serverplan.NoContractPackage}}
 	switch serves.(type) {
 	case serverplan.ServesRoutes:
@@ -231,10 +215,11 @@ func fixedImports(serves serverplan.Routing) [][2]string {
 }
 
 // newImports names the fixed packages a file of the package at home imports, every one but home
-// itself: the runtime's own file refers to its declarations by their bare names.
-func newImports(home string, serves serverplan.Routing) *imports {
-	names := &imports{home: home, aliases: map[string]string{}, order: []string{}}
-	for _, fixed := range fixedImports(serves) {
+// itself: the runtime's own file refers to its declarations by their bare names. No alias takes a
+// name declared, which the package's other files declare.
+func newImports(home string, fixedImports [][2]string, declared []string) *imports {
+	names := &imports{home: home, aliases: map[string]string{}, order: []string{}, declared: declared}
+	for _, fixed := range fixedImports {
 		if fixed[0] == home {
 			continue
 		}
@@ -263,7 +248,7 @@ func (names *imports) imported(path string) reference {
 		}
 		return '_'
 	}, base)
-	taken := append(slices.Collect(maps.Values(names.aliases)), localNames()...)
+	taken := slices.Concat(slices.Collect(maps.Values(names.aliases)), localNames(), names.declared)
 	alias := cleaned
 	for suffix := 2; slices.Contains(taken, alias); suffix++ {
 		alias = cleaned + strconv.Itoa(suffix)
@@ -295,7 +280,7 @@ func (qualifiedBy) isReference() {}
 // localNames are the names the generated functions give their parameters and variables, which no
 // package alias may take.
 func localNames() []string {
-	return []string{"input", "read", "request", "writer", "outcome", "member", "serving", "http", "json", "mo", "nocontract"}
+	return []string{"input", "read", "request", "writer", "outcome", "member", "receiver", "api", "layers", "http", "json", "mo", "slices", "nocontract"}
 }
 
 // runtime is a declaration of nocontract's runtime as the generated file writes it.

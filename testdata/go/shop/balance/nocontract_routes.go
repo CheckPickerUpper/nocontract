@@ -4,35 +4,19 @@ package balance
 
 import (
 	json "encoding/json"
-	shopperrefusal "example.com/shop/shopperauth/shopperrefusal"
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
 	mo "github.com/samber/mo"
 	http "net/http"
 )
 
-// Serving is what this package's routes are served with: the receiver of each method handler
-// and each guard its routes name.
-type Serving struct {
-	Ledger  Ledger
-	Shopper nocontract.Guard[shopperrefusal.Refusal]
-}
-
-// Routes is every route this package declares, each behind the guard it names, or why a guard
-// cannot check one.
-func Routes(serving Serving) mo.Result[[]nocontract.Route] {
-	return nocontract.Collect(
-		nocontract.GuardedBy(serving.Shopper, nocontract.GuardedRoute{Method: "GET", Path: "/shoppers/{shopper_id}/balance", Argument: "read-balance"}, shopperrefusal.NocontractAnswerRefusal, func(request *http.Request) nocontract.Answer { return nocontractAnswerReadBalance(serving, request) }),
-		nocontract.Served(nocontract.RouteAt{Method: "POST", Path: "/shoppers/{shopper_id}/top-ups"}, func(request *http.Request) nocontract.Answer { return nocontractAnswerTopUp(serving, request) }),
-	)
-}
-
-func nocontractAnswerReadBalance(serving Serving, request *http.Request) nocontract.Answer {
+// NocontractRouteReadBalance answers one request to GET /shoppers/{shopper_id}/balance. Only the generated server calls it.
+func NocontractRouteReadBalance(receiver Ledger, request *http.Request) nocontract.Answer {
 	var input ReadInput
 	return nocontract.Then(nocontract.Signed(nocontract.Path(request, "shopper_id"), 0), func(read int64) nocontract.Answer {
 		input.ShopperID = int(read)
 		return nocontract.Then(nocontract.Literal(nocontract.Query(request, "currency"), "CAD", "USD"), func(read string) nocontract.Answer {
 			input.Currency = Currency(read)
-			return nocontractAnswerReadOutcome(serving.Ledger.ReadBalance(request.Context(), input))
+			return nocontractAnswerReadOutcome(receiver.ReadBalance(request.Context(), input))
 		})
 	})
 }
@@ -50,7 +34,8 @@ func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
 	return nocontract.NoOutcome()
 }
 
-func nocontractAnswerTopUp(serving Serving, request *http.Request) nocontract.Answer {
+// NocontractRouteTopUp answers one request to POST /shoppers/{shopper_id}/top-ups. Only the generated server calls it.
+func NocontractRouteTopUp(request *http.Request) nocontract.Answer {
 	var input TopUpInput
 	return nocontract.Then(nocontract.Signed(nocontract.Path(request, "shopper_id"), 0), func(read int64) nocontract.Answer {
 		input.ShopperID = int(read)

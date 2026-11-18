@@ -23,10 +23,12 @@ import (
 )
 
 // Request is what the generator reads: the loaded packages, the project's own and nocontract's,
-// each with its syntax, and the API's name and where it is given.
+// each with its syntax, the API's name and where it is given, and the absolute path of the folder
+// the server package is written into.
 type Request struct {
 	Packages []*packages.Package
 	API      assembling.NamedAPI
+	Server   string
 }
 
 // Reading is what reading a project's routes found: the import path of every package read,

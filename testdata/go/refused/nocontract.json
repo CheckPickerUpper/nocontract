@@ -3,5 +3,6 @@
   "packages": ["./..."],
   "typescript": "refused_api.generated.ts",
   "api": "RefusedApi",
-  "openapi": { "file": "refused_api.openapi.json", "version": "1.0.0" }
+  "openapi": { "file": "refused_api.openapi.json", "version": "1.0.0" },
+  "server": "server"
 }

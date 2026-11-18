@@ -20,12 +20,15 @@ type projectPaths struct {
 	openAPI     OpenAPIFile
 }
 
-// servedFiles is each package's generated Go file, then the test that fails while any generated
-// file is stale, or why one could not be rendered.
-func servedFiles(served []serverplan.Package, projectFile string) outcome.Result[[]generatedFile] {
-	return outcome.Fold(goFiles(served), func(goFile []generatedFile) outcome.Result[[]generatedFile] {
-		return outcome.Fold(filesTestFiles(served, projectFile), func(tests []generatedFile) outcome.Result[[]generatedFile] {
-			return outcome.Ok(append(goFile, tests...))
+// servedFiles is each package's generated Go file, the server file, then the test that fails while
+// any generated file is stale, or why one could not be rendered.
+func servedFiles(plan serverplan.Plan, projectFile string) outcome.Result[[]generatedFile] {
+	return outcome.Fold(goFiles(plan.Packages), func(goFile []generatedFile) outcome.Result[[]generatedFile] {
+		return outcome.Fold(writing.RenderServer(plan), func(server []byte) outcome.Result[[]generatedFile] {
+			serverFile := generatedFile{path: filepath.Join(plan.Server.Directory, serverplan.ServerFileName), content: mo.Some(server)}
+			return outcome.Fold(filesTestFiles(plan.Packages, projectFile), func(tests []generatedFile) outcome.Result[[]generatedFile] {
+				return outcome.Ok(slices.Concat(goFile, []generatedFile{serverFile}, tests))
+			}, outcome.Err[[]generatedFile])
 		}, outcome.Err[[]generatedFile])
 	}, outcome.Err[[]generatedFile])
 }

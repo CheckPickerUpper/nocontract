@@ -84,6 +84,12 @@ func TestEachRuleSpanningRoutesRefusesWithItsCode(t *testing.T) {
 		{name: "a brace inside a segment", declared: api(route("read", "/files/a{b}", 2)), want: []string{"NC-1024"}},
 		{name: "a body on a GET route", declared: api(withBody), want: []string{"NC-1025"}},
 		{name: "two routes on one pattern", declared: api(route("first", "/items", 2), route("second", "/items", 3)), want: []string{"NC-1026"}},
+		{
+			name: "two routes on one path whose parameters are named apart",
+			declared: api(withParams(route("first", "/items/{item_id}", 2), text),
+				withParams(route("second", "/items/{id}", 3), description.Field{Name: "id", Schema: description.Text{}})),
+			want: []string{"NC-1026"},
+		},
 		{name: "a route with no success", declared: api(succeedsNever), want: []string{"NC-1028"}},
 		{name: "a member field named code", declared: reservedField, want: []string{"NC-1033"}},
 		{name: "two routes of a group with one name", declared: api(route("read", "/a", 2), route("read", "/b", 3)), want: []string{"NC-1050"}},

@@ -45,13 +45,15 @@ type Request struct {
 
 // writtenProject is a project file as it is written: the language its backend is written in, the
 // package patterns holding its routes, the TypeScript file to write, relative to the project file,
-// the name of the Effect API, and the OpenAPI file to write.
+// the name of the Effect API, the OpenAPI file to write, and the folder of the server package to
+// write.
 type writtenProject struct {
 	Language   string         `json:"language"`
 	Packages   []string       `json:"packages"`
 	TypeScript string         `json:"typescript"`
 	API        string         `json:"api"`
 	OpenAPI    writtenOpenAPI `json:"openapi"`
+	Server     string         `json:"server"`
 }
 
 // writtenOpenAPI is a project file's OpenAPI file as it is written: its path, relative to the
@@ -62,14 +64,15 @@ type writtenOpenAPI struct {
 }
 
 // Project is a project file read: its backend, the package patterns holding its routes, the
-// TypeScript file to write, the name of the Effect API and the OpenAPI file to write. Each file's
-// path is relative to the project file.
+// TypeScript file to write, the name of the Effect API, the OpenAPI file to write and the folder of
+// the server package to write. Each path is relative to the project file.
 type Project struct {
 	Backend    Backend
 	Packages   []string
 	TypeScript string
 	API        string
 	OpenAPI    OpenAPIFile
+	Server     string
 }
 
 // OpenAPIFile is the OpenAPI document a project writes: its path and the version of the API it
@@ -433,7 +436,7 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 	return outcome.Fold(loadPackages(ctx, directory, project.Packages, existing), func(loaded []*packages.Package) Outcome {
 		// The API's name is given in the project file, which is where a name it repeats is refused.
 		named := assembling.NamedAPI{Name: project.API, Position: assembling.Position{File: projectFile, Line: 1, Column: 1}}
-		read := reading.ReadRoutes(reading.Request{Packages: loaded, API: named})
+		read := reading.ReadRoutes(reading.Request{Packages: loaded, API: named, Server: filepath.Join(directory, project.Server)})
 		if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
 			return PackagesNotLoaded{Errors: problems}
 		}
@@ -453,10 +456,10 @@ func generatedGo(ctx context.Context, projectFile string, project Project, finis
 	}, func(cause error) Outcome { return PackagesNotLoaded{Errors: []error{cause}} })
 }
 
-// renderedFiles is the TypeScript file, the OpenAPI file, each package's Go file, the test of them
-// all, and every generated Go file this run no longer writes, which must go.
+// renderedFiles is the TypeScript file, the OpenAPI file, each package's Go file, the server file,
+// the test of them all, and every generated Go file this run no longer writes, which must go.
 func renderedFiles(api description.API, plan serverplan.Plan, paths projectPaths, existing map[string][]byte) outcome.Result[[]generatedFile] {
-	return outcome.Fold(servedFiles(plan.Packages, paths.projectFile), func(served []generatedFile) outcome.Result[[]generatedFile] {
+	return outcome.Fold(servedFiles(plan, paths.projectFile), func(served []generatedFile) outcome.Result[[]generatedFile] {
 		return outcome.Fold(openapi.Render(api, paths.openAPI.Version), func(document []byte) outcome.Result[[]generatedFile] {
 			// Every existing generated file goes unless this run writes it again.
 			contents := map[string]mo.Option[[]byte]{paths.typeScript: mo.Some(effect.Render(api)), paths.openAPI.File: mo.Some(document)}
@@ -526,6 +529,15 @@ func (missing OpenAPIVersionMissing) Error() string {
 	return missing.Report(messages.Match("")).Message
 }
 
+// ServerFolderMissing is a project file naming no folder for the server package NoContract writes.
+//
+//ergo:code NC-1068
+//ergo:message The project file names no server folder.
+type ServerFolderMissing struct{}
+
+// Error is the failure's message in the source language.
+func (missing ServerFolderMissing) Error() string { return missing.Report(messages.Match("")).Message }
+
 // APINameMissing is a project file naming no API class.
 //
 //ergo:code NC-1054
@@ -546,7 +558,7 @@ func (unknown LanguageUnknown) Error() string { return unknown.Report(messages.M
 
 func readProject(projectFile string) mo.Result[Project] {
 	return mo.Fold(mo.TupleToResult(os.ReadFile(projectFile)), func(content []byte) mo.Result[Project] {
-		written := writtenProject{Language: "", Packages: []string{}, TypeScript: "", API: "", OpenAPI: writtenOpenAPI{File: "", Version: ""}}
+		written := writtenProject{Language: "", Packages: []string{}, TypeScript: "", API: "", OpenAPI: writtenOpenAPI{File: "", Version: ""}, Server: ""}
 		decoder := json.NewDecoder(bytes.NewReader(content))
 		decoder.DisallowUnknownFields()
 		return mo.Fold(mo.EmptyableToOption(decoder.Decode(&written)), mo.Err[Project], func(error) mo.Result[Project] {
@@ -561,10 +573,14 @@ func readProject(projectFile string) mo.Result[Project] {
 				return mo.Err[Project](OpenAPIFileMissing{})
 			case written.OpenAPI.Version == "":
 				return mo.Err[Project](OpenAPIVersionMissing{})
+			case written.Server == "":
+				return mo.Err[Project](ServerFolderMissing{})
 			}
 			return mo.Fold(parseBackend(written.Language), func(backend Backend) mo.Result[Project] {
 				openAPI := OpenAPIFile{File: written.OpenAPI.File, Version: written.OpenAPI.Version}
-				return mo.Ok(Project{Backend: backend, Packages: written.Packages, TypeScript: written.TypeScript, API: written.API, OpenAPI: openAPI})
+				return mo.Ok(Project{
+					Backend: backend, Packages: written.Packages, TypeScript: written.TypeScript, API: written.API, OpenAPI: openAPI, Server: written.Server,
+				})
 			}, func(error) mo.Result[Project] { return mo.Err[Project](LanguageUnknown{Language: written.Language}) })
 		})
 	}, mo.Err[Project])

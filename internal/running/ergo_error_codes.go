@@ -496,3 +496,29 @@ func (failure OpenAPIVersionMissing) Report(language messages.Language) ergo.Rep
 func (failure OpenAPIVersionMissing) Causes() []error {
 	return nil
 }
+
+func (ServerFolderMissing) ErrorCode() ergo.Code { return "NC-1068" }
+
+// ServerFolderMissingArguments holds the arguments ServerFolderMissing's message names, in the order the message first names them.
+type ServerFolderMissingArguments struct {
+}
+
+// ReportArguments marks ServerFolderMissingArguments as the arguments of a report.
+func (ServerFolderMissingArguments) ReportArguments() {}
+
+// Report is ServerFolderMissing's code, its message in language and the arguments the message names.
+func (failure ServerFolderMissing) Report(language messages.Language) ergo.Report {
+	arguments := ServerFolderMissingArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names no server folder."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1068", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error ServerFolderMissing holds, then the causes of every failure it holds.
+func (failure ServerFolderMissing) Causes() []error {
+	return nil
+}

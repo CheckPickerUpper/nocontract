@@ -17,7 +17,8 @@
 //	}
 //
 // The generator reads those declarations once and writes both the Go code that serves each
-// route and the Effect HttpApi its TypeScript clients call.
+// route and the Effect HttpApi its TypeScript clients call. The only value that serves routes is
+// the API type NoContract generates into the project's server package.
 package nocontract
 
 import (
@@ -25,35 +26,6 @@ import (
 
 	"github.com/samber/mo"
 )
-
-// Route is one served route: its method, its path in net/http's pattern syntax and the answer it
-// gives a request, behind its guard when it names one. The generated Routes function of each
-// package builds them.
-type Route struct {
-	method string
-	path   string
-	answer func(request *http.Request) Answer
-}
-
-// Pattern is the route's net/http ServeMux pattern, such as "GET /balance/{shopper_id}".
-func (route Route) Pattern() string { return route.method + " " + route.path }
-
-// ServeHTTP writes the route's answer to the request.
-func (route Route) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	Write(writer, route.answer(request))
-}
-
-// RouteAt is where a route is served: its method and its path in net/http's pattern syntax.
-type RouteAt struct {
-	Method string
-	Path   string
-}
-
-// Served is the route at its place answering with answer, behind no guard. Only generated code
-// calls it.
-func Served(at RouteAt, answer func(request *http.Request) Answer) mo.Result[Route] {
-	return mo.Ok(Route{method: at.Method, path: at.Path, answer: answer})
-}
 
 // GuardedRoute is the route a guard is asked to check: its method, its path and the argument its
 // //nocontract:guard line gives the guard, such as the action a staff member must hold.
@@ -65,7 +37,7 @@ type GuardedRoute struct {
 
 // Guard puts a check in front of every route that names it. Refusal is the guard's sealed refusal,
 // the type marked //nocontract:guard with the guard's name. CheckRoute is asked once for each
-// route when the routes are built: how the guard decides each request to that route, or why it
+// route when the server is built: how the guard decides each request to that route, or why it
 // cannot check the route at all.
 type Guard[Refusal any] interface {
 	CheckRoute(route GuardedRoute) mo.Result[RequestCheck[Refusal]]
@@ -110,28 +82,6 @@ func Decided[Refusal any](decision Decision[Refusal], refused func(refusal Refus
 	case nil:
 	}
 	return NocontractAnswerSharedFailure(AnswerNotWritten{Answer: "", Reason: "the guard decided nothing"})
-}
-
-// GuardedBy is the guarded route answering with answer behind guard, whose refusals refused
-// answers; or why the guard cannot check the route. Only generated code calls it.
-func GuardedBy[Refusal any](guard Guard[Refusal], guarded GuardedRoute, refused func(refusal Refusal) Answer, answer func(request *http.Request) Answer) mo.Result[Route] {
-	return mo.Fold(guard.CheckRoute(guarded), func(check RequestCheck[Refusal]) mo.Result[Route] {
-		decide := func(request *http.Request) Answer {
-			return Decided(check(request), refused, func() Answer { return answer(request) })
-		}
-		return mo.Ok(Route{method: guarded.Method, path: guarded.Path, answer: decide})
-	}, mo.Err[Route])
-}
-
-// Collect is every route, or the first reason a route could not be built.
-func Collect(routes ...mo.Result[Route]) mo.Result[[]Route] {
-	collected := mo.Ok([]Route{})
-	for _, route := range routes {
-		collected = mo.Fold(collected, func(built []Route) mo.Result[[]Route] {
-			return mo.Fold(route, func(served Route) mo.Result[[]Route] { return mo.Ok(append(built, served)) }, mo.Err[[]Route])
-		}, mo.Err[[]Route])
-	}
-	return collected
 }
 
 // NoInput is the input of a route that reads nothing from its request.

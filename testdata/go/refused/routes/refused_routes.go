@@ -223,5 +223,32 @@ func (Rack) Count(context.Context, nocontract.NoInput) ReadOutcome { return Read
 //nocontract:rout GET /misspelled
 func Misspelled(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
 
-// Serving takes a name the generated file declares.
-type Serving struct{}
+// Taken is a route whose generated function's name the package already declares.
+//
+//nocontract:route GET /taken
+func Taken(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }
+
+// NocontractRouteTaken takes the name of the function generated for Taken.
+func NocontractRouteTaken() {}
+
+// doorRefusal is a guard's refusal the generated server, in a package of its own, cannot name.
+//
+//sumtype:decl
+//nocontract:guard Door
+type doorRefusal interface {
+	isDoorRefusal()
+}
+
+// DoorLocked is a door the guard keeps shut.
+//
+//ergo:code RF-1004
+//nocontract:status 403
+type DoorLocked struct{}
+
+func (DoorLocked) isDoorRefusal() {}
+
+// OpenDoor is a route behind the guard whose refusal is unexported.
+//
+//nocontract:route GET /door
+//nocontract:guard Door front
+func OpenDoor(context.Context, nocontract.NoInput) ReadOutcome { return Read{Text: ""} }

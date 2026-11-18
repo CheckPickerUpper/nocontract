@@ -173,7 +173,7 @@ func scratchLedger(t *testing.T) string {
 	writeScratchFile(t, directory, "go.mod", bytesOrStop(t, "making the scratch go.mod", scratchModFile(shopModFile, checkout)))
 	writeScratchFile(t, directory, "go.sum", bytesOrStop(t, "reading the shop's go.sum", outcome.TupleToResult(os.ReadFile(filepath.Join(shop, "go.sum")))))
 	writeScratchFile(t, directory, "nocontract.json", []byte(`{"language": "go", "packages": ["./..."], "typescript": "web/ledger_api.generated.ts", "api": "LedgerApi", `+
-		`"openapi": {"file": "ledger_api.openapi.json", "version": "1.0.0"}}`))
+		`"openapi": {"file": "ledger_api.openapi.json", "version": "1.0.0"}, "server": "server"}`))
 	writeScratchFile(t, directory, "ledger/ledger_routes.go", []byte(ledgerRoutes))
 	return directory
 }

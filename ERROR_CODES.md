@@ -722,11 +722,11 @@ Message: `The API's declarations were refused.`
 ## NC-1063 SharedFieldUnsupported
 
 SharedFieldUnsupported is a field of one of nocontract's own failures whose schema the Go runtime
-declares no type for: only text and a set of string constants have one.
+declares no type for: only text, a set of string constants and a list of text have one.
 
 Declared in `go/writing/writing_runtime.go`.
 
-Message: `The field {Field} of {Failure} has no Go runtime type: only text and a set of string constants have one.`
+Message: `The field {Field} of {Failure} has no Go runtime type: only text, a set of string constants and a list of text have one.`
 
 | Field | Type |
 | --- | --- |
@@ -774,3 +774,37 @@ Message: `The route {Endpoint} answers with {Member}, which no declaration descr
 | --- | --- |
 | `Endpoint` | `string` |
 | `Member` | `string` |
+
+## NC-1068 ServerFolderMissing
+
+ServerFolderMissing is a project file naming no folder for the server package NoContract writes.
+
+Declared in `internal/running/running_command.go`.
+
+Message: `The project file names no server folder.`
+
+## NC-1069 RouteNotFound
+
+RouteNotFound is a request to a path no route declares.
+
+Declared in `go/nocontract_routes.go`.
+
+Message: `No route is declared at {Path}, asked for with {Method}`
+
+| Field | Type |
+| --- | --- |
+| `Method` | `string` |
+| `Path` | `string` |
+
+## NC-1070 MethodNotDeclared
+
+MethodNotDeclared is a request to a declared path with a method no route at that path declares, and the methods the path's routes declare.
+
+Declared in `go/nocontract_routes.go`.
+
+Message: `No route at this path answers {Method}`
+
+| Field | Type |
+| --- | --- |
+| `Method` | `string` |
+| `Allowed` | `[]string` |

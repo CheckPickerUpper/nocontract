@@ -7,7 +7,7 @@ import (
 	mo "github.com/samber/mo"
 )
 
-// SharedFailure is a failure nocontract answers on a route's behalf, outside its handler.
+// SharedFailure is a failure nocontract answers itself, outside any handler.
 //
 //sumtype:decl
 type SharedFailure interface{ isSharedFailure() }
@@ -45,7 +45,29 @@ type AnswerNotWritten struct {
 
 func (AnswerNotWritten) isSharedFailure() {}
 
-// NocontractAnswerSharedFailure answers each failure nocontract answers on a route's behalf
+// RouteNotFound is a request to a path no route declares.
+//
+//ergo:code NC-1069
+//ergo:message No route is declared at {Path}, asked for with {Method}
+type RouteNotFound struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
+}
+
+func (RouteNotFound) isSharedFailure() {}
+
+// MethodNotDeclared is a request to a declared path with a method no route at that path declares, and the methods the path's routes declare.
+//
+//ergo:code NC-1070
+//ergo:message No route at this path answers {Method}
+type MethodNotDeclared struct {
+	Method  string   `json:"method"`
+	Allowed []string `json:"allowed"`
+}
+
+func (MethodNotDeclared) isSharedFailure() {}
+
+// NocontractAnswerSharedFailure answers each failure nocontract answers itself
 // with its status, tag and code.
 func NocontractAnswerSharedFailure(outcome SharedFailure) Answer {
 	switch member := outcome.(type) {
@@ -53,6 +75,10 @@ func NocontractAnswerSharedFailure(outcome SharedFailure) Answer {
 		return Failed(Failure{Status: 400, Tag: "RequestRefused", Code: "NC-1001", Fields: mo.TupleToResult(json.Marshal(member))})
 	case AnswerNotWritten:
 		return Failed(Failure{Status: 500, Tag: "AnswerNotWritten", Code: "NC-1002", Fields: mo.TupleToResult(json.Marshal(member))})
+	case RouteNotFound:
+		return Failed(Failure{Status: 404, Tag: "RouteNotFound", Code: "NC-1069", Fields: mo.TupleToResult(json.Marshal(member))})
+	case MethodNotDeclared:
+		return Failed(Failure{Status: 405, Tag: "MethodNotDeclared", Code: "NC-1070", Fields: mo.TupleToResult(json.Marshal(member))})
 	case nil:
 	}
 	return NoOutcome()

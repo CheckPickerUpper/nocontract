@@ -143,3 +143,58 @@ func (failure BodyNotSingle) Report(language messages.Language) ergo.Report {
 func (failure BodyNotSingle) Causes() []error {
 	return nil
 }
+
+func (RouteNotFound) ErrorCode() ergo.Code { return "NC-1069" }
+
+// RouteNotFoundArguments holds the arguments RouteNotFound's message names, in the order the message first names them.
+type RouteNotFoundArguments struct {
+	Path   string `json:"Path"`
+	Method string `json:"Method"`
+}
+
+// ReportArguments marks RouteNotFoundArguments as the arguments of a report.
+func (RouteNotFoundArguments) ReportArguments() {}
+
+// Report is RouteNotFound's code, its message in language and the arguments the message names.
+func (failure RouteNotFound) Report(language messages.Language) ergo.Report {
+	arguments := RouteNotFoundArguments{Path: string(failure.Path), Method: string(failure.Method)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "No route is declared at "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: ", asked for with "}, messageformat.Argument{Index: 1}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1069", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Method}}}), Arguments: arguments}
+}
+
+// Causes is every error RouteNotFound holds, then the causes of every failure it holds.
+func (failure RouteNotFound) Causes() []error {
+	return nil
+}
+
+func (MethodNotDeclared) ErrorCode() ergo.Code { return "NC-1070" }
+
+// MethodNotDeclaredArguments holds the arguments MethodNotDeclared's message names, in the order the message first names them.
+type MethodNotDeclaredArguments struct {
+	Method string `json:"Method"`
+}
+
+// ReportArguments marks MethodNotDeclaredArguments as the arguments of a report.
+func (MethodNotDeclaredArguments) ReportArguments() {}
+
+// Report is MethodNotDeclared's code, its message in language and the arguments the message names.
+func (failure MethodNotDeclared) Report(language messages.Language) ergo.Report {
+	arguments := MethodNotDeclaredArguments{Method: string(failure.Method)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "No route at this path answers "}, messageformat.Argument{Index: 0}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1070", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Method}}}), Arguments: arguments}
+}
+
+// Causes is every error MethodNotDeclared holds, then the causes of every failure it holds.
+func (failure MethodNotDeclared) Causes() []error {
+	return nil
+}

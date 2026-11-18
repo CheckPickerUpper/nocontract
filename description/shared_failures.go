@@ -41,8 +41,15 @@ type AnsweredWhenRequestRead struct{}
 //ergo:not-an-error
 type AnsweredByEveryRoute struct{}
 
+// AnsweredWithoutRoute is a failure the server answers to a request no declared route takes, so no
+// route lists it.
+//
+//ergo:not-an-error
+type AnsweredWithoutRoute struct{}
+
 func (AnsweredWhenRequestRead) isSharedAnswer() {}
 func (AnsweredByEveryRoute) isSharedAnswer()    {}
+func (AnsweredWithoutRoute) isSharedAnswer()    {}
 
 // MessagePart is one piece of a shared failure's message: text, written as it is, or the value of
 // one of its fields, named as it is on the wire. Each runtime spells the field its own way.
@@ -94,6 +101,26 @@ func SharedFailures() []SharedFailure {
 			Doc: "AnswerNotWritten is a route whose outcome could not be written as JSON, or that answered no " +
 				"outcome at all. Every route can answer it.",
 			Message: []MessagePart{MessageText{Text: "The route could not write its answer: "}, MessageField{Field: "reason"}},
+		},
+		{
+			Name: "RouteNotFound", Status: FailureStatus{code: http.StatusNotFound}, Code: "NC-1069",
+			Fields:  []Field{{Name: "method", Schema: Text{}}, {Name: "path", Schema: Text{}}},
+			Answers: AnsweredWithoutRoute{},
+			Doc:     "RouteNotFound is a request to a path no route declares.",
+			Message: []MessagePart{
+				MessageText{Text: "No route is declared at "},
+				MessageField{Field: "path"},
+				MessageText{Text: ", asked for with "},
+				MessageField{Field: "method"},
+			},
+		},
+		{
+			Name: "MethodNotDeclared", Status: FailureStatus{code: http.StatusMethodNotAllowed}, Code: "NC-1070",
+			Fields:  []Field{{Name: "method", Schema: Text{}}, {Name: "allowed", Schema: List{Item: Text{}}}},
+			Answers: AnsweredWithoutRoute{},
+			Doc: "MethodNotDeclared is a request to a declared path with a method no route at that path declares, " +
+				"and the methods the path's routes declare.",
+			Message: []MessagePart{MessageText{Text: "No route at this path answers "}, MessageField{Field: "method"}},
 		},
 	}
 }

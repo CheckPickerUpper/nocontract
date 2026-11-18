@@ -22,6 +22,18 @@ export class AnswerNotWritten extends Schema.TaggedError<AnswerNotWritten>()("An
   reason: Schema.String,
 }, { httpApiStatus: 500 }) {}
 
+export class RouteNotFound extends Schema.TaggedError<RouteNotFound>()("RouteNotFound", {
+  code: Schema.Literal("NC-1069"),
+  method: Schema.String,
+  path: Schema.String,
+}, { httpApiStatus: 404 }) {}
+
+export class MethodNotDeclared extends Schema.TaggedError<MethodNotDeclared>()("MethodNotDeclared", {
+  code: Schema.Literal("NC-1070"),
+  method: Schema.String,
+  allowed: Schema.Array(Schema.String),
+}, { httpApiStatus: 405 }) {}
+
 export class NotSignedIn extends Schema.TaggedError<NotSignedIn>()("NotSignedIn", {
   code: Schema.Literal("SH-1101"),
   scope: Schema.String,
