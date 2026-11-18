@@ -105,7 +105,8 @@ func (reader jsonReader) token() outcome.Result[json.Token] {
 	return outcome.Fold(outcome.TupleToResult(reader.decoder.Token()), outcome.Ok[json.Token], func(cause error) outcome.Result[json.Token] {
 		offset := int(reader.decoder.InputOffset())
 		if syntax, isSyntax := errors.AsType[*json.SyntaxError](cause); isSyntax {
-			offset = int(syntax.Offset)
+			// A syntax error is found after reading Offset bytes, the last of them the one refused.
+			offset = int(syntax.Offset) - 1
 		}
 		if errors.Is(cause, io.EOF) {
 			return outcome.Err[json.Token](jsonSyntaxFailure{offset: offset, reason: "the content ends before a value"})

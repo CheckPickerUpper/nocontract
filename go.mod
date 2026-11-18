@@ -1,6 +1,6 @@
 module github.com/CheckPickerUpper/nocontract
 
-go 1.26.5
+go 1.27.4
 
 require (
 	github.com/CheckPickerUpper/ErGo v0.0.0-20261115191336-da68dcb0f844

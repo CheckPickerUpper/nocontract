@@ -29,7 +29,8 @@ func serve(api server.API) int {
 	listening := &http.Server{
 		Addr: os.Getenv("SHOP_ADDRESS"), Handler: api, DisableGeneralOptionsHandler: true, TLSConfig: nil,
 		ReadTimeout: 0, ReadHeaderTimeout: 10 * time.Second, WriteTimeout: 0, IdleTimeout: 0, MaxHeaderBytes: 0,
-		TLSNextProto: nil, ConnState: nil, ErrorLog: nil, BaseContext: nil, ConnContext: nil, HTTP2: nil, Protocols: nil,
+		MaxHeaderValueCount: 0, TLSNextProto: nil, ConnState: nil, ErrorLog: nil, BaseContext: nil, ConnContext: nil,
+		HTTP2: nil, Protocols: nil, DisableClientPriority: false,
 	}
 	// ListenAndServe always returns the error that stopped it.
 	fmt.Fprintln(os.Stderr, listening.ListenAndServe())
