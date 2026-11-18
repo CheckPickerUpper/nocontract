@@ -48,6 +48,8 @@ func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
 		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "BalanceRead", Fields: mo.TupleToResult(json.Marshal(member))})
 	case ShopperNotFound:
 		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001", Fields: mo.TupleToResult(json.Marshal(member))})
+	case BalanceNotOpened:
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "BalanceNotOpened", Code: "SH-1003", Fields: mo.TupleToResult(json.Marshal(member))})
 	case nil:
 	}
 	return nocontract.NoOutcome()

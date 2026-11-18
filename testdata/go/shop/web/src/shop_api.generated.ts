@@ -39,6 +39,11 @@ export class ShopperNotFound extends Schema.TaggedError<ShopperNotFound>()("Shop
   shopper_id: Schema.Int,
 }, { httpApiStatus: 404 }) {}
 
+export class BalanceNotOpened extends Schema.TaggedError<BalanceNotOpened>()("BalanceNotOpened", {
+  code: Schema.Literal("SH-1003"),
+  currency: Schema.Literals(["CAD", "USD"]),
+}, { httpApiStatus: 404 }) {}
+
 export const TopUpQueued = Schema.TaggedStruct("TopUpQueued", {
   reference: Schema.String,
 }).pipe(HttpApiSchema.status(202))
@@ -58,7 +63,7 @@ export class BalanceGroup extends HttpApiGroup.make("balance").add(
       currency: Schema.Literals(["CAD", "USD"]),
     },
     success: [BalanceRead],
-    error: [ShopperNotFound, NotSignedIn, RequestRefused, AnswerNotWritten],
+    error: [ShopperNotFound, BalanceNotOpened, NotSignedIn, RequestRefused, AnswerNotWritten],
   }),
   HttpApiEndpoint.post("topUp", "/shoppers/:shopper_id/top-ups", {
     params: {

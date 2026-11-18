@@ -74,7 +74,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ShopperNotFound"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ShopperNotFound"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BalanceNotOpened"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "_tag",
+                    "mapping": {
+                      "BalanceNotOpened": "#/components/schemas/BalanceNotOpened",
+                      "ShopperNotFound": "#/components/schemas/ShopperNotFound"
+                    }
+                  }
                 }
               }
             }
@@ -211,6 +225,36 @@
           "code",
           "answer",
           "reason"
+        ],
+        "additionalProperties": false
+      },
+      "BalanceNotOpened": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "BalanceNotOpened"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "SH-1003"
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "CAD",
+              "USD"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "currency"
         ],
         "additionalProperties": false
       },

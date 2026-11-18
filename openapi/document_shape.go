@@ -148,11 +148,18 @@ type anyOfSchema struct {
 	AnyOf []schema `json:"anyOf"`
 }
 
-// oneOfSchema is a value exactly one of OneOf accepts.
+// oneOfSchema is an answer exactly one of OneOf accepts, told apart by the member its tag names.
 //
 //ergo:not-an-error
 type oneOfSchema struct {
-	OneOf []schema `json:"oneOf"`
+	OneOf         []schema      `json:"oneOf"`
+	Discriminator discriminator `json:"discriminator"`
+}
+
+// discriminator is the field naming which schema an answer is, and the schema each name selects.
+type discriminator struct {
+	PropertyName string            `json:"propertyName"`
+	Mapping      map[string]string `json:"mapping"`
 }
 
 // neverSchema accepts no value: it is the schema Not says every value matches.

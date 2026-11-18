@@ -143,16 +143,17 @@ func responses(endpoint description.Endpoint) map[string]response {
 }
 
 // answerSchema is the body of a status the members named names answer under: the one member's
-// schema, or exactly one of several.
+// schema, or exactly one of several, the one its tag names.
 func answerSchema(names []string) schema {
-	references := []schema{}
+	references, mapping := []schema{}, map[string]string{}
 	for _, name := range names {
 		references = append(references, reference(name))
+		mapping[name] = schemaPrefix + name
 	}
 	if len(references) == 1 {
 		return references[0]
 	}
-	return oneOfSchema{OneOf: references}
+	return oneOfSchema{OneOf: references, Discriminator: discriminator{PropertyName: description.TagField, Mapping: mapping}}
 }
 
 func reference(name string) referenceSchema { return referenceSchema{Ref: schemaPrefix + name} }

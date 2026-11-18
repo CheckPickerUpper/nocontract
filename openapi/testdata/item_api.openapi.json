@@ -159,7 +159,14 @@
                     {
                       "$ref": "#/components/schemas/ShopClosed"
                     }
-                  ]
+                  ],
+                  "discriminator": {
+                    "propertyName": "_tag",
+                    "mapping": {
+                      "ItemMissing": "#/components/schemas/ItemMissing",
+                      "ShopClosed": "#/components/schemas/ShopClosed"
+                    }
+                  }
                 }
               }
             }

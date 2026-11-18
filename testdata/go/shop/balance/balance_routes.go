@@ -54,10 +54,19 @@ type ShopperNotFound struct {
 	ShopperID int `json:"shopper_id"`
 }
 
-func (BalanceRead) isReadOutcome()     {}
-func (ShopperNotFound) isReadOutcome() {}
+// BalanceNotOpened is a currency the shopper holds no balance in.
+//
+//ergo:code SH-1003
+//nocontract:status 404
+type BalanceNotOpened struct {
+	Currency Currency `json:"currency"`
+}
 
-// Ledger holds the one shopper whose balance the example shop keeps.
+func (BalanceRead) isReadOutcome()      {}
+func (ShopperNotFound) isReadOutcome()  {}
+func (BalanceNotOpened) isReadOutcome() {}
+
+// Ledger holds the one shopper whose balance the example shop keeps, in Canadian dollars.
 type Ledger struct {
 	ShopperID int
 	Cents     int
@@ -70,6 +79,9 @@ type Ledger struct {
 func (ledger Ledger) ReadBalance(_ context.Context, input ReadInput) ReadOutcome {
 	if input.ShopperID != ledger.ShopperID {
 		return ShopperNotFound{ShopperID: input.ShopperID}
+	}
+	if input.Currency != CAD {
+		return BalanceNotOpened{Currency: input.Currency}
 	}
 	return BalanceRead{
 		Balance: Money{Cents: ledger.Cents, Currency: input.Currency},
