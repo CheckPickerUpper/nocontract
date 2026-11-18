@@ -39,11 +39,27 @@ type HandlerSignatureUnsupported struct {
 //ergo:message The route's outcome {Type} is not a named interface.
 type OutcomeNotNamedInterface struct{ Type string }
 
-// OutcomeNotSealed is an outcome interface without //sumtype:decl and an unexported method.
+// OutcomeNotSealed is an outcome interface marked //sumtype:decl whose every method is exported, so
+// any package can add a member, and the methods it has.
 //
 //ergo:code NC-1007
-//ergo:message The outcome {Outcome} is not sealed: mark it //sumtype:decl and give it an unexported method.
-type OutcomeNotSealed struct{ Outcome string }
+//ergo:message The outcome {Outcome} is not sealed: its methods {Methods} are all exported; give it an unexported method.
+type OutcomeNotSealed struct {
+	Outcome string
+	Methods string
+}
+
+// OutcomeNotDeclared is an outcome interface not marked //sumtype:decl.
+//
+//ergo:code NC-1105
+//ergo:message The outcome {Outcome} is not marked //sumtype:decl.
+type OutcomeNotDeclared struct{ Outcome string }
+
+// EndpointWithoutSuccess is a route whose outcome has no member answered with a success status.
+//
+//ergo:code NC-1028
+//ergo:message The route {Endpoint} has no outcome member answered with a success status.
+type EndpointWithoutSuccess struct{ Endpoint string }
 
 // DeclarationOutsideProject is a type declared in a package the project file does not list.
 //
@@ -87,11 +103,30 @@ type SuccessWithCode struct {
 	Status int
 }
 
-// MemberUndecided is a member without exactly one ErGo decision.
+// MemberUndecided is a member marked neither //ergo:code nor //ergo:not-an-error.
 //
 //ergo:code NC-1014
-//ergo:message {Member} needs exactly one of //ergo:code and //ergo:not-an-error.
+//ergo:message {Member} is marked neither //ergo:code nor //ergo:not-an-error; mark it with one.
 type MemberUndecided struct{ Member string }
+
+// MemberMarkedBoth is a member marked both //ergo:code and //ergo:not-an-error, and the codes it
+// names.
+//
+//ergo:code NC-1106
+//ergo:message {Member} is marked both //ergo:code {Codes} and //ergo:not-an-error; keep one.
+type MemberMarkedBoth struct {
+	Member string
+	Codes  string
+}
+
+// CodeRepeated is a member marked //ergo:code more than once, and each code it names.
+//
+//ergo:code NC-1107
+//ergo:message {Member} is marked //ergo:code more than once, with {Codes}; a failure has one code.
+type CodeRepeated struct {
+	Member string
+	Codes  string
+}
 
 // FieldOptionUnsupported is a JSON field whose tag carries an option, such as omitempty.
 //
@@ -216,6 +251,10 @@ func (GenericMember) isProblem()               {}
 func (FailureWithoutCode) isProblem()          {}
 func (SuccessWithCode) isProblem()             {}
 func (MemberUndecided) isProblem()             {}
+func (MemberMarkedBoth) isProblem()            {}
+func (CodeRepeated) isProblem()                {}
+func (OutcomeNotDeclared) isProblem()          {}
+func (EndpointWithoutSuccess) isProblem()      {}
 func (FieldOptionUnsupported) isProblem()      {}
 func (EmbeddedFieldUnsupported) isProblem()    {}
 func (TypeUnsupported) isProblem()             {}

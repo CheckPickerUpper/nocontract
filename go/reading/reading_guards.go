@@ -8,6 +8,7 @@ import (
 	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 
+	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 )
@@ -92,7 +93,8 @@ func readGuardDeclaration(index projectIndex, guards map[string]guardEntry, mark
 func readGuardRefusal(index projectIndex, declared declaredType) reading[[]sealedMember] {
 	return andThen(readSealed(index, typeKeyFor(declared.object), declared.spec.Pos()), func(sealed sealedRead) reading[[]sealedMember] {
 		refused := collected(sealed.successes, func(member succeededMember) reading[succeededMember] {
-			return notRead[succeededMember](index.refused(member.object.Pos(), GuardMemberSucceeds{Member: member.object.Name(), Status: member.status.Code()}))
+			object := member.member.declared.object
+			return notRead[succeededMember](index.refused(object.Pos(), GuardMemberSucceeds{Member: object.Name(), Status: member.status.Code()}))
 		})
 		return andThen(refused, func([]succeededMember) reading[[]sealedMember] { return readAs(sealed.failures, nothingFound()) })
 	})
@@ -102,14 +104,14 @@ func readGuardRefusal(index projectIndex, declared declaredType) reading[[]seale
 // refusal: none when the handler names no guard.
 type routeGuard struct {
 	plan    serverplan.RouteGuard
-	members []string
+	members []description.Member
 }
 
 // readRouteGuard reads a handler's //nocontract:guard line, naming a declared guard and the one
 // argument it is handed.
 func readRouteGuard(index projectIndex, guards guardTable, texts []directiveText) reading[routeGuard] {
 	return readOnce(texts, func() reading[routeGuard] {
-		return readAs(routeGuard{plan: serverplan.Unguarded{}, members: []string{}}, nothingFound())
+		return readAs(routeGuard{plan: serverplan.Unguarded{}, members: []description.Member{}}, nothingFound())
 	}, func(text directiveText) reading[routeGuard] { return readNamedRouteGuard(index, guards, text) }, func(second directiveText) reading[routeGuard] {
 		return notRead[routeGuard](index.refused(second.position, GuardDirectiveRepeated{Text: second.written}))
 	})
@@ -125,15 +127,11 @@ func readNamedRouteGuard(index projectIndex, guards guardTable, line directiveTe
 	return andThen(readGuardName(index, line, line.words[0]), func(name string) reading[routeGuard] {
 		return outcome.FoldOption(keyed.Entry(guards.guards, name), func(guard guardEntry) reading[routeGuard] {
 			return mo.Fold(guard.members, func(members []sealedMember) reading[routeGuard] {
-				names := []string{}
-				for _, member := range members {
-					names = append(names, member.declared.object.Name())
-				}
 				// The generated server names the refusal, which types what the guard decides, from a
 				// package of its own.
 				return mapped(reachableName(index, guard.declared.object, "", line.position), func(refusal serverplan.GoName) routeGuard {
 					guarding := serverplan.Guarding{Name: name, Refusal: refusal}
-					return routeGuard{plan: serverplan.Guarded{Guard: guarding, Argument: argument}, members: names}
+					return routeGuard{plan: serverplan.Guarded{Guard: guarding, Argument: argument}, members: described(members)}
 				})
 			}, func(error) reading[routeGuard] { return notRead[routeGuard](nothingFound()) })
 		}, func() reading[routeGuard] {

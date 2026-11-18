@@ -69,15 +69,17 @@ Message: `The route's outcome {Type} is not a named interface.`
 
 ## NC-1007 OutcomeNotSealed
 
-OutcomeNotSealed is an outcome interface without //sumtype:decl and an unexported method.
+OutcomeNotSealed is an outcome interface marked //sumtype:decl whose every method is exported, so
+any package can add a member, and the methods it has.
 
 Declared in `go/reading/refusals.go`.
 
-Message: `The outcome {Outcome} is not sealed: mark it //sumtype:decl and give it an unexported method.`
+Message: `The outcome {Outcome} is not sealed: its methods {Methods} are all exported; give it an unexported method.`
 
 | Field | Type |
 | --- | --- |
 | `Outcome` | `string` |
+| `Methods` | `string` |
 
 ## NC-1008 DeclarationOutsideProject
 
@@ -155,11 +157,11 @@ Message: `{Member} answers {Status}, a success, but is marked //ergo:code; mark 
 
 ## NC-1014 MemberUndecided
 
-MemberUndecided is a member without exactly one ErGo decision.
+MemberUndecided is a member marked neither //ergo:code nor //ergo:not-an-error.
 
 Declared in `go/reading/refusals.go`.
 
-Message: `{Member} needs exactly one of //ergo:code and //ergo:not-an-error.`
+Message: `{Member} is marked neither //ergo:code nor //ergo:not-an-error; mark it with one.`
 
 | Field | Type |
 | --- | --- |
@@ -319,7 +321,7 @@ Message: `{Type} is unexported and declared in another package, so the route's g
 
 EndpointWithoutSuccess is a route whose outcome has no member answered with a success status.
 
-Declared in `assembling/refusals.go`.
+Declared in `go/reading/refusals.go`.
 
 Message: `The route {Endpoint} has no outcome member answered with a success status.`
 
@@ -670,19 +672,6 @@ Message: `The handler {Handler} has more than one //nocontract:route line; a han
 | Field | Type |
 | --- | --- |
 | `Handler` | `string` |
-
-## NC-1067 MemberUndeclared
-
-MemberUndeclared is a member a route answers with that no declaration describes.
-
-Declared in `assembling/refusals.go`.
-
-Message: `The route {Endpoint} answers with {Member}, which no declaration describes.`
-
-| Field | Type |
-| --- | --- |
-| `Endpoint` | `string` |
-| `Member` | `string` |
 
 ## NC-1069 RouteNotFound
 
@@ -1127,3 +1116,42 @@ Message: `The line {Text} is a second guard line; a declaration names one guard.
 | Field | Type |
 | --- | --- |
 | `Text` | `string` |
+
+## NC-1105 OutcomeNotDeclared
+
+OutcomeNotDeclared is an outcome interface not marked //sumtype:decl.
+
+Declared in `go/reading/refusals.go`.
+
+Message: `The outcome {Outcome} is not marked //sumtype:decl.`
+
+| Field | Type |
+| --- | --- |
+| `Outcome` | `string` |
+
+## NC-1106 MemberMarkedBoth
+
+MemberMarkedBoth is a member marked both //ergo:code and //ergo:not-an-error, and the codes it
+names.
+
+Declared in `go/reading/refusals.go`.
+
+Message: `{Member} is marked both //ergo:code {Codes} and //ergo:not-an-error; keep one.`
+
+| Field | Type |
+| --- | --- |
+| `Member` | `string` |
+| `Codes` | `string` |
+
+## NC-1107 CodeRepeated
+
+CodeRepeated is a member marked //ergo:code more than once, and each code it names.
+
+Declared in `go/reading/refusals.go`.
+
+Message: `{Member} is marked //ergo:code more than once, with {Codes}; a failure has one code.`
+
+| Field | Type |
+| --- | --- |
+| `Member` | `string` |
+| `Codes` | `string` |

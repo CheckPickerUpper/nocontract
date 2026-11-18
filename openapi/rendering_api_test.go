@@ -68,7 +68,7 @@ func itemAPI(t *testing.T) description.API {
 				Name: "readItem", Method: description.Get{},
 				Path:  []description.PathSegment{description.PathText{Text: "items"}, description.PathParameter{Field: itemID}},
 				Query: []description.Field{field("sort", description.Literals{Values: []string{"name", "price"}})},
-				Body:  description.NoBody{}, Successes: []description.Member{itemRead}, Failures: []description.Member{itemMissing, shopClosed, requestRefused},
+				Body:  description.NoBody{}, Successes: description.Successes{First: itemRead, Rest: []description.Member{}}, Failures: []description.Member{itemMissing, shopClosed, requestRefused},
 			},
 			{
 				Name: "addItem", Method: description.Post{},
@@ -77,13 +77,13 @@ func itemAPI(t *testing.T) description.API {
 				Body: description.JSONBody{Schema: description.InlineStruct{Fields: []description.Field{
 					field("item", description.StructRef{Name: "Item"}),
 				}}},
-				Successes: []description.Member{itemAdded}, Failures: []description.Member{requestRefused},
+				Successes: description.Successes{First: itemAdded, Rest: []description.Member{}}, Failures: []description.Member{requestRefused},
 			},
 			{
 				Name: "removeItem", Method: description.Delete{},
 				Path:  []description.PathSegment{description.PathText{Text: "items"}, description.PathParameter{Field: itemID}},
 				Query: []description.Field{}, Body: description.NoBody{},
-				Successes: []description.Member{itemRemoved}, Failures: []description.Member{itemMissing},
+				Successes: description.Successes{First: itemRemoved, Rest: []description.Member{}}, Failures: []description.Member{itemMissing},
 			},
 		}}},
 		Members: []description.Member{itemRead, itemAdded, itemRemoved, itemMissing, shopClosed, requestRefused},

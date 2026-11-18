@@ -120,7 +120,7 @@ type statusMember struct {
 // status, in the order the route lists them.
 func responses(endpoint description.Endpoint) map[string]response {
 	answered := []statusMember{}
-	for _, member := range slices.Concat(endpoint.Successes, endpoint.Failures) {
+	for _, member := range slices.Concat(endpoint.Successes.Members(), endpoint.Failures) {
 		switch answer := member.Answer.(type) {
 		case description.Succeeds:
 			answered = append(answered, statusMember{status: answer.Status.Code(), member: member})

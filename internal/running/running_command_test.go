@@ -66,22 +66,50 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 	}
 	slices.Sort(codes)
 	want := []string{
-		"NC-1005", "NC-1007", "NC-1012", "NC-1013", "NC-1014", "NC-1015", "NC-1016", "NC-1017", "NC-1018",
+		"NC-1005", "NC-1012", "NC-1013", "NC-1014", "NC-1015", "NC-1016", "NC-1017", "NC-1018",
 		"NC-1022", "NC-1025", "NC-1027", "NC-1029", "NC-1033", "NC-1046", "NC-1048", "NC-1049", "NC-1050",
 		"NC-1051", "NC-1051", "NC-1052", "NC-1056", "NC-1090", "NC-1091", "NC-1092", "NC-1093", "NC-1094", "NC-1095",
 		"NC-1096", "NC-1097", "NC-1096", "NC-1098", "NC-1099", "NC-1100", "NC-1101", "NC-1102", "NC-1103", "NC-1104",
+		"NC-1007", "NC-1014", "NC-1105", "NC-1106", "NC-1107",
 	}
 	slices.Sort(want)
 	if !slices.Equal(codes, want) {
 		t.Fatalf("the refused project was refused with %v; want %v", codes, want)
 	}
-	// Each wrong //nocontract: line is refused for its own fault, naming the text it read.
-	directives := filepath.Join(filepath.Dir(project(t, "refused")), "routes", "refused_directives.go") + ":"
-	read := []string{}
-	for _, line := range refused.Lines() {
-		outcome.ForEachOption(outcome.TupleToOption(strings.CutPrefix(line, directives)), func(placed string) { read = append(read, placed) })
+	for _, each := range []struct {
+		file string
+		want []string
+	}{
+		{file: "refused_directives.go", want: wrongDirectiveRefusals()},
+		{file: "refused_markings.go", want: undecidedMarkingRefusals()},
+	} {
+		placed := filepath.Join(filepath.Dir(project(t, "refused")), "routes", each.file) + ":"
+		read := []string{}
+		for _, line := range refused.Lines() {
+			outcome.ForEachOption(outcome.TupleToOption(strings.CutPrefix(line, placed)), func(at string) { read = append(read, at) })
+		}
+		if !slices.Equal(read, each.want) {
+			t.Errorf("%s was refused as\n%s\nwant\n%s", each.file, strings.Join(read, "\n"), strings.Join(each.want, "\n"))
+		}
 	}
-	wantRead := []string{
+}
+
+// undecidedMarkingRefusals is each refusal of the refused project's outcomes whose declaration or
+// ErGo marking decides nothing, each for its own cause.
+func undecidedMarkingRefusals() []string {
+	return []string{
+		`25:6: NC-1014 Unmarked is marked neither //ergo:code nor //ergo:not-an-error; mark it with one.`,
+		`32:6: NC-1106 DoublyMarked is marked both //ergo:code RF-1006 and //ergo:not-an-error; keep one.`,
+		`39:6: NC-1107 CodedTwice is marked //ergo:code more than once, with RF-1007, RF-1008; a failure has one code.`,
+		`52:6: NC-1105 The outcome OpenOutcome is not marked //sumtype:decl.`,
+		`70:6: NC-1007 The outcome ExportedOutcome is not sealed: its methods (example.com/refused/routes.ExportedOutcome).IsExportedOutcome are all exported; give it an unexported method.`,
+	}
+}
+
+// wrongDirectiveRefusals is each wrong //nocontract: line of the refused project, refused for its own
+// fault, naming the text it read.
+func wrongDirectiveRefusals() []string {
+	return []string{
 		`11:1: NC-1096 The line //nocontract:route GET is not one method and one path.`,
 		`16:1: NC-1090 The route's path unrooted does not start with /.`,
 		`21:1: NC-1097 FETCH in the line //nocontract:route FETCH /fetched is not a method a route answers: GET, POST, PUT, PATCH or DELETE.`,
@@ -99,8 +127,5 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 		`115:1: NC-1102 The line //nocontract:guard Staff on a handler is not one guard name and one argument.`,
 		`121:1: NC-1103 staff in the line //nocontract:guard staff admin is not an exported Go identifier, the form a guard's name takes.`,
 		`128:1: NC-1104 The line //nocontract:guard Staff owner is a second guard line; a declaration names one guard.`,
-	}
-	if !slices.Equal(read, wantRead) {
-		t.Errorf("the wrong directive lines were refused as\n%s\nwant\n%s", strings.Join(read, "\n"), strings.Join(wantRead, "\n"))
 	}
 }

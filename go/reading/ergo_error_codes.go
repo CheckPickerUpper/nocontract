@@ -82,6 +82,7 @@ func (OutcomeNotSealed) ErrorCode() ergo.Code { return "NC-1007" }
 // OutcomeNotSealedArguments holds the arguments OutcomeNotSealed's message names, in the order the message first names them.
 type OutcomeNotSealedArguments struct {
 	Outcome string `json:"Outcome"`
+	Methods string `json:"Methods"`
 }
 
 // ReportArguments marks OutcomeNotSealedArguments as the arguments of a report.
@@ -89,14 +90,14 @@ func (OutcomeNotSealedArguments) ReportArguments() {}
 
 // Report is OutcomeNotSealed's code, its message in language and the arguments the message names.
 func (failure OutcomeNotSealed) Report(language messages.Language) ergo.Report {
-	arguments := OutcomeNotSealedArguments{Outcome: string(failure.Outcome)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The outcome "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is not sealed: mark it //sumtype:decl and give it an unexported method."}}}
+	arguments := OutcomeNotSealedArguments{Outcome: string(failure.Outcome), Methods: string(failure.Methods)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The outcome "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is not sealed: its methods "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " are all exported; give it an unexported method."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:
 	case nil:
 	}
-	return ergo.Report{Code: "NC-1007", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Outcome}}}), Arguments: arguments}
+	return ergo.Report{Code: "NC-1007", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Outcome}, messageformat.TextValue{Text: arguments.Methods}}}), Arguments: arguments}
 }
 
 // Causes is every error OutcomeNotSealed holds, then the causes of every failure it holds.
@@ -281,7 +282,7 @@ func (MemberUndecidedArguments) ReportArguments() {}
 // Report is MemberUndecided's code, its message in language and the arguments the message names.
 func (failure MemberUndecided) Report(language messages.Language) ergo.Report {
 	arguments := MemberUndecidedArguments{Member: string(failure.Member)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " needs exactly one of //ergo:code and //ergo:not-an-error."}}}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is marked neither //ergo:code nor //ergo:not-an-error; mark it with one."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:
@@ -497,6 +498,33 @@ func (failure TypeNotReachable) Report(language messages.Language) ergo.Report {
 
 // Causes is every error TypeNotReachable holds, then the causes of every failure it holds.
 func (failure TypeNotReachable) Causes() []error {
+	return nil
+}
+
+func (EndpointWithoutSuccess) ErrorCode() ergo.Code { return "NC-1028" }
+
+// EndpointWithoutSuccessArguments holds the arguments EndpointWithoutSuccess's message names, in the order the message first names them.
+type EndpointWithoutSuccessArguments struct {
+	Endpoint string `json:"Endpoint"`
+}
+
+// ReportArguments marks EndpointWithoutSuccessArguments as the arguments of a report.
+func (EndpointWithoutSuccessArguments) ReportArguments() {}
+
+// Report is EndpointWithoutSuccess's code, its message in language and the arguments the message names.
+func (failure EndpointWithoutSuccess) Report(language messages.Language) ergo.Report {
+	arguments := EndpointWithoutSuccessArguments{Endpoint: string(failure.Endpoint)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The route "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " has no outcome member answered with a success status."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1028", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Endpoint}}}), Arguments: arguments}
+}
+
+// Causes is every error EndpointWithoutSuccess holds, then the causes of every failure it holds.
+func (failure EndpointWithoutSuccess) Causes() []error {
 	return nil
 }
 
@@ -1259,5 +1287,88 @@ func (failure GuardDirectiveRepeated) Report(language messages.Language) ergo.Re
 
 // Causes is every error GuardDirectiveRepeated holds, then the causes of every failure it holds.
 func (failure GuardDirectiveRepeated) Causes() []error {
+	return nil
+}
+
+func (OutcomeNotDeclared) ErrorCode() ergo.Code { return "NC-1105" }
+
+// OutcomeNotDeclaredArguments holds the arguments OutcomeNotDeclared's message names, in the order the message first names them.
+type OutcomeNotDeclaredArguments struct {
+	Outcome string `json:"Outcome"`
+}
+
+// ReportArguments marks OutcomeNotDeclaredArguments as the arguments of a report.
+func (OutcomeNotDeclaredArguments) ReportArguments() {}
+
+// Report is OutcomeNotDeclared's code, its message in language and the arguments the message names.
+func (failure OutcomeNotDeclared) Report(language messages.Language) ergo.Report {
+	arguments := OutcomeNotDeclaredArguments{Outcome: string(failure.Outcome)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The outcome "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is not marked //sumtype:decl."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1105", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Outcome}}}), Arguments: arguments}
+}
+
+// Causes is every error OutcomeNotDeclared holds, then the causes of every failure it holds.
+func (failure OutcomeNotDeclared) Causes() []error {
+	return nil
+}
+
+func (MemberMarkedBoth) ErrorCode() ergo.Code { return "NC-1106" }
+
+// MemberMarkedBothArguments holds the arguments MemberMarkedBoth's message names, in the order the message first names them.
+type MemberMarkedBothArguments struct {
+	Member string `json:"Member"`
+	Codes  string `json:"Codes"`
+}
+
+// ReportArguments marks MemberMarkedBothArguments as the arguments of a report.
+func (MemberMarkedBothArguments) ReportArguments() {}
+
+// Report is MemberMarkedBoth's code, its message in language and the arguments the message names.
+func (failure MemberMarkedBoth) Report(language messages.Language) ergo.Report {
+	arguments := MemberMarkedBothArguments{Member: string(failure.Member), Codes: string(failure.Codes)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is marked both //ergo:code "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " and //ergo:not-an-error; keep one."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1106", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Member}, messageformat.TextValue{Text: arguments.Codes}}}), Arguments: arguments}
+}
+
+// Causes is every error MemberMarkedBoth holds, then the causes of every failure it holds.
+func (failure MemberMarkedBoth) Causes() []error {
+	return nil
+}
+
+func (CodeRepeated) ErrorCode() ergo.Code { return "NC-1107" }
+
+// CodeRepeatedArguments holds the arguments CodeRepeated's message names, in the order the message first names them.
+type CodeRepeatedArguments struct {
+	Member string `json:"Member"`
+	Codes  string `json:"Codes"`
+}
+
+// ReportArguments marks CodeRepeatedArguments as the arguments of a report.
+func (CodeRepeatedArguments) ReportArguments() {}
+
+// Report is CodeRepeated's code, its message in language and the arguments the message names.
+func (failure CodeRepeated) Report(language messages.Language) ergo.Report {
+	arguments := CodeRepeatedArguments{Member: string(failure.Member), Codes: string(failure.Codes)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is marked //ergo:code more than once, with "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "; a failure has one code."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1107", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Member}, messageformat.TextValue{Text: arguments.Codes}}}), Arguments: arguments}
+}
+
+// Causes is every error CodeRepeated holds, then the causes of every failure it holds.
+func (failure CodeRepeated) Causes() []error {
 	return nil
 }

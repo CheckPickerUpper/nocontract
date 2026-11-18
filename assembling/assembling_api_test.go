@@ -14,12 +14,18 @@ func at(line int) assembling.Position {
 	return assembling.Position{File: "routes.src", Line: line, Column: 1}
 }
 
+// found is the member every route succeeds with.
+func found() description.Member {
+	return description.Member{Name: "Found", Answer: description.Succeeds{Status: description.SuccessStatus{}}, Fields: []description.Field{}}
+}
+
 // route is a GET route that reads nothing and succeeds with Found.
 func route(t *testing.T, name string, path string, line int) assembling.DeclaredEndpoint {
 	t.Helper()
 	return assembling.DeclaredEndpoint{
 		Name: name, Method: description.Get{}, Path: routePath(t, path), Params: []description.Field{}, Query: []description.Field{},
-		Body: description.NoBody{}, Successes: []string{"Found"}, Failures: []string{}, Position: at(line),
+		Body: description.NoBody{}, Successes: description.Successes{First: found(), Rest: []description.Member{}},
+		Failures: []description.Member{}, Position: at(line),
 	}
 }
 
@@ -55,18 +61,16 @@ func apiName(t *testing.T, text string) description.APIName {
 func api(t *testing.T, endpoints ...assembling.DeclaredEndpoint) assembling.Declared {
 	t.Helper()
 	return assembling.Declared{
-		API:    assembling.NamedAPI{Name: apiName(t, "ShopApi"), Position: at(0)},
-		Groups: []assembling.DeclaredGroup{{Name: "shop", Position: at(1), Endpoints: endpoints}},
-		Members: []assembling.DeclaredMember{{
-			Member: description.Member{Name: "Found", Answer: description.Succeeds{Status: description.SuccessStatus{}}, Fields: []description.Field{}}, Position: at(100),
-		}},
+		API:     assembling.NamedAPI{Name: apiName(t, "ShopApi"), Position: at(0)},
+		Groups:  []assembling.DeclaredGroup{{Name: "shop", Position: at(1), Endpoints: endpoints}},
+		Members: []assembling.DeclaredMember{{Member: found(), Position: at(100)}},
 		Structs: []assembling.DeclaredStruct{},
 	}
 }
 
 func refusedCodes(t *testing.T, declared assembling.Declared) []string {
 	t.Helper()
-	switch assembled := assembling.Assemble(assembling.Request{Declared: declared, Refused: []assembling.Refusal{}}).(type) {
+	switch assembled := assembling.Assemble(declared).(type) {
 	case assembling.APIRefused:
 		codes := []string{}
 		for _, refusal := range assembled.Refusals {
@@ -91,16 +95,12 @@ func TestEachRuleSpanningRoutesRefusesWithItsCode(t *testing.T) {
 	}
 	withBody := route(t, "readBody", "/body", 5)
 	withBody.Body = description.JSONBody{Schema: description.Text{}}
-	succeedsNever := route(t, "never", "/never", 6)
-	succeedsNever.Successes = []string{}
 	repeatsShared := api(t, route(t, "list", "/items", 2))
 	repeatsShared.Members = append(repeatsShared.Members, assembling.DeclaredMember{
 		Member: description.Member{Name: "RequestRefused", Answer: description.Succeeds{Status: description.SuccessStatus{}}, Fields: []description.Field{}}, Position: at(101),
 	})
 	reservedField := api(t, route(t, "list", "/items", 2))
 	reservedField.Members[0].Member.Fields = []description.Field{{Name: "code", Schema: description.Text{}}}
-	answersUndeclared := route(t, "read", "/items", 2)
-	answersUndeclared.Failures = []string{"Missing"}
 	for _, each := range []struct {
 		name     string
 		declared assembling.Declared
@@ -116,11 +116,9 @@ func TestEachRuleSpanningRoutesRefusesWithItsCode(t *testing.T) {
 				withParams(route(t, "second", "/items/{id}", 3), description.Field{Name: "id", Schema: description.Text{}})),
 			want: []string{"NC-1026"},
 		},
-		{name: "a route with no success", declared: api(t, succeedsNever), want: []string{"NC-1028"}},
 		{name: "a member field named code", declared: reservedField, want: []string{"NC-1033"}},
 		{name: "two routes of a group with one name", declared: api(t, route(t, "read", "/a", 2), route(t, "read", "/b", 3)), want: []string{"NC-1050"}},
 		{name: "a member taking a shared failure's name", declared: repeatsShared, want: []string{"NC-1018"}},
-		{name: "a route answering a member nothing declares", declared: api(t, answersUndeclared), want: []string{"NC-1067"}},
 		{name: "a path parameter its field reads", declared: api(t, withParams(route(t, "read", "/items/{item_id}", 2), text)), want: []string{}},
 	} {
 		if got := refusedCodes(t, each.declared); !slices.Equal(got, each.want) {
@@ -141,10 +139,6 @@ func memberAnswers(members []description.Member) []string {
 func TestARouteIsDescribedWithItsBoundPathAndTheMembersItAnswersWith(t *testing.T) {
 	t.Parallel()
 	item := description.Field{Name: "item_id", Schema: description.Text{}}
-	reads := route(t, "read", "/items/{item_id}", 2)
-	reads.Params = []description.Field{item}
-	reads.Failures = []string{"Missing"}
-	declared := api(t, reads, route(t, "list", "/items", 3))
 	notFound := description.FoldStatus(404, func(status description.Status) description.FailureStatus {
 		failure, isFailure := status.(description.FailureStatus)
 		if !isFailure {
@@ -156,13 +150,16 @@ func TestARouteIsDescribedWithItsBoundPathAndTheMembersItAnswersWith(t *testing.
 		return description.FailureStatus{}
 	})
 	missing := description.Member{Name: "Missing", Answer: description.Fails{Status: notFound, Code: "IT-1001"}, Fields: []description.Field{item}}
+	reads := route(t, "read", "/items/{item_id}", 2)
+	reads.Params = []description.Field{item}
+	reads.Failures = []description.Member{missing}
+	declared := api(t, reads, route(t, "list", "/items", 3))
 	declared.Members = append(declared.Members, assembling.DeclaredMember{Member: missing, Position: at(101)})
-	found := declared.Members[0].Member
 	shared := map[string]description.Member{}
 	for _, failure := range description.SharedFailures() {
 		shared[failure.Name] = failure.Member()
 	}
-	switch assembled := assembling.Assemble(assembling.Request{Declared: declared, Refused: []assembling.Refusal{}}).(type) {
+	switch assembled := assembling.Assemble(declared).(type) {
 	case assembling.APIAssembled:
 		endpoints := assembled.API.Groups[0].Endpoints
 		if len(endpoints) != 2 || endpoints[0].Name != "list" || endpoints[1].Name != "read" {
@@ -173,7 +170,7 @@ func TestARouteIsDescribedWithItsBoundPathAndTheMembersItAnswersWith(t *testing.
 			t.Errorf("read's path is %v; want %v", endpoints[1].Path, wantPath)
 		}
 		for _, endpoint := range endpoints {
-			if got, want := memberAnswers(endpoint.Successes), memberAnswers([]description.Member{found}); !slices.Equal(got, want) {
+			if got, want := memberAnswers(endpoint.Successes.Members()), memberAnswers([]description.Member{found()}); !slices.Equal(got, want) {
 				t.Errorf("%s succeeds with %v; want %v", endpoint.Name, got, want)
 			}
 		}

@@ -46,22 +46,6 @@ type BodyInput struct {
 //nocontract:route GET /body
 func ReadBody(context.Context, BodyInput) ReadOutcome { return Read{Text: ""} }
 
-// OpenOutcome is not sealed.
-type OpenOutcome interface {
-	Open()
-}
-
-// ReadOpen answers with an unsealed outcome.
-//
-//nocontract:route GET /open
-func ReadOpen(context.Context, nocontract.NoInput) OpenOutcome { return Opened{} }
-
-// Opened is the open outcome's only member.
-type Opened struct{}
-
-// Open makes Opened an OpenOutcome.
-func (Opened) Open() {}
-
 // FlawedOutcome holds one member for each way a member is refused.
 //
 //sumtype:decl

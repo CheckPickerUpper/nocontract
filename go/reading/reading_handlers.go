@@ -188,13 +188,20 @@ func servedHandler(index projectIndex, loaded *packages.Package, handler handler
 	}, func(error) reading[handlerTypes] { return readAs(handler, nothingFound()) })
 }
 
+// routeName is a route's endpoint name and where its handler is named.
+type routeName struct {
+	endpoint string
+	position token.Pos
+}
+
 // readRoute reads one handler's route whole: its line, signature, guard, input and outcome.
 func readRoute(index projectIndex, guards guardTable, handler handlerDeclaration) reading[routeEntry] {
 	position := handler.function.Name.Pos()
+	named := routeName{endpoint: endpointName(handler.function.Name.Name), position: position}
 	declared := paired(paired(readRouteDirective(index, handler), readHandlerTypes(index, handler)), readRouteGuard(index, guards, directiveTexts(handler.doc, guardKind{})))
 	return alongside(andThen(declared, func(read pair[pair[routeLine, handlerTypes], routeGuard]) reading[routeEntry] {
 		route, signature, guard := read.first.first, read.first.second, read.second
-		parts := paired(readInput(index, handler.loaded, signature.input, position), readOutcome(index, handler.loaded, signature.outcome, position))
+		parts := paired(readInput(index, handler.loaded, signature.input, position), readOutcome(index, handler.loaded, signature.outcome, named))
 		return mapped(parts, func(parts pair[inputShape, outcomeShape]) routeEntry {
 			return readEntry(index, handler, routeParts{route: route, handler: signature, guard: guard, input: parts.first, outcome: parts.second})
 		})
@@ -213,13 +220,12 @@ type routeParts struct {
 // readEntry is a route read whole, as its endpoint, served route and outcome answer.
 func readEntry(index projectIndex, handler handlerDeclaration, parts routeParts) routeEntry {
 	name := endpointName(handler.function.Name.Name)
-	answered := answeredBy(parts.outcome.plans)
 	return routeEntry{
 		loaded: handler.loaded, position: handler.function.Name.Pos(),
 		endpoint: assembling.DeclaredEndpoint{
 			Name: name, Method: parts.route.method, Path: parts.route.path, Params: parameterFields(parts.input.params),
-			Query: parameterFields(parts.input.query), Body: parts.input.body, Successes: answered.successes,
-			Failures: slices.Concat(answered.failures, parts.guard.members), Position: index.placed(handler.function.Name.Pos()),
+			Query: parameterFields(parts.input.query), Body: parts.input.body, Successes: parts.outcome.successes,
+			Failures: slices.Concat(parts.outcome.failures, parts.guard.members), Position: index.placed(handler.function.Name.Pos()),
 		},
 		route: serverplan.Route{
 			Name: name, Method: parts.route.method, Path: parts.route.path, Handler: parts.handler.handler, Guard: parts.guard.plan,
@@ -247,28 +253,6 @@ func bodyRead(body description.Body) serverplan.BodyRead {
 	case description.NoBody, nil:
 	}
 	return serverplan.NoBodyRead{}
-}
-
-// answered is an outcome's members by how they answer: the names of its successes and of its
-// failures, each in declaration order.
-type answered struct {
-	successes []string
-	failures  []string
-}
-
-// answeredBy sorts an outcome's members into its successes and its failures.
-func answeredBy(members []serverplan.Member) answered {
-	sorted := answered{successes: []string{}, failures: []string{}}
-	for _, member := range members {
-		switch member.Answer.(type) {
-		case description.Succeeds:
-			sorted.successes = append(sorted.successes, member.Go.Name)
-		case description.Fails:
-			sorted.failures = append(sorted.failures, member.Go.Name)
-		case nil:
-		}
-	}
-	return sorted
 }
 
 // reachableName is the Go name the route's generated code in package from refers to a type by,

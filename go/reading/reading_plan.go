@@ -16,7 +16,7 @@ import (
 )
 
 // assembledPlan is everything the routes read found: the API they declare, which package
-// assembling checks across routes, every Go declaration refused, and the Go server plan.
+// assembling checks across routes, and the Go server plan, or every Go declaration refused.
 func assembledPlan(index projectIndex, earlier found, guards guardTable, routes []reading[routeEntry]) Reading {
 	entries, finding := []routeEntry{}, earlier.with(unknownDirectiveLines(index))
 	for _, route := range routes {
@@ -30,7 +30,11 @@ func assembledPlan(index projectIndex, earlier found, guards guardTable, routes 
 	finding = finding.with(serverNameChecks(index))
 	read := keyed.FirstOfEach(finding.packages, func(path string) string { return path })
 	slices.Sort(read)
-	return Reading{Read: read, Declared: declaredAPI(index, finding, byPackage), Refused: finding.refusals, Plan: goPlan(index, guards, byPackage)}
+	declared := declaredAPI(index, finding, byPackage)
+	if len(finding.refusals) > 0 {
+		return Reading{Packages: read, Routes: RoutesRefused{Declared: declared, Refusals: finding.refusals}}
+	}
+	return Reading{Packages: read, Routes: RoutesRead{Declared: declared, Plan: goPlan(index, guards, byPackage)}}
 }
 
 // unknownDirectiveLines refuses every //nocontract: line of the project's own files that names no

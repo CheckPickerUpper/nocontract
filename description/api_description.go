@@ -164,8 +164,20 @@ type Endpoint struct {
 	Path      []PathSegment
 	Query     []Field
 	Body      Body
-	Successes []Member
+	Successes Successes
 	Failures  []Member
+}
+
+// Successes is every member a route succeeds with, in declaration order: First, then Rest. A route
+// succeeds with at least one.
+type Successes struct {
+	First Member
+	Rest  []Member
+}
+
+// Members is every success, First first.
+func (successes Successes) Members() []Member {
+	return append([]Member{successes.First}, successes.Rest...)
 }
 
 // PathSegment is one part of a route's path between two slashes: text the path holds, or a

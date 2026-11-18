@@ -129,7 +129,7 @@ func endpointText(endpoint description.Endpoint) string {
 		options = append(options, "payload: "+schemaText(body.Schema, "    "))
 	case description.NoBody, nil:
 	}
-	options = append(options, "success: ["+strings.Join(memberNames(endpoint.Successes), ", ")+"]", "error: ["+strings.Join(memberNames(endpoint.Failures), ", ")+"]")
+	options = append(options, "success: ["+strings.Join(memberNames(endpoint.Successes.Members()), ", ")+"]", "error: ["+strings.Join(memberNames(endpoint.Failures), ", ")+"]")
 	return fmt.Sprintf("  HttpApiEndpoint.%s(%s, %s, {\n    %s,\n  })", strings.ToLower(endpoint.Method.Name()), quoted(endpoint.Name), quoted(path.path), strings.Join(options, ",\n    "))
 }
 

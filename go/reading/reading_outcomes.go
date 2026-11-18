@@ -5,6 +5,7 @@ import (
 	"go/types"
 	"slices"
 	"strconv"
+	"strings"
 
 	ergo "github.com/CheckPickerUpper/ErGo"
 	"github.com/CheckPickerUpper/ErGo/declarations"
@@ -18,37 +19,53 @@ import (
 )
 
 // outcomeShape is a route's outcome and its members in declaration order, as the generated code
-// answers each.
+// answers each, and the members it succeeds and fails with, as the API describes them.
 type outcomeShape struct {
-	name  serverplan.GoName
-	plans []serverplan.Member
+	name      serverplan.GoName
+	plans     []serverplan.Member
+	successes description.Successes
+	failures  []description.Member
 }
 
-// sealedMember is one member of a sealed type, as declared, with its answer.
+// sealedMember is one member of a sealed type, as declared, and as the API describes it.
 type sealedMember struct {
 	declared declaredType
-	answer   description.Answer
+	member   description.Member
 }
 
 // memberPlan is how the generated code answers a member.
 func memberPlan(member sealedMember) serverplan.Member {
-	return serverplan.Member{Go: goName(member.declared), Answer: member.answer}
+	return serverplan.Member{Go: goName(member.declared), Answer: member.member.Answer}
 }
 
-// readOutcome reads a route's sealed outcome, which must answer at least one success, refusing a
-// member the route's package cannot name.
-func readOutcome(index projectIndex, loaded *packages.Package, outcome types.Type, position token.Pos) reading[outcomeShape] {
+// described is each member as the API describes it, in order.
+func described(members []sealedMember) []description.Member {
+	read := []description.Member{}
+	for _, member := range members {
+		read = append(read, member.member)
+	}
+	return read
+}
+
+// readOutcome reads a route's sealed outcome, refusing one that answers no success and a member the
+// route's package cannot name.
+func readOutcome(index projectIndex, loaded *packages.Package, outcome types.Type, route routeName) reading[outcomeShape] {
 	named, isNamed := types.Unalias(outcome).(*types.Named)
 	if !isNamed {
-		return notRead[outcomeShape](index.refused(position, OutcomeNotNamedInterface{Type: types.TypeString(outcome, nil)}))
+		return notRead[outcomeShape](index.refused(route.position, OutcomeNotNamedInterface{Type: types.TypeString(outcome, nil)}))
 	}
-	members := mapped(readSealed(index, typeKeyFor(named.Obj()), position), func(sealed sealedRead) []sealedMember { return sealed.members })
-	return andThen(members, func(read []sealedMember) reading[outcomeShape] {
-		return andThen(reachableName(index, named.Obj(), loaded.PkgPath, position), func(name serverplan.GoName) reading[outcomeShape] {
-			plans := collected(read, func(member sealedMember) reading[serverplan.Member] {
-				return mapped(reachableName(index, member.declared.object, loaded.PkgPath, position), func(serverplan.GoName) serverplan.Member { return memberPlan(member) })
+	return andThen(readSealed(index, typeKeyFor(named.Obj()), route.position), func(sealed sealedRead) reading[outcomeShape] {
+		if len(sealed.successes) == 0 {
+			return notRead[outcomeShape](index.refused(route.position, EndpointWithoutSuccess{Endpoint: route.endpoint}))
+		}
+		successes := description.Successes{First: sealed.successes[0].member.member, Rest: described(succeededMembers(sealed.successes[1:]))}
+		return andThen(reachableName(index, named.Obj(), loaded.PkgPath, route.position), func(name serverplan.GoName) reading[outcomeShape] {
+			plans := collected(sealed.members, func(member sealedMember) reading[serverplan.Member] {
+				return mapped(reachableName(index, member.declared.object, loaded.PkgPath, route.position), func(serverplan.GoName) serverplan.Member { return memberPlan(member) })
 			})
-			return mapped(plans, func(plans []serverplan.Member) outcomeShape { return outcomeShape{name: name, plans: plans} })
+			return mapped(plans, func(plans []serverplan.Member) outcomeShape {
+				return outcomeShape{name: name, plans: plans, successes: successes, failures: described(sealed.failures)}
+			})
 		})
 	})
 }
@@ -64,17 +81,26 @@ type sealedRead struct {
 
 // succeededMember is a member that answers with a success, and its status.
 type succeededMember struct {
-	object *types.TypeName
+	member sealedMember
 	status description.SuccessStatus
+}
+
+// succeededMembers is each success's member, in order.
+func succeededMembers(successes []succeededMember) []sealedMember {
+	members := []sealedMember{}
+	for _, success := range successes {
+		members = append(members, success.member)
+	}
+	return members
 }
 
 // sortedByAnswer is a sealed interface's members, sorted by how each answers.
 func sortedByAnswer(declared declaredType, members []sealedMember) sealedRead {
 	sealed := sealedRead{declared: declared, members: members, successes: []succeededMember{}, failures: []sealedMember{}}
 	for _, member := range members {
-		switch answer := member.answer.(type) {
+		switch answer := member.member.Answer.(type) {
 		case description.Succeeds:
-			sealed.successes = append(sealed.successes, succeededMember{object: member.declared.object, status: answer.Status})
+			sealed.successes = append(sealed.successes, succeededMember{member: member, status: answer.Status})
 		case description.Fails:
 			sealed.failures = append(sealed.failures, member)
 		case nil:
@@ -99,15 +125,20 @@ func readDeclaredSealed(index projectIndex, key typeKey, declared declaredType, 
 	if !isInterface {
 		return notRead[sealedRead](index.refused(position, OutcomeNotNamedInterface{Type: key.name}).with(packageRead(key.path)))
 	}
-	switch declarations.ReadOutcomeDeclaration(declared.comment, contract).(type) {
+	switch read := declarations.ReadOutcomeDeclaration(declared.comment, contract).(type) {
 	case declarations.SealedOutcome:
-	case declarations.UnsealedOutcome, declarations.NotAnOutcome, nil:
-		return notRead[sealedRead](index.refused(declared.spec.Pos(), OutcomeNotSealed{Outcome: key.name}).with(packageRead(key.path)))
+	case declarations.UnsealedOutcome:
+		unsealed := OutcomeNotSealed{Outcome: key.name, Methods: strings.Join(read.Methods, ", ")}
+		return notRead[sealedRead](index.refused(declared.spec.Pos(), unsealed).with(packageRead(key.path)))
+	case declarations.NotAnOutcome:
+		return notRead[sealedRead](index.refused(declared.spec.Pos(), OutcomeNotDeclared{Outcome: key.name}).with(packageRead(key.path)))
+	case nil:
+		return notRead[sealedRead](packageRead(key.path))
 	}
 	candidates := sealedMemberCandidates(index, declared, contract)
 	members := collected(candidates.members, func(member declaredType) reading[sealedMember] {
-		return mapped(readMember(index, member), func(answer description.Answer) sealedMember {
-			return sealedMember{declared: member, answer: answer}
+		return mapped(readMember(index, member), func(read description.Member) sealedMember {
+			return sealedMember{declared: member, member: read}
 		})
 	})
 	return alongside(mapped(members, func(read []sealedMember) sealedRead { return sortedByAnswer(declared, read) }),
@@ -148,26 +179,24 @@ func sealedMemberCandidates(index projectIndex, sealed declaredType, contract *t
 
 // readMember reads one member's answer and fields, finding the member whole when every part of it
 // is read.
-func readMember(index projectIndex, member declaredType) reading[description.Answer] {
+func readMember(index projectIndex, member declaredType) reading[description.Member] {
 	name := member.object.Name()
 	named, isNamed := member.object.Type().(*types.Named)
 	if isNamed && named.TypeParams().Len() > 0 {
-		return notRead[description.Answer](index.refused(member.spec.Pos(), GenericMember{Member: name}))
+		return notRead[description.Member](index.refused(member.spec.Pos(), GenericMember{Member: name}))
 	}
 	fields, isStruct := member.object.Type().Underlying().(*types.Struct)
 	if !isStruct {
-		return notRead[description.Answer](index.refused(member.spec.Pos(), MemberNotStruct{Member: name}))
+		return notRead[description.Member](index.refused(member.spec.Pos(), MemberNotStruct{Member: name}))
 	}
 	read := collected(indexedFields(fields), func(field indexedField) reading[mo.Option[description.Field]] {
 		return readField(index, field, []typeKey{})
 	})
 	answer := andThen(readStatus(index, member), func(status description.Status) reading[description.Answer] { return readAnswer(index, member, status) })
-	return andThen(read, func(written []mo.Option[description.Field]) reading[description.Answer] {
-		return andThen(answer, func(decided description.Answer) reading[description.Answer] {
-			whole := memberRead(foundMember{key: typeKeyFor(member.object), position: index.placed(member.spec.Pos()), member: description.Member{
-				Name: name, Answer: decided, Fields: present(written),
-			}})
-			return readAs(decided, whole)
+	return andThen(read, func(written []mo.Option[description.Field]) reading[description.Member] {
+		return andThen(answer, func(decided description.Answer) reading[description.Member] {
+			whole := description.Member{Name: name, Answer: decided, Fields: present(written)}
+			return readAs(whole, memberRead(foundMember{key: typeKeyFor(member.object), position: index.placed(member.spec.Pos()), member: whole}))
 		})
 	})
 }
@@ -238,5 +267,28 @@ func readAnswer(index projectIndex, member declaredType, status description.Stat
 		}
 	case nil:
 	}
-	return refused(MemberUndecided{Member: name})
+	return notRead[description.Answer](markingRefused(index, member, marking))
+}
+
+// markingRefused refuses a member's ErGo marking that decides nothing: no decision, both
+// decisions, or more than one code.
+func markingRefused(index projectIndex, member declaredType, marking declarations.Marking) found {
+	name := member.object.Name()
+	switch read := marking.(type) {
+	case declarations.MarkedBoth:
+		return index.refused(member.spec.Pos(), MemberMarkedBoth{Member: name, Codes: ergoCodes(read.Codes)})
+	case declarations.RepeatedCode:
+		return index.refused(member.spec.Pos(), CodeRepeated{Member: name, Codes: ergoCodes(read.Codes)})
+	case declarations.Undecided, declarations.NotAnError, declarations.Coded, nil:
+	}
+	return index.refused(member.spec.Pos(), MemberUndecided{Member: name})
+}
+
+// ergoCodes is the code each //ergo:code directive writes, in order, joined by commas.
+func ergoCodes(directives []declarations.Directive) string {
+	texts := []string{}
+	for _, directive := range directives {
+		texts = append(texts, directive.Text)
+	}
+	return strings.Join(texts, ", ")
 }

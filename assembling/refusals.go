@@ -87,12 +87,6 @@ type RouteRepeated struct {
 	First   string
 }
 
-// EndpointWithoutSuccess is a route whose outcome has no member answered with a success status.
-//
-//ergo:code NC-1028
-//ergo:message The route {Endpoint} has no outcome member answered with a success status.
-type EndpointWithoutSuccess struct{ Endpoint string }
-
 // FieldNameReserved is a member field whose JSON name is one every answer starts with.
 //
 //ergo:code NC-1033
@@ -110,15 +104,6 @@ type FieldNameReserved struct {
 type EndpointNameRepeated struct {
 	Name  string
 	First string
-}
-
-// MemberUndeclared is a member a route answers with that no declaration describes.
-//
-//ergo:code NC-1067
-//ergo:message The route {Endpoint} answers with {Member}, which no declaration describes.
-type MemberUndeclared struct {
-	Endpoint string
-	Member   string
 }
 
 // APIRefused is a declared API with declarations it cannot hold, in source order.

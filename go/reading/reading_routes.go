@@ -32,15 +32,37 @@ type Request struct {
 }
 
 // Reading is what reading a project's routes found: the import path of every package read,
-// sorted, the API the routes read declare, every Go declaration refused, and the Go server plan of
-// the routes read. Package assembling decides whether anything was refused, and the plan is
-// written only when nothing was.
+// sorted, and the routes read whole or refused.
 type Reading struct {
-	Read     []string
+	Packages []string
+	Routes   RoutesReading
+}
+
+// RoutesReading is the project's routes read whole, or the declarations refused.
+//
+//sumtype:decl
+type RoutesReading interface{ isRoutesReading() }
+
+// RoutesRead is every route read whole: the API the routes declare, which assembling checks across
+// routes, and the Go server plan that serves them.
+//
+//ergo:not-an-error
+type RoutesRead struct {
 	Declared assembling.Declared
-	Refused  []assembling.Refusal
 	Plan     serverplan.Plan
 }
+
+// RoutesRefused is every Go declaration refused, and the API the declarations read whole declare,
+// which assembling still checks across routes.
+//
+//ergo:not-an-error
+type RoutesRefused struct {
+	Declared assembling.Declared
+	Refusals []assembling.Refusal
+}
+
+func (RoutesRead) isRoutesReading()    {}
+func (RoutesRefused) isRoutesReading() {}
 
 // ReadRoutes reads every route the project's packages declare. The packages read include
 // nocontract's own, whose declarations the routes' generated code uses.

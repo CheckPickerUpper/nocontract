@@ -403,16 +403,22 @@ func generatedGo(ctx context.Context, project projectfile.Project, finish func([
 	existing := existingGenerated(directory)
 	return outcome.Fold(loadPackages(ctx, directory, project.Packages(), existing), func(loaded []*packages.Package) Outcome {
 		read := reading.ReadRoutes(reading.Request{Packages: loaded, API: project.API(), Server: project.ServerFolder()})
-		if problems := loadProblems(loaded, read.Read); len(problems) > 0 {
+		if problems := loadProblems(loaded, read.Packages); len(problems) > 0 {
 			return PackagesNotLoaded{Errors: problems}
 		}
-		switch assembled := assembling.Assemble(assembling.Request{Declared: read.Declared, Refused: read.Refused}).(type) {
-		case assembling.APIAssembled:
-			return outcome.Fold(renderedFiles(assembled.API, read.Plan, project, existing), func(files []generatedFile) Outcome {
-				return judgedServing(ctx, project, files, finish)
-			}, func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
-		case assembling.APIRefused:
-			return DeclarationsRefused{Refusals: assembled.Refusals}
+		switch routes := read.Routes.(type) {
+		case reading.RoutesRead:
+			switch assembled := assembling.Assemble(routes.Declared).(type) {
+			case assembling.APIAssembled:
+				return outcome.Fold(renderedFiles(assembled.API, routes.Plan, project, existing), func(files []generatedFile) Outcome {
+					return judgedServing(ctx, project, files, finish)
+				}, func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
+			case assembling.APIRefused:
+				return DeclarationsRefused{Refusals: assembled.Refusals}
+			case nil:
+			}
+		case reading.RoutesRefused:
+			return DeclarationsRefused{Refusals: assembling.Refuse(routes.Declared, routes.Refusals).Refusals}
 		case nil:
 		}
 		return DeclarationsRefused{Refusals: []assembling.Refusal{}}

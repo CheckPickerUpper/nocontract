@@ -9,8 +9,6 @@ import (
 	"cmp"
 	"slices"
 
-	"github.com/CheckPickerUpper/outcome"
-
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/effect"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
@@ -50,8 +48,8 @@ type DeclaredEndpoint struct {
 	Params    []description.Field
 	Query     []description.Field
 	Body      description.Body
-	Successes []string
-	Failures  []string
+	Successes description.Successes
+	Failures  []description.Member
 	Position  Position
 }
 
@@ -67,12 +65,6 @@ type DeclaredStruct struct {
 	Position Position
 }
 
-// Request is a declared API and every declaration its reader already refused.
-type Request struct {
-	Declared Declared
-	Refused  []Refusal
-}
-
 // Assembled is what assembling an API ended as.
 //
 //sumtype:decl
@@ -86,22 +78,40 @@ type APIAssembled struct{ API description.API }
 func (APIAssembled) isAssembled() {}
 func (APIRefused) isAssembled()   {}
 
-// Assemble checks the declared API and describes it, refusing it when its reader refused any
-// declaration or a check that spans routes refuses one.
-func Assemble(request Request) Assembled {
-	shared := description.SharedFailures()
-	refusals := slices.Clone(request.Refused)
-	// A name two members take is refused below; the first of them is the one a route answers with.
-	members := map[string]description.Member{}
-	for _, member := range slices.Backward(request.Declared.Members) {
-		members[member.Member.Name] = member.Member
+// Assemble checks an API its reader read whole and describes it, refusing it when a check that
+// spans routes refuses a declaration.
+func Assemble(declared Declared) Assembled {
+	checked := checkedAPI(declared)
+	if len(checked.refusals) > 0 {
+		return APIRefused{Refusals: sortedRefusals(checked.refusals)}
 	}
+	return APIAssembled{API: described(declared, checked.groups, checked.shared)}
+}
+
+// Refuse is an API its reader refused declarations of, with the reader's refusals and every one the
+// checks that span routes find among the declarations it did read.
+func Refuse(declared Declared, refused []Refusal) APIRefused {
+	return APIRefused{Refusals: sortedRefusals(slices.Concat(refused, checkedAPI(declared).refusals))}
+}
+
+// apiCheck is a declared API's groups as described, nocontract's own failures, and every refusal
+// the checks that span routes find.
+type apiCheck struct {
+	groups   []description.Group
+	shared   []description.SharedFailure
+	refusals []Refusal
+}
+
+// checkedAPI describes each group of routes and runs every check that spans routes.
+func checkedAPI(declared Declared) apiCheck {
+	shared := description.SharedFailures()
+	refusals := []Refusal{}
 	groups, endpoints := []description.Group{}, []DeclaredEndpoint{}
-	for _, group := range request.Declared.Groups {
+	for _, group := range declared.Groups {
 		described := []description.Endpoint{}
-		for _, declared := range group.Endpoints {
-			endpoints = append(endpoints, declared)
-			switch checked := checkedEndpoint(declared, endpointMembers{declared: members, shared: shared}).(type) {
+		for _, endpoint := range group.Endpoints {
+			endpoints = append(endpoints, endpoint)
+			switch checked := checkedEndpoint(endpoint, shared).(type) {
 			case endpointChecked:
 				described = append(described, checked.endpoint)
 			case endpointRefused:
@@ -115,12 +125,9 @@ func Assemble(request Request) Assembled {
 	}
 	slices.SortFunc(groups, func(left, right description.Group) int { return cmp.Compare(left.Name, right.Name) })
 	refusals = append(refusals, repeatedRoutes(endpoints)...)
-	refusals = append(refusals, repeatedNames(request.Declared, shared)...)
-	refusals = append(refusals, reservedFields(request.Declared.Members)...)
-	if len(refusals) > 0 {
-		return APIRefused{Refusals: sortedRefusals(refusals)}
-	}
-	return APIAssembled{API: described(request.Declared, groups, shared)}
+	refusals = append(refusals, repeatedNames(declared, shared)...)
+	refusals = append(refusals, reservedFields(declared.Members)...)
+	return apiCheck{groups: groups, shared: shared, refusals: refusals}
 }
 
 // described is the API's description: nocontract's own failures first, then every member and
@@ -158,44 +165,10 @@ type endpointRefused struct{ refusals []Refusal }
 func (endpointChecked) isEndpointCheck() {}
 func (endpointRefused) isEndpointCheck() {}
 
-// endpointMembers is every member a route can answer with: the declared members, by name, and
-// nocontract's own failures.
-type endpointMembers struct {
-	declared map[string]description.Member
-	shared   []description.SharedFailure
-}
-
-// resolvedMembers is the members a route names, each found among the declared members, and a
-// refusal for each name none of them takes.
-type resolvedMembers struct {
-	members  []description.Member
-	refusals []Refusal
-}
-
-// resolved finds each member a route names among the declared members.
-func (members endpointMembers) resolved(declared DeclaredEndpoint, names []string) resolvedMembers {
-	found := resolvedMembers{members: []description.Member{}, refusals: []Refusal{}}
-	for _, name := range names {
-		outcome.FoldOption(keyed.Entry(members.declared, name), func(member description.Member) struct{} {
-			found.members = append(found.members, member)
-			return struct{}{}
-		}, func() struct{} {
-			found.refusals = append(found.refusals, Refusal{Position: declared.Position, Problem: MemberUndeclared{Endpoint: declared.Name, Member: name}})
-			return struct{}{}
-		})
-	}
-	return found
-}
-
-// checkedEndpoint binds a route's path, resolves the members it answers with, refuses a body its
-// method's request does not carry and an outcome with no success, and adds every shared failure it
-// can answer.
-func checkedEndpoint(declared DeclaredEndpoint, members endpointMembers) endpointCheck {
-	successes, failures := members.resolved(declared, declared.Successes), members.resolved(declared, declared.Failures)
-	refusals := slices.Concat(bodyRefusals(declared), successes.refusals, failures.refusals)
-	if len(declared.Successes) == 0 {
-		refusals = append(refusals, Refusal{Position: declared.Position, Problem: EndpointWithoutSuccess{Endpoint: declared.Name}})
-	}
+// checkedEndpoint binds a route's path, refuses a body its method's request does not carry, and adds
+// every shared failure it can answer.
+func checkedEndpoint(declared DeclaredEndpoint, shared []description.SharedFailure) endpointCheck {
+	refusals := bodyRefusals(declared)
 	switch path := boundPath(declared).(type) {
 	case pathBound:
 		if len(refusals) > 0 {
@@ -203,7 +176,7 @@ func checkedEndpoint(declared DeclaredEndpoint, members endpointMembers) endpoin
 		}
 		return endpointChecked{endpoint: description.Endpoint{
 			Name: declared.Name, Method: declared.Method, Path: path.segments, Query: declared.Query, Body: declared.Body,
-			Successes: successes.members, Failures: append(failures.members, sharedFailureMembers(declared, members.shared)...),
+			Successes: declared.Successes, Failures: slices.Concat(declared.Failures, sharedFailureMembers(declared, shared)),
 		}}
 	case pathRefused:
 		return endpointRefused{refusals: append(refusals, path.refusals...)}
