@@ -129,6 +129,24 @@ type formattedIntegerSchema struct {
 	Maximum json.Number `json:"maximum"`
 }
 
+// decimalTextSchema is a whole number written as a string of decimal text matching Pattern.
+//
+//ergo:not-an-error
+type decimalTextSchema struct {
+	Type    string `json:"type"`
+	Pattern string `json:"pattern"`
+}
+
+// formattedDecimalTextSchema is a whole number written as a string of decimal text matching
+// Pattern, whose width is one the OpenAPI Format Registry names as Format for a string.
+//
+//ergo:not-an-error
+type formattedDecimalTextSchema struct {
+	Type    string `json:"type"`
+	Format  string `json:"format"`
+	Pattern string `json:"pattern"`
+}
+
 // enumSchema is a value of one JSON type holding one of Enum.
 //
 //ergo:not-an-error
@@ -217,17 +235,19 @@ type neverSchema struct {
 	Not struct{} `json:"not"`
 }
 
-func (referenceSchema) isSchema()        {}
-func (typeSchema) isSchema()             {}
-func (formatSchema) isSchema()           {}
-func (integerSchema) isSchema()          {}
-func (formattedIntegerSchema) isSchema() {}
-func (enumSchema) isSchema()             {}
-func (arraySchema) isSchema()            {}
-func (fixedArraySchema) isSchema()       {}
-func (dictionarySchema) isSchema()       {}
-func (keyedDictionarySchema) isSchema()  {}
-func (objectSchema) isSchema()           {}
-func (anyOfSchema) isSchema()            {}
-func (oneOfSchema) isSchema()            {}
-func (neverSchema) isSchema()            {}
+func (referenceSchema) isSchema()            {}
+func (typeSchema) isSchema()                 {}
+func (formatSchema) isSchema()               {}
+func (integerSchema) isSchema()              {}
+func (formattedIntegerSchema) isSchema()     {}
+func (decimalTextSchema) isSchema()          {}
+func (formattedDecimalTextSchema) isSchema() {}
+func (enumSchema) isSchema()                 {}
+func (arraySchema) isSchema()                {}
+func (fixedArraySchema) isSchema()           {}
+func (dictionarySchema) isSchema()           {}
+func (keyedDictionarySchema) isSchema()      {}
+func (objectSchema) isSchema()               {}
+func (anyOfSchema) isSchema()                {}
+func (oneOfSchema) isSchema()                {}
+func (neverSchema) isSchema()                {}

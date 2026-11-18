@@ -7,7 +7,7 @@ import (
 
 // IntegerWidth is the whole numbers an integer holds: signed or unsigned, at 8, 16, 32 or 64 bits.
 // Least and Most are exact decimal text, so the most an unsigned 64-bit integer holds is stated
-// whole, which no float64 can hold.
+// whole, which no float64 can hold. Every width holds 0.
 //
 //sumtype:decl
 type IntegerWidth interface {
@@ -16,7 +16,32 @@ type IntegerWidth interface {
 	Least() string
 	// Most is the most whole number the width holds, in decimal.
 	Most() string
+	// Wire is how JSON carries a whole number of the width.
+	Wire() IntegerWire
 }
+
+// IntegerWire is how JSON carries a whole number: as a JSON number, or as a JSON string holding
+// its decimal text.
+//
+//sumtype:decl
+type IntegerWire interface{ isIntegerWire() }
+
+// NumberWire is a whole number written as a JSON number. JavaScript reads every JSON number as a
+// float64, which holds every whole number of 32 bits or fewer exactly.
+//
+//ergo:not-an-error
+type NumberWire struct{}
+
+// DecimalTextWire is a whole number written as a JSON string holding its canonical decimal text:
+// an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0. A float64
+// holds no whole number past 2^53 exactly, so 64-bit widths travel as text, as protobuf's JSON
+// mapping carries int64 and uint64.
+//
+//ergo:not-an-error
+type DecimalTextWire struct{}
+
+func (NumberWire) isIntegerWire()      {}
+func (DecimalTextWire) isIntegerWire() {}
 
 // Signed8 holds -128 to 127.
 //
@@ -114,3 +139,27 @@ func (Unsigned64) Least() string { return strconv.FormatUint(0, 10) }
 
 // Most is math.MaxUint64.
 func (Unsigned64) Most() string { return strconv.FormatUint(math.MaxUint64, 10) }
+
+// Wire is a JSON number.
+func (Signed8) Wire() IntegerWire { return NumberWire{} }
+
+// Wire is a JSON number.
+func (Signed16) Wire() IntegerWire { return NumberWire{} }
+
+// Wire is a JSON number.
+func (Signed32) Wire() IntegerWire { return NumberWire{} }
+
+// Wire is decimal text.
+func (Signed64) Wire() IntegerWire { return DecimalTextWire{} }
+
+// Wire is a JSON number.
+func (Unsigned8) Wire() IntegerWire { return NumberWire{} }
+
+// Wire is a JSON number.
+func (Unsigned16) Wire() IntegerWire { return NumberWire{} }
+
+// Wire is a JSON number.
+func (Unsigned32) Wire() IntegerWire { return NumberWire{} }
+
+// Wire is decimal text.
+func (Unsigned64) Wire() IntegerWire { return DecimalTextWire{} }

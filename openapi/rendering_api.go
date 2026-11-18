@@ -226,19 +226,48 @@ func fieldSchema(shape description.Schema) schema {
 	return neverSchema{Not: struct{}{}}
 }
 
-// widthSchema is a whole number of width: from its least to its most value, with the format OpenAPI
-// names it by when it is exactly 32 or 64 signed bits.
+// widthSchema is a whole number of width as its wire carries it: a JSON number from its least to its
+// most value, or a string of decimal text whose pattern holds exactly that range.
 func widthSchema(width description.IntegerWidth) schema {
+	switch width.Wire().(type) {
+	case description.NumberWire:
+		return numberWidthSchema(width)
+	case description.DecimalTextWire:
+		pattern := decimalTextPattern(width.Least(), width.Most())
+		return outcome.FoldOption(decimalTextFormat(width), func(format string) schema {
+			return formattedDecimalTextSchema{Type: "string", Format: format, Pattern: pattern}
+		}, func() schema { return decimalTextSchema{Type: "string", Pattern: pattern} })
+	case nil:
+	}
+	return neverSchema{Not: struct{}{}}
+}
+
+// numberWidthSchema is a whole number of width written as a JSON number: from its least to its most
+// value, with the format OpenAPI names it by when it is exactly 32 signed bits.
+func numberWidthSchema(width description.IntegerWidth) schema {
 	switch typed := width.(type) {
 	case description.Signed32:
 		return formattedIntegerSchema{Type: "integer", Format: "int32", Minimum: exactly(typed.Least()), Maximum: exactly(typed.Most())}
-	case description.Signed64:
-		return formattedIntegerSchema{Type: "integer", Format: "int64", Minimum: exactly(typed.Least()), Maximum: exactly(typed.Most())}
-	case description.Signed8, description.Signed16, description.Unsigned8, description.Unsigned16, description.Unsigned32, description.Unsigned64:
+	case description.Signed8, description.Signed16, description.Signed64, description.Unsigned8, description.Unsigned16, description.Unsigned32,
+		description.Unsigned64:
 		return integerSchema{Type: "integer", Minimum: exactly(typed.Least()), Maximum: exactly(typed.Most())}
 	case nil:
 	}
 	return neverSchema{Not: struct{}{}}
+}
+
+// decimalTextFormat is the format the OpenAPI Format Registry names a width by when it is written as
+// a string: the registry registers int64 and uint64 for a string, and every narrower width's format
+// for a number only.
+func decimalTextFormat(width description.IntegerWidth) outcome.Option[string] {
+	switch width.(type) {
+	case description.Signed64:
+		return outcome.Some("int64")
+	case description.Unsigned64:
+		return outcome.Some("uint64")
+	case description.Signed8, description.Signed16, description.Signed32, description.Unsigned8, description.Unsigned16, description.Unsigned32, nil:
+	}
+	return outcome.None[string]()
 }
 
 // exactly is a whole number's decimal text as a JSON number holding every one of its digits.

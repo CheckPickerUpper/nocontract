@@ -1508,3 +1508,17 @@ Message: `Run there, go list exits with status 0.`
 | Field | Type |
 | --- | --- |
 | `Stderr` | `string` |
+
+## NC-1135 BodyDecimalTextNotCanonical
+
+BodyDecimalTextNotCanonical is a string a 64-bit whole number field holds that is not canonical
+decimal text: an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0.
+
+Declared in `go/request_body_reading.go`.
+
+Message: `{Path} holds "{Read}", which is not a whole number written as canonical decimal text: an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Read` | `string` |

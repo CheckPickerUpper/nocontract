@@ -6,8 +6,10 @@ package nocontract
 
 import (
 	"encoding/json"
+	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"net/http"
+	"strconv"
 
 	"github.com/samber/mo"
 )
@@ -35,23 +37,54 @@ type Failure struct {
 	Code   string
 }
 
-// Succeeded is a success member's answer, member's fields written after its tag.
-func Succeeded[M any](success Success, member M) Answer {
-	return Answer{status: success.Status, tag: success.Tag, code: mo.None[string](), body: encoded(taggedSuccess[M]{Tag: success.Tag, Fields: member})}
-}
-
-// Failed is a failure member's answer, member's fields written after its tag and code.
-func Failed[M any](failure Failure, member M) Answer {
+// Succeeded is a success member's answer, member's fields written after its tag, each Go type a
+// marshaler of written takes written by it.
+func Succeeded[M any](success Success, member M, written ...*jsonv2.Marshalers) Answer {
 	return Answer{
-		status: failure.Status, tag: failure.Tag, code: mo.Some(failure.Code),
-		body: encoded(taggedFailure[M]{Tag: failure.Tag, Code: failure.Code, Fields: member}),
+		status: success.Status, tag: success.Tag, code: mo.None[string](),
+		body: encoded(taggedSuccess[M]{Tag: success.Tag, Fields: member}, written),
 	}
 }
 
-// encoded is value as encoding/json writes it, which writes an embedded member's fields beside the
-// tag and code in the one object it encodes.
-func encoded[V any](value V) mo.Result[[]byte] {
-	return mo.TupleToResult(jsonv2.Marshal(value, json.DefaultOptionsV1()))
+// Failed is a failure member's answer, member's fields written after its tag and code, each Go type
+// a marshaler of written takes written by it.
+func Failed[M any](failure Failure, member M, written ...*jsonv2.Marshalers) Answer {
+	return Answer{
+		status: failure.Status, tag: failure.Tag, code: mo.Some(failure.Code),
+		body: encoded(taggedFailure[M]{Tag: failure.Tag, Code: failure.Code, Fields: member}, written),
+	}
+}
+
+// encoded is value as encoding/json writes it with written, which writes an embedded member's
+// fields beside the tag and code in the one object it encodes.
+func encoded[V any](value V, written []*jsonv2.Marshalers) mo.Result[[]byte] {
+	return mo.TupleToResult(jsonv2.Marshal(value, json.DefaultOptionsV1(), jsonv2.WithMarshalers(jsonv2.JoinMarshalers(written...))))
+}
+
+// SignedText writes the signed 64-bit type I as a JSON string of its decimal text, which a
+// JavaScript client reads whole where a JSON number past 2^53 loses its last digits.
+func SignedText[I ~int | ~int64]() *jsonv2.Marshalers {
+	return jsonv2.MarshalToFunc(func(encoder *jsontext.Encoder, value I) error {
+		return encoder.WriteToken(jsontext.String(strconv.FormatInt(int64(value), 10)))
+	})
+}
+
+// UnsignedText writes the 64-bit type U at or above zero as a JSON string of its decimal text.
+func UnsignedText[U ~uint | ~uint64 | ~uintptr]() *jsonv2.Marshalers {
+	return jsonv2.MarshalToFunc(func(encoder *jsontext.Encoder, value U) error {
+		return encoder.WriteToken(jsontext.String(strconv.FormatUint(uint64(value), 10)))
+	})
+}
+
+// NullableValue writes a mo.Option of T as null, or as the value it holds written with the
+// answer's marshalers. mo.Option's own MarshalJSON writes the value with encoding/json's first
+// version, which no marshaler of the answer reaches.
+func NullableValue[T any]() *jsonv2.Marshalers {
+	return jsonv2.MarshalToFunc(func(encoder *jsontext.Encoder, value mo.Option[T]) error {
+		return mo.Fold(value, func(held T) error { return jsonv2.MarshalEncode(encoder, held) }, func(error) error {
+			return encoder.WriteToken(jsontext.Null)
+		})
+	})
 }
 
 // NoOutcome is the answer of a route whose handler returned no outcome.

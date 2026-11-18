@@ -6,6 +6,7 @@ package serverplan
 
 import (
 	"go/types"
+	"slices"
 	"unicode"
 	"unicode/utf8"
 
@@ -333,8 +334,8 @@ type BodyFieldRead struct{ Value BodyValue }
 func (NoBodyRead) isBodyRead()    {}
 func (BodyFieldRead) isBodyRead() {}
 
-// BodyValue is one JSON value of a request's body: the Go type the generated code reads it as, and
-// its shape, which decides how.
+// BodyValue is one JSON value of a request's body or an answer: the Go type the generated code
+// reads or writes it as, and its shape, which decides how.
 type BodyValue struct {
 	GoType types.Type
 	Shape  BodyShape
@@ -457,8 +458,88 @@ func (value BodyValue) Values() []BodyValue {
 const OptionPath = "github.com/samber/mo"
 
 // Member is one member of an outcome or a guard's refusal: its Go type, whose name is its tag, and
-// how it answers.
+// how it answers, and once each Go type its answer holds that encoding/json writes otherwise than
+// the description declares, each before the types it holds.
 type Member struct {
-	Go     GoName
-	Answer description.Answer
+	Go      GoName
+	Answer  description.Answer
+	Written []WrittenType
+}
+
+// WrittenType is a Go type an answer holds that encoding/json writes otherwise than the description
+// declares, for which the generated code hands the runtime a marshaler.
+//
+//sumtype:decl
+type WrittenType interface{ isWrittenType() }
+
+// DecimalTextType is a whole number type of Width, whose wire is decimal text, which encoding/json
+// writes as a JSON number.
+//
+//ergo:not-an-error
+type DecimalTextType struct {
+	GoType types.Type
+	Width  description.IntegerWidth
+}
+
+// NullableType is the mo.Option holding Inner, a value that holds a DecimalTextType. mo.Option's
+// own MarshalJSON writes its value with encoding/json's first version, which no marshaler reaches.
+//
+//ergo:not-an-error
+type NullableType struct{ Inner types.Type }
+
+func (DecimalTextType) isWrittenType() {}
+func (NullableType) isWrittenType()    {}
+
+// NamedType is the Go type the generated code names to write written.
+func NamedType(written WrittenType) types.Type {
+	switch typed := written.(type) {
+	case DecimalTextType:
+		return typed.GoType
+	case NullableType:
+		return typed.Inner
+	case nil:
+	}
+	return types.Typ[types.Invalid]
+}
+
+// WrittenTypes is once each Go type value holds that encoding/json writes otherwise than the
+// description declares, each before the types it holds.
+func WrittenTypes(value BodyValue) []WrittenType {
+	written := []WrittenType{}
+	for _, held := range value.Values() {
+		switch shape := held.Shape.(type) {
+		case WholeShape:
+			switch shape.Width.Wire().(type) {
+			case description.DecimalTextWire:
+				written = append(written, DecimalTextType{GoType: held.GoType, Width: shape.Width})
+			case description.NumberWire, nil:
+			}
+		case NullableShape:
+			if len(WrittenTypes(shape.Inner)) > 0 {
+				written = append(written, NullableType{Inner: shape.Inner.GoType})
+			}
+		case TextShape, NumberShape, TruthShape, InstantShape, LiteralShape, ListShape, ArrayShape, DictionaryShape, StructShape, nil:
+		}
+	}
+	once := []WrittenType{}
+	for _, each := range written {
+		if !slices.ContainsFunc(once, func(kept WrittenType) bool { return sameWrittenType(kept, each) }) {
+			once = append(once, each)
+		}
+	}
+	return once
+}
+
+// sameWrittenType is whether left and right hand the runtime a marshaler for the same Go type.
+func sameWrittenType(left, right WrittenType) bool {
+	switch typed := left.(type) {
+	case DecimalTextType:
+		other, isDecimal := right.(DecimalTextType)
+		return isDecimal && types.Identical(typed.GoType, other.GoType)
+	case NullableType:
+		other, isNullable := right.(NullableType)
+		return isNullable && types.Identical(typed.Inner, other.Inner)
+	case nil:
+	}
+	return false
 }

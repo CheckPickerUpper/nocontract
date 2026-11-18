@@ -45,8 +45,10 @@ func RenderRuntime(failures []description.SharedFailure) mo.Result[[]byte] {
 		names := newImports(serverplan.NoContractPath, routeFileImports(serverplan.ServesNoRoutes{}), []string{})
 		members := []serverplan.Member{}
 		for _, failure := range failures {
+			// sharedFailureText refuses every field but text, so a shared failure writes no whole number.
 			members = append(members, serverplan.Member{
 				Go: serverplan.GoName{Package: serverplan.NoContractPath, Name: failure.Name}, Answer: failure.Member().Answer,
+				Written: []serverplan.WrittenType{},
 			})
 		}
 		name := serverplan.AnswerPrefix + serverplan.SharedFailureType

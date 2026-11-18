@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/samber/mo"
@@ -114,6 +115,16 @@ type BodyNumberOutside struct {
 	Most  string
 }
 
+// BodyDecimalTextNotCanonical is a string a 64-bit whole number field holds that is not canonical
+// decimal text: an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0.
+//
+//ergo:code NC-1135
+//ergo:message {Path} holds "{Read}", which is not a whole number written as canonical decimal text: an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0.
+type BodyDecimalTextNotCanonical struct {
+	Path string
+	Read string
+}
+
 // BodyInstantUnreadable is a string an instant field holds that is not an RFC 3339 time, and why.
 //
 //ergo:code NC-1121
@@ -188,6 +199,11 @@ func (cause BodyNumberNotWhole) Error() string { return cause.Report(messages.Ma
 func (cause BodyNumberOutside) Error() string { return cause.Report(messages.Match("")).Message }
 
 // Error is the failure's message in the source language.
+func (cause BodyDecimalTextNotCanonical) Error() string {
+	return cause.Report(messages.Match("")).Message
+}
+
+// Error is the failure's message in the source language.
 func (cause BodyInstantUnreadable) Error() string { return cause.Report(messages.Match("")).Message }
 
 // Error is the failure's message in the source language.
@@ -205,20 +221,21 @@ func (cause BodyNotReceived) Error() string { return cause.Report(messages.Match
 // Error is the failure's message in the source language.
 func (cause BodyNotSingle) Error() string { return cause.Report(messages.Match("")).Message }
 
-func (BodyMemberMissing) isBodyCause()     {}
-func (BodyMemberRepeated) isBodyCause()    {}
-func (BodyMemberUnknown) isBodyCause()     {}
-func (BodyValueMistyped) isBodyCause()     {}
-func (BodyLiteralOutside) isBodyCause()    {}
-func (BodyKeyOutside) isBodyCause()        {}
-func (BodyNumberNotWhole) isBodyCause()    {}
-func (BodyNumberOutside) isBodyCause()     {}
-func (BodyInstantUnreadable) isBodyCause() {}
-func (BodyListLengthWrong) isBodyCause()   {}
-func (BodyMalformed) isBodyCause()         {}
-func (BodyEmpty) isBodyCause()             {}
-func (BodyNotReceived) isBodyCause()       {}
-func (BodyNotSingle) isBodyCause()         {}
+func (BodyMemberMissing) isBodyCause()           {}
+func (BodyMemberRepeated) isBodyCause()          {}
+func (BodyMemberUnknown) isBodyCause()           {}
+func (BodyValueMistyped) isBodyCause()           {}
+func (BodyLiteralOutside) isBodyCause()          {}
+func (BodyKeyOutside) isBodyCause()              {}
+func (BodyNumberNotWhole) isBodyCause()          {}
+func (BodyNumberOutside) isBodyCause()           {}
+func (BodyDecimalTextNotCanonical) isBodyCause() {}
+func (BodyInstantUnreadable) isBodyCause()       {}
+func (BodyListLengthWrong) isBodyCause()         {}
+func (BodyMalformed) isBodyCause()               {}
+func (BodyEmpty) isBodyCause()                   {}
+func (BodyNotReceived) isBodyCause()             {}
+func (BodyNotSingle) isBodyCause()               {}
 
 // bodyRoot is the path of the body's own value.
 const bodyRoot = "body"
@@ -242,6 +259,8 @@ func bodyCausePath(cause BodyCause) string {
 	case BodyNumberNotWhole:
 		return found.Path
 	case BodyNumberOutside:
+		return found.Path
+	case BodyDecimalTextNotCanonical:
 		return found.Path
 	case BodyInstantUnreadable:
 		return found.Path
@@ -387,38 +406,83 @@ func whole[V any](value BodyValue, within numberRange, parse func(string) mo.Res
 	})
 }
 
+// decimalText is value's JSON string of canonical decimal text parsed by parse into its field's
+// type, whose range is within. parse reads every canonical decimal text, so it refuses one only as
+// outside within.
+func decimalText[V any](value BodyValue, within numberRange, parse func(string) mo.Result[V]) BodyReading[V] {
+	return Next(value.token("a whole number written as a string", jsontext.KindString), func(token jsontext.Token) BodyReading[V] {
+		return mo.Fold(canonicalDecimal(token.String()), func(read string) BodyReading[V] {
+			return mo.Fold(parse(read), func(fitted V) BodyReading[V] { return Read[V]{Value: fitted} }, func(error) BodyReading[V] {
+				return BodyRefused{Cause: BodyNumberOutside{Path: value.path, Read: strconv.Quote(read), Least: within.least, Most: within.most}}
+			})
+		}, func(error) BodyReading[V] {
+			return BodyRefused{Cause: BodyDecimalTextNotCanonical{Path: value.path, Read: token.String()}}
+		})
+	})
+}
+
+// canonicalDecimal is text when it is canonical decimal text: 0, or an optional - and a digit from
+// 1 to 9 followed by any digits.
+func canonicalDecimal(text string) mo.Option[string] {
+	digits := strings.TrimPrefix(text, "-")
+	if text == "0" || (digits != "" && digits[0] != '0' && strings.Trim(digits, "0123456789") == "") {
+		return mo.Some(text)
+	}
+	return mo.None[string]()
+}
+
+// parsedSigned is read, a whole number in decimal, as the signed type I, refused with
+// strconv.ErrRange when I does not hold it.
+func parsedSigned[I signedWhole](read string) mo.Result[I] {
+	return mo.Fold(mo.TupleToResult(strconv.ParseInt(read, 10, 64)), func(parsed int64) mo.Result[I] {
+		return mo.Fold(fittedSigned[I](parsed), mo.Ok[I], func(error) mo.Result[I] { return mo.Err[I](strconv.ErrRange) })
+	}, mo.Err[I])
+}
+
+// parsedUnsigned is read, a whole number in decimal, as the type U, refused with strconv.ErrRange
+// when U does not hold it.
+func parsedUnsigned[U unsignedWhole](read string) mo.Result[U] {
+	return mo.Fold(mo.TupleToResult(strconv.ParseUint(read, 10, 64)), func(parsed uint64) mo.Result[U] {
+		return mo.Fold(fittedUnsigned[U](parsed), mo.Ok[U], func(error) mo.Result[U] { return mo.Err[U](strconv.ErrRange) })
+	}, func(unsigned error) mo.Result[U] {
+		// ParseUint refuses every negative number as unreadable; a negative whole number is outside
+		// U, and -0 is zero.
+		return mo.Fold(mo.TupleToResult(strconv.ParseInt(read, 10, 64)), func(signed int64) mo.Result[U] {
+			if signed == 0 {
+				return mo.Ok[U](0)
+			}
+			return mo.Err[U](strconv.ErrRange)
+		}, func(signed error) mo.Result[U] {
+			if errors.Is(signed, strconv.ErrRange) {
+				return mo.Err[U](strconv.ErrRange)
+			}
+			return mo.Err[U](unsigned)
+		})
+	})
+}
+
 // BodySigned is a JSON whole number as the signed type I its field holds, refused when I does not
 // hold it.
 func BodySigned[I signedWhole](value BodyValue) BodyReading[I] {
-	return whole(value, signedRange[I](), func(read string) mo.Result[I] {
-		return mo.Fold(mo.TupleToResult(strconv.ParseInt(read, 10, 64)), func(parsed int64) mo.Result[I] {
-			return mo.Fold(fittedSigned[I](parsed), mo.Ok[I], func(error) mo.Result[I] { return mo.Err[I](strconv.ErrRange) })
-		}, mo.Err[I])
-	})
+	return whole(value, signedRange[I](), parsedSigned[I])
 }
 
 // BodyUnsigned is a JSON whole number at or above zero as the type U its field holds, refused when U
 // does not hold it.
 func BodyUnsigned[U unsignedWhole](value BodyValue) BodyReading[U] {
-	return whole(value, unsignedRange[U](), func(read string) mo.Result[U] {
-		return mo.Fold(mo.TupleToResult(strconv.ParseUint(read, 10, 64)), func(parsed uint64) mo.Result[U] {
-			return mo.Fold(fittedUnsigned[U](parsed), mo.Ok[U], func(error) mo.Result[U] { return mo.Err[U](strconv.ErrRange) })
-		}, func(unsigned error) mo.Result[U] {
-			// ParseUint refuses every negative number as unreadable; a negative whole number is outside
-			// U, and -0 is zero.
-			return mo.Fold(mo.TupleToResult(strconv.ParseInt(read, 10, 64)), func(signed int64) mo.Result[U] {
-				if signed == 0 {
-					return mo.Ok[U](0)
-				}
-				return mo.Err[U](strconv.ErrRange)
-			}, func(signed error) mo.Result[U] {
-				if errors.Is(signed, strconv.ErrRange) {
-					return mo.Err[U](strconv.ErrRange)
-				}
-				return mo.Err[U](unsigned)
-			})
-		})
-	})
+	return whole(value, unsignedRange[U](), parsedUnsigned[U])
+}
+
+// BodySignedText is a JSON string of canonical decimal text as the signed 64-bit type I its field
+// holds, refused when I does not hold it.
+func BodySignedText[I ~int | ~int64](value BodyValue) BodyReading[I] {
+	return decimalText(value, signedRange[I](), parsedSigned[I])
+}
+
+// BodyUnsignedText is a JSON string of canonical decimal text at or above zero as the 64-bit type
+// U its field holds, refused when U does not hold it.
+func BodyUnsignedText[U ~uint | ~uint64 | ~uintptr](value BodyValue) BodyReading[U] {
+	return decimalText(value, unsignedRange[U](), parsedUnsigned[U])
 }
 
 // floatBits is the size of the floating-point type F: doubling the largest float32 is infinite only

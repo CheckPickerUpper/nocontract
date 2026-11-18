@@ -74,7 +74,7 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 		"NC-1096", "NC-1097", "NC-1096", "NC-1098", "NC-1099", "NC-1100", "NC-1101", "NC-1102", "NC-1103", "NC-1104",
 		"NC-1007", "NC-1014", "NC-1105", "NC-1106", "NC-1107",
 		"NC-1108", "NC-1108", "NC-1109", "NC-1110", "NC-1110", "NC-1111", "NC-1111", "NC-1112",
-		"NC-1027", "NC-1113",
+		"NC-1027", "NC-1113", "NC-1027",
 	}
 	slices.Sort(want)
 	if !slices.Equal(codes, want) {
@@ -88,6 +88,7 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 		{file: "routes/refused_markings.go", want: undecidedMarkingRefusals()},
 		{file: "routes/refused_fields.go", want: misnamedFieldRefusals()},
 		{file: "elsewhere/elsewhere_inputs.go", want: unwritableBodyRefusals()},
+		{file: "routes/refused_answers.go", want: unwritableAnswerRefusals()},
 	} {
 		placed := filepath.Join(filepath.Dir(project(t, "refused")), filepath.FromSlash(each.file)) + ":"
 		read := []string{}
@@ -107,6 +108,14 @@ func unwritableBodyRefusals() []string {
 	return []string{
 		`10:3: NC-1113 The field note is unexported and declared in example.com/refused/elsewhere, so the route's generated code cannot write the struct that holds it.`,
 		`21:2: NC-1027 example.com/refused/elsewhere.hiddenBody is unexported and declared in another package, so the route's generated code cannot name it.`,
+	}
+}
+
+// unwritableAnswerRefusals is each route whose answer holds a 64-bit whole number its generated code
+// must name to write as decimal text, and cannot: a type another package does not export.
+func unwritableAnswerRefusals() []string {
+	return []string{
+		`32:6: NC-1027 example.com/refused/elsewhere.count is unexported and declared in another package, so the route's generated code cannot name it.`,
 	}
 }
 

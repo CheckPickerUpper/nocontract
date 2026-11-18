@@ -206,14 +206,14 @@ func literalsText(literals description.Literals) string {
 	return "Schema.Literals([" + strings.Join(values, ", ") + "])"
 }
 
-// widthText is the schema of a whole number of width: checked from its least to its most value up
-// to 32 bits, which a JavaScript number holds exactly. A 64-bit width is any whole number.
+// widthText is the schema of a whole number of width, checked from its least to its most value as
+// its wire carries it: a JSON number read as a number, or decimal text read as a bigint.
 func widthText(width description.IntegerWidth) string {
-	switch typed := width.(type) {
-	case description.Signed8, description.Signed16, description.Signed32, description.Unsigned8, description.Unsigned16, description.Unsigned32:
-		return fmt.Sprintf("Schema.Int.check(Schema.isBetween({ minimum: %s, maximum: %s }))", typed.Least(), typed.Most())
-	case description.Signed64, description.Unsigned64:
-		return "Schema.Int"
+	switch width.Wire().(type) {
+	case description.NumberWire:
+		return fmt.Sprintf("Schema.Int.check(Schema.isBetween({ minimum: %s, maximum: %s }))", width.Least(), width.Most())
+	case description.DecimalTextWire:
+		return fmt.Sprintf("Schema.BigIntFromString.check(Schema.isBetweenBigInt({ minimum: %sn, maximum: %sn }))", width.Least(), width.Most())
 	case nil:
 	}
 	return "Schema.Never"

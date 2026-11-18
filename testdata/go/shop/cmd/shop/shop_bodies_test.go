@@ -18,6 +18,11 @@ import (
 // publishedDocument is the OpenAPI document the shop publishes for every other client.
 const publishedDocument = "../../shop_api.openapi.json"
 
+// notCanonical ends the reason a string a 64-bit field holds is refused for when it is not canonical
+// decimal text.
+const notCanonical = "which is not a whole number written as canonical decimal text: an optional -, then 0 or a digit from 1 to 9 followed by any digits, " +
+	"and never -0."
+
 // bodyRefused is the answer refusing a body at name, which reason explains, as JSON writes it.
 func bodyRefused(name, reason string) received {
 	return received{status: 400, allow: "", header: "", body: `{"_tag":"RequestRefused","code":"NC-1001","part":"body","name":"` + name + `","reason":"` + reason + `"}`}
@@ -75,24 +80,45 @@ func TestARouteReadsItsBodyWholeOrRefusesItWhereItIsWrong(t *testing.T) {
 		want   received
 	}{
 		{
-			name: "a whole top-up", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":500,"currency":"CAD"}}`,
+			name: "a whole top-up", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":"500","currency":"CAD"}}`,
 			want: received{status: 202, allow: "", header: "", body: `{"_tag":"TopUpQueued","reference":"CAD"}`},
 		},
 		{
-			name: "a member left out", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":500}}`,
+			name: "the most a 64-bit amount holds, as decimal text", path: topUps, schema: topUpSchema,
+			body: `{"amount":{"cents":"9223372036854775807","currency":"CAD"}}`,
+			want: received{status: 202, allow: "", header: "", body: `{"_tag":"TopUpQueued","reference":"CAD"}`},
+		},
+		{
+			name: "a member left out", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":"500"}}`,
 			want: bodyRefused("body.amount.currency", "body.amount.currency is missing from the body."),
 		},
 		{
-			name: "a member the body does not declare", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":500,"currency":"CAD"},"tip":5}`,
+			name: "a member the body does not declare", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":"500","currency":"CAD"},"tip":5}`,
 			want: bodyRefused("body.tip", "body.tip is not a member the body accepts."),
 		},
 		{
-			name: "a value outside its set", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":500,"currency":"EUR"}}`,
+			name: "a value outside its set", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":"500","currency":"EUR"}}`,
 			want: bodyRefused("body.amount.currency", `body.amount.currency holds \"EUR\", which is not one of the values it accepts.`),
 		},
 		{
-			name: "a number outside its field's width", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":9223372036854775808,"currency":"CAD"}}`,
-			want: bodyRefused("body.amount.cents", "body.amount.cents holds 9223372036854775808, which is outside -9223372036854775808 to 9223372036854775807."),
+			name: "decimal text outside its field's width", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":"9223372036854775808","currency":"CAD"}}`,
+			want: bodyRefused("body.amount.cents", `body.amount.cents holds \"9223372036854775808\", which is outside -9223372036854775808 to 9223372036854775807.`),
+		},
+		{
+			name: "decimal text with a leading zero", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":"007","currency":"CAD"}}`,
+			want: bodyRefused("body.amount.cents", `body.amount.cents holds \"007\", `+notCanonical),
+		},
+		{
+			name: "decimal text with a plus sign", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":"+7","currency":"CAD"}}`,
+			want: bodyRefused("body.amount.cents", `body.amount.cents holds \"+7\", `+notCanonical),
+		},
+		{
+			name: "decimal text of minus zero", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":"-0","currency":"CAD"}}`,
+			want: bodyRefused("body.amount.cents", `body.amount.cents holds \"-0\", `+notCanonical),
+		},
+		{
+			name: "a JSON number where a 64-bit amount is decimal text", path: topUps, schema: topUpSchema, body: `{"amount":{"cents":500,"currency":"CAD"}}`,
+			want: bodyRefused("body.amount.cents", "body.amount.cents must hold a whole number written as a string, and it holds 500."),
 		},
 		{
 			name: "an empty body", path: topUps, schema: topUpSchema, body: "",

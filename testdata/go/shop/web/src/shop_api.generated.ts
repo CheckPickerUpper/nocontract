@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 
 export const Money = Schema.Struct({
-  cents: Schema.Int,
+  cents: Schema.BigIntFromString.check(Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })),
   currency: Schema.Literals(["CAD", "USD"]),
 })
 export type Money = typeof Money.Type
@@ -57,6 +57,7 @@ export class NotSignedIn extends Schema.TaggedError<NotSignedIn>()("NotSignedIn"
 
 export const BalanceRead = Schema.TaggedStruct("BalanceRead", {
   balance: Money,
+  overdraft: Schema.NullOr(Money),
   changed: Schema.DateTimeUtcFromString,
   note: Schema.NullOr(Schema.String),
 })
@@ -64,7 +65,7 @@ export type BalanceRead = typeof BalanceRead.Type
 
 export class ShopperNotFound extends Schema.TaggedError<ShopperNotFound>()("ShopperNotFound", {
   code: Schema.Literal("SH-1001"),
-  shopper_id: Schema.Int,
+  shopper_id: Schema.BigIntFromString.check(Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })),
 }, { httpApiStatus: 404 }) {}
 
 export class BalanceNotOpened extends Schema.TaggedError<BalanceNotOpened>()("BalanceNotOpened", {
@@ -90,7 +91,7 @@ export type OrderPlaced = typeof OrderPlaced.Type
 export class BalanceGroup extends HttpApiGroup.make("balance").add(
   HttpApiEndpoint.get("readBalance", "/shoppers/:shopper_id/balance", {
     params: {
-      shopper_id: Schema.Int,
+      shopper_id: Schema.BigIntFromString.check(Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })),
     },
     query: {
       currency: Schema.Literals(["CAD", "USD"]),
@@ -100,7 +101,7 @@ export class BalanceGroup extends HttpApiGroup.make("balance").add(
   }),
   HttpApiEndpoint.post("topUp", "/shoppers/:shopper_id/top-ups", {
     params: {
-      shopper_id: Schema.Int,
+      shopper_id: Schema.BigIntFromString.check(Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })),
     },
     payload: Schema.Struct({
       amount: Money,
@@ -113,7 +114,7 @@ export class BalanceGroup extends HttpApiGroup.make("balance").add(
 export class OrdersGroup extends HttpApiGroup.make("orders").add(
   HttpApiEndpoint.post("place", "/shoppers/:shopper_id/orders", {
     params: {
-      shopper_id: Schema.Int,
+      shopper_id: Schema.BigIntFromString.check(Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })),
     },
     payload: Order,
     success: [OrderPlaced],

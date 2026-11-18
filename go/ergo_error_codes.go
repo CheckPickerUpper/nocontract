@@ -534,3 +534,31 @@ func (failure BodyKeyOutside) Report(language messages.Language) ergo.Report {
 func (failure BodyKeyOutside) Causes() []error {
 	return nil
 }
+
+func (BodyDecimalTextNotCanonical) ErrorCode() ergo.Code { return "NC-1135" }
+
+// BodyDecimalTextNotCanonicalArguments holds the arguments BodyDecimalTextNotCanonical's message names, in the order the message first names them.
+type BodyDecimalTextNotCanonicalArguments struct {
+	Path string `json:"Path"`
+	Read string `json:"Read"`
+}
+
+// ReportArguments marks BodyDecimalTextNotCanonicalArguments as the arguments of a report.
+func (BodyDecimalTextNotCanonicalArguments) ReportArguments() {}
+
+// Report is BodyDecimalTextNotCanonical's code, its message in language and the arguments the message names.
+func (failure BodyDecimalTextNotCanonical) Report(language messages.Language) ergo.Report {
+	arguments := BodyDecimalTextNotCanonicalArguments{Path: string(failure.Path), Read: string(failure.Read)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds \""}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "\", which is not a whole number written as canonical decimal text: an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1135", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}, messageformat.TextValue{Text: arguments.Read}}}), Arguments: arguments}
+}
+
+// Causes is every error BodyDecimalTextNotCanonical holds, then the causes of every failure it holds.
+func (failure BodyDecimalTextNotCanonical) Causes() []error {
+	return nil
+}

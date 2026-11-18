@@ -217,8 +217,10 @@ sits at a path it writes, it stops and names the file.
 
 The OpenAPI file lists each route's path and query parameters, its body, and every member it
 answers with under that member's status. Each member is its own schema, whose `_tag` and, for a
-failure, `code` each allow one value. A whole number is `integer`, and a `time.Time` is a string
-of format `date-time`.
+failure, `code` each allow one value. A whole number of 32 bits or fewer is an `integer` from its
+least to its most value. A 64-bit whole number, a plain `int` included, is a string of format
+`int64` or `uint64` whose `pattern` takes exactly the canonical decimal text of its range, and a
+`time.Time` is a string of format `date-time`.
 
 ## Serving
 
@@ -326,7 +328,8 @@ not valid escaping. `AnswerNotWritten`
 | --- | --- |
 | `string` | `Schema.String` |
 | a string type with constants | `Schema.Literals` of its constants |
-| whole numbers | `Schema.Int` |
+| whole numbers of 32 bits or fewer | `Schema.Int` within the type's range |
+| 64-bit whole numbers, `int` and `uint` included | `Schema.BigIntFromString`, a `bigint` within the type's range |
 | `float32`, `float64` | `Schema.Finite` |
 | `bool` | `Schema.Boolean` |
 | `time.Time` | `Schema.DateTimeUtcFromString` |
@@ -336,6 +339,12 @@ not valid escaping. `AnswerNotWritten`
 | named and unnamed structs | `Schema.Struct` |
 
 A path or query field is text, a whole number, a boolean or a string type with constants.
+
+A 64-bit whole number travels in JSON as a string of its canonical decimal text, such as
+`"9007199254740993"`, as protobuf's JSON mapping carries `int64` and `uint64`: a JavaScript
+number holds no whole number past 2^53 exactly. The text is an optional `-`, then `0` or a digit
+from 1 to 9 followed by any digits, and never `-0`. A body holding `"007"`, `"+7"`, `"-0"` or the
+number `7` for such a field is refused.
 
 ## What is refused
 

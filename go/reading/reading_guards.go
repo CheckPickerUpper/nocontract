@@ -89,14 +89,17 @@ func readGuardDeclaration(index projectIndex, guards map[string]guardEntry, mark
 }
 
 // readGuardRefusal reads a guard's sealed refusal, refusing each member that succeeds: a refusal
-// holds only failures.
+// holds only failures, which the generated code of the refusal's package answers.
 func readGuardRefusal(index projectIndex, declared declaredType) reading[[]sealedMember] {
 	return andThen(readSealed(index, typeKeyFor(declared.object), declared.spec.Pos()), func(sealed sealedRead) reading[[]sealedMember] {
 		refused := collected(sealed.successes, func(member succeededMember) reading[succeededMember] {
 			object := member.member.declared.object
 			return notRead[succeededMember](index.refused(object.Pos(), GuardMemberSucceeds{Member: object.Name(), Status: member.status.Code()}))
 		})
-		return andThen(refused, func([]succeededMember) reading[[]sealedMember] { return readAs(sealed.failures, nothingFound()) })
+		answered := collected(sealed.failures, func(member sealedMember) reading[serverplan.Member] {
+			return writableAnswer(index, member, declared.loaded.PkgPath, member.declared.spec.Pos())
+		})
+		return mapped(paired(refused, answered), func(pair[[]succeededMember, []serverplan.Member]) []sealedMember { return sealed.failures })
 	})
 }
 

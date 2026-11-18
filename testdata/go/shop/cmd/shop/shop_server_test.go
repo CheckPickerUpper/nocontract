@@ -22,7 +22,14 @@ import (
 // built.
 func shopServer(t *testing.T, layers []nocontract.Layer) *httptest.Server {
 	t.Helper()
-	built := server.New(layers, balance.Ledger{ShopperID: 7, Cents: 1250}, shopperauth.Check{})
+	return ledgerServer(t, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: mo.None[int]()}, layers)
+}
+
+// ledgerServer serves the shop's generated API over ledger through layers, stopping the test when it
+// cannot be built.
+func ledgerServer(t *testing.T, ledger balance.Ledger, layers []nocontract.Layer) *httptest.Server {
+	t.Helper()
+	built := server.New(layers, ledger, shopperauth.Check{})
 	served := httptest.NewServer(mo.Fold(built, func(api server.API) server.API { return api }, func(cause error) server.API {
 		t.Fatalf("building the shop's API: %v", cause)
 		return server.API{}
@@ -104,13 +111,38 @@ func TestTheShopperGuardRefusesARequestWithoutAShopperAndAdmitsOneToTheRoute(t *
 		},
 		{
 			name: "a shopper", shopper: "shopper-8",
-			want: received{status: 404, allow: "", header: "", body: `{"_tag":"ShopperNotFound","code":"SH-1001","shopper_id":8}`},
+			want: received{status: 404, allow: "", header: "", body: `{"_tag":"ShopperNotFound","code":"SH-1001","shopper_id":"8"}`},
 		},
 	}
 	for _, each := range cases {
 		t.Run(each.name, func(t *testing.T) {
 			if got := send(t, served, http.MethodGet, "/shoppers/8/balance?currency=CAD", each.shopper, ""); got != each.want {
 				t.Errorf("the request was answered %+v; want %+v", got, each.want)
+			}
+		})
+	}
+}
+
+// A balance of 2^53 + 1 cents, the least whole number a JavaScript number cannot hold, is answered as
+// the string of its decimal text, which a client reads whole, and so is one an option holds; an
+// empty option is null.
+func TestAWholeNumberPastWhatJavaScriptHoldsIsAnsweredAsDecimalText(t *testing.T) {
+	answered := func(overdraft string) received {
+		return received{status: 200, allow: "", header: "", body: `{"_tag":"BalanceRead","balance":{"cents":"9007199254740993","currency":"CAD"},` +
+			`"overdraft":` + overdraft + `,"changed":"2026-11-14T12:00:00Z","note":"first top-up"}`}
+	}
+	for _, each := range []struct {
+		name      string
+		overdraft mo.Option[int]
+		want      received
+	}{
+		{name: "an overdraft", overdraft: mo.Some(1<<53 + 3), want: answered(`{"cents":"9007199254740995","currency":"CAD"}`)},
+		{name: "no overdraft", overdraft: mo.None[int](), want: answered("null")},
+	} {
+		t.Run(each.name, func(t *testing.T) {
+			served := ledgerServer(t, balance.Ledger{ShopperID: 7, Cents: 1<<53 + 1, OverdraftCents: each.overdraft}, []nocontract.Layer{})
+			if got := send(t, served, http.MethodGet, "/shoppers/7/balance?currency=CAD", "shopper-7", ""); got != each.want {
+				t.Errorf("the balance was answered %+v; want %+v", got, each.want)
 			}
 		})
 	}
@@ -129,7 +161,7 @@ func (closedGuard) CheckRoute(route nocontract.GuardedRoute) mo.Result[nocontrac
 }
 
 func TestAGuardThatCannotCheckARouteKeepsTheAPIFromBeingBuiltWithItsReason(t *testing.T) {
-	built := server.New([]nocontract.Layer{}, balance.Ledger{ShopperID: 7, Cents: 1250}, closedGuard{})
+	built := server.New([]nocontract.Layer{}, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: mo.None[int]()}, closedGuard{})
 	mo.Fold(built, func(server.API) struct{} {
 		t.Fatal("the API was built; want the guard's reason")
 		return struct{}{}

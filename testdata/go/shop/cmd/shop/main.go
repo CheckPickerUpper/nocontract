@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	built := server.New([]nocontract.Layer{logRequest}, balance.Ledger{ShopperID: 7, Cents: 1250}, shopperauth.Check{})
+	built := server.New([]nocontract.Layer{logRequest}, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: mo.None[int]()}, shopperauth.Check{})
 	os.Exit(mo.Fold(built, serve, func(cause error) int {
 		fmt.Fprintln(os.Stderr, cause)
 		return 1

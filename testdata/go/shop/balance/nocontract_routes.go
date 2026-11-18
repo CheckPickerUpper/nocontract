@@ -20,9 +20,9 @@ func NocontractRouteReadBalance(receiver Ledger, request *http.Request) nocontra
 func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
 	switch member := outcome.(type) {
 	case BalanceRead:
-		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "BalanceRead"}, member)
+		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "BalanceRead"}, member, nocontract.SignedText[int](), nocontract.NullableValue[Money]())
 	case ShopperNotFound:
-		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member)
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member, nocontract.SignedText[int]())
 	case BalanceNotOpened:
 		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "BalanceNotOpened", Code: "SH-1003"}, member)
 	case nil:
@@ -42,7 +42,7 @@ func NocontractRouteTopUp(request *http.Request) nocontract.Answer {
 func nocontractAnswerTopUpOutcome(outcome TopUpOutcome) nocontract.Answer {
 	switch member := outcome.(type) {
 	case ShopperNotFound:
-		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member)
+		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member, nocontract.SignedText[int]())
 	case TopUpQueued:
 		return nocontract.Succeeded(nocontract.Success{Status: 202, Tag: "TopUpQueued"}, member)
 	case TopUpRefused:
@@ -73,7 +73,7 @@ func nocontractBodyMoney(value nocontract.BodyValue) nocontract.BodyReading[Mone
 func nocontractBodyMoneyMember(members nocontractBodyMoneyMembers, member nocontract.BodyMember) nocontract.BodyReading[nocontractBodyMoneyMembers] {
 	switch member.Name {
 	case "cents":
-		return nocontract.Once(member, members.Cents, nocontract.BodySigned[int], func(read int) nocontractBodyMoneyMembers {
+		return nocontract.Once(member, members.Cents, nocontract.BodySignedText[int], func(read int) nocontractBodyMoneyMembers {
 			return nocontractBodyMoneyMembers{Cents: mo.Some(read), Currency: members.Currency}
 		})
 	case "currency":

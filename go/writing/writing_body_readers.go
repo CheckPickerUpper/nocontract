@@ -91,7 +91,7 @@ func (readers *bodyReaders) reader(value serverplan.BodyValue, place string, nam
 	case serverplan.TextShape:
 		return instantiated("BodyText")
 	case serverplan.WholeShape:
-		return instantiated("Body" + wholeReader(shape.Width))
+		return instantiated("Body" + wholeReader(shape.Width) + wireReader(shape.Width.Wire()))
 	case serverplan.NumberShape:
 		return instantiated("BodyNumber")
 	case serverplan.TruthShape:

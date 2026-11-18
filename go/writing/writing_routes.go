@@ -189,7 +189,8 @@ func quotedLiterals(literals description.Literals) []string {
 }
 
 // wholeReader is the name of the runtime's reader of a parameter's whole number of width, by the
-// width's sign; the reader of a body's is named the same after Body.
+// width's sign; the reader of a body's is named the same after Body and before its wire's name,
+// and the marshaler writing an answer's decimal text before Text.
 func wholeReader(width description.IntegerWidth) string {
 	switch width.(type) {
 	case description.Unsigned8, description.Unsigned16, description.Unsigned32, description.Unsigned64:
@@ -197,6 +198,40 @@ func wholeReader(width description.IntegerWidth) string {
 	case description.Signed8, description.Signed16, description.Signed32, description.Signed64, nil:
 	}
 	return "Signed"
+}
+
+// wireReader is what the name of the runtime's reader of a body's whole number ends with, by the
+// wire the number travels as: nothing for a JSON number, and Text for decimal text.
+func wireReader(wire description.IntegerWire) string {
+	switch wire.(type) {
+	case description.DecimalTextWire:
+		return "Text"
+	case description.NumberWire, nil:
+	}
+	return ""
+}
+
+// writtenMarshaler is the runtime's marshaler of the Go type written, as the generated file calls
+// it.
+func writtenMarshaler(written serverplan.WrittenType, names *imports) string {
+	switch typed := written.(type) {
+	case serverplan.DecimalTextType:
+		return names.runtime(wholeReader(typed.Width)+"Text") + "[" + names.goType(typed.GoType) + "]()"
+	case serverplan.NullableType:
+		return names.runtime("NullableValue") + "[" + names.goType(typed.Inner) + "]()"
+	case nil:
+	}
+	return ""
+}
+
+// memberWritten is the member answered by the generated file, after the marshaler of each Go type
+// its answer holds that encoding/json writes otherwise than the description declares.
+func memberWritten(member serverplan.Member, names *imports) string {
+	arguments := []string{"member"}
+	for _, written := range member.Written {
+		arguments = append(arguments, writtenMarshaler(written, names))
+	}
+	return strings.Join(arguments, ", ")
 }
 
 // outcomeFunction is the generated function that answers a route outcome's members.
@@ -225,11 +260,11 @@ func answerText(function answerFunction, names *imports) string {
 	for _, member := range function.members {
 		switch answer := member.Answer.(type) {
 		case description.Fails:
-			fmt.Fprintf(text, "\tcase %s:\n\t\treturn %s(%s{Status: %d, Tag: %s, Code: %s}, member)\n", names.qualified(member.Go), names.runtime("Failed"),
-				names.runtime("Failure"), answer.Status.Code(), strconv.Quote(member.Go.Name), strconv.Quote(answer.Code.String()))
+			fmt.Fprintf(text, "\tcase %s:\n\t\treturn %s(%s{Status: %d, Tag: %s, Code: %s}, %s)\n", names.qualified(member.Go), names.runtime("Failed"),
+				names.runtime("Failure"), answer.Status.Code(), strconv.Quote(member.Go.Name), strconv.Quote(answer.Code.String()), memberWritten(member, names))
 		case description.Succeeds:
-			fmt.Fprintf(text, "\tcase %s:\n\t\treturn %s(%s{Status: %d, Tag: %s}, member)\n", names.qualified(member.Go), names.runtime("Succeeded"),
-				names.runtime("Success"), answer.Status.Code(), strconv.Quote(member.Go.Name))
+			fmt.Fprintf(text, "\tcase %s:\n\t\treturn %s(%s{Status: %d, Tag: %s}, %s)\n", names.qualified(member.Go), names.runtime("Succeeded"),
+				names.runtime("Success"), answer.Status.Code(), strconv.Quote(member.Go.Name), memberWritten(member, names))
 		case nil:
 		}
 	}

@@ -26,15 +26,26 @@ type outcomeShape struct {
 	failures  []description.Member
 }
 
-// sealedMember is one member of a sealed type, as declared, and as the API describes it.
+// sealedMember is one member of a sealed type, as declared, as the API describes it, and each Go
+// type its answer holds that the generated code hands the runtime a marshaler for.
 type sealedMember struct {
 	declared declaredType
 	member   description.Member
+	written  []serverplan.WrittenType
 }
 
 // memberPlan is how the generated code answers a member.
 func memberPlan(member sealedMember) serverplan.Member {
-	return serverplan.Member{Go: goName(member.declared), Answer: member.member.Answer}
+	return serverplan.Member{Go: goName(member.declared), Answer: member.member.Answer, Written: member.written}
+}
+
+// writableAnswer is how the generated code of the package at from answers member, refusing at
+// position each Go type the code names to write the answer that it cannot name there.
+func writableAnswer(index projectIndex, member sealedMember, from string, position token.Pos) reading[serverplan.Member] {
+	named := collected(member.written, func(written serverplan.WrittenType) reading[types.Type] {
+		return writableType(index, serverplan.NamedType(written), from, position)
+	})
+	return mapped(named, func([]types.Type) serverplan.Member { return memberPlan(member) })
 }
 
 // described is each member as the API describes it, in order.
@@ -60,7 +71,9 @@ func readOutcome(index projectIndex, loaded *packages.Package, outcome types.Typ
 		successes := description.Successes{First: sealed.successes[0].member.member, Rest: described(succeededMembers(sealed.successes[1:]))}
 		return andThen(reachableName(index, named.Obj(), loaded.PkgPath, route.position), func(name serverplan.GoName) reading[outcomeShape] {
 			plans := collected(sealed.members, func(member sealedMember) reading[serverplan.Member] {
-				return mapped(reachableName(index, member.declared.object, loaded.PkgPath, route.position), func(serverplan.GoName) serverplan.Member { return memberPlan(member) })
+				return andThen(reachableName(index, member.declared.object, loaded.PkgPath, route.position), func(serverplan.GoName) reading[serverplan.Member] {
+					return writableAnswer(index, member, loaded.PkgPath, route.position)
+				})
 			})
 			return mapped(plans, func(plans []serverplan.Member) outcomeShape {
 				return outcomeShape{name: name, plans: plans, successes: successes, failures: described(sealed.failures)}
@@ -135,11 +148,7 @@ func readDeclaredSealed(index projectIndex, key typeKey, declared declaredType, 
 		return notRead[sealedRead](packageRead(key.path))
 	}
 	candidates := sealedMemberCandidates(index, declared, contract)
-	members := collected(candidates.members, func(member declaredType) reading[sealedMember] {
-		return mapped(readMember(index, member), func(read description.Member) sealedMember {
-			return sealedMember{declared: member, member: read}
-		})
-	})
+	members := collected(candidates.members, func(member declaredType) reading[sealedMember] { return readMember(index, member) })
 	return alongside(mapped(members, func(read []sealedMember) sealedRead { return sortedByAnswer(declared, read) }),
 		candidates.found.with(packageRead(key.path)))
 }
@@ -178,22 +187,24 @@ func sealedMemberCandidates(index projectIndex, sealed declaredType, contract *t
 
 // readMember reads one member's answer and fields, finding the member whole when every part of it
 // is read.
-func readMember(index projectIndex, member declaredType) reading[description.Member] {
+func readMember(index projectIndex, member declaredType) reading[sealedMember] {
 	name := member.object.Name()
 	named, isNamed := member.object.Type().(*types.Named)
 	if isNamed && named.TypeParams().Len() > 0 {
-		return notRead[description.Member](index.refused(member.spec.Pos(), GenericMember{Member: name}))
+		return notRead[sealedMember](index.refused(member.spec.Pos(), GenericMember{Member: name}))
 	}
 	fields, isStruct := member.object.Type().Underlying().(*types.Struct)
 	if !isStruct {
-		return notRead[description.Member](index.refused(member.spec.Pos(), MemberNotStruct{Member: name}))
+		return notRead[sealedMember](index.refused(member.spec.Pos(), MemberNotStruct{Member: name}))
 	}
 	read := structFields(index, fields, []typeKey{})
 	answer := andThen(readStatus(index, member), func(status description.Status) reading[description.Answer] { return readAnswer(index, member, status) })
-	return andThen(read, func(written []fieldWritten) reading[description.Member] {
-		return andThen(answer, func(decided description.Answer) reading[description.Member] {
+	return andThen(read, func(written []fieldWritten) reading[sealedMember] {
+		return andThen(answer, func(decided description.Answer) reading[sealedMember] {
 			whole := description.Member{Name: name, Answer: decided, Fields: describedFields(written)}
-			return readAs(whole, memberRead(foundMember{key: typeKeyFor(member.object), position: index.placed(member.spec.Pos()), member: whole}))
+			value := serverplan.BodyValue{GoType: member.object.Type(), Shape: serverplan.StructShape{Fields: bodyFields(written)}}
+			return readAs(sealedMember{declared: member, member: whole, written: serverplan.WrittenTypes(value)},
+				memberRead(foundMember{key: typeKeyFor(member.object), position: index.placed(member.spec.Pos()), member: whole}))
 		})
 	})
 }
