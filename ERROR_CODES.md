@@ -761,3 +761,16 @@ OpenAPIVersionMissing is a project file naming no version for the API its OpenAP
 Declared in `internal/running/running_command.go`.
 
 Message: `The project file names no openapi version.`
+
+## NC-1067 MemberUndeclared
+
+MemberUndeclared is a member a route answers with that no declaration describes.
+
+Declared in `assembling/refusals.go`.
+
+Message: `The route {Endpoint} answers with {Member}, which no declaration describes.`
+
+| Field | Type |
+| --- | --- |
+| `Endpoint` | `string` |
+| `Member` | `string` |

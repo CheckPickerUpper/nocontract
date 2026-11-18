@@ -129,8 +129,17 @@ func endpointText(endpoint description.Endpoint) string {
 		options = append(options, "payload: "+schemaText(body.Schema, "    "))
 	case description.NoBody, nil:
 	}
-	options = append(options, "success: ["+strings.Join(endpoint.Successes, ", ")+"]", "error: ["+strings.Join(endpoint.Failures, ", ")+"]")
+	options = append(options, "success: ["+strings.Join(memberNames(endpoint.Successes), ", ")+"]", "error: ["+strings.Join(memberNames(endpoint.Failures), ", ")+"]")
 	return fmt.Sprintf("  HttpApiEndpoint.%s(%s, %s, {\n    %s,\n  })", strings.ToLower(endpoint.Method.Name()), quoted(endpoint.Name), quoted(path.path), strings.Join(options, ",\n    "))
+}
+
+// memberNames is the name each member is declared under in the file.
+func memberNames(members []description.Member) []string {
+	names := []string{}
+	for _, member := range members {
+		names = append(names, member.Name)
+	}
+	return names
 }
 
 func fieldsText(fields []description.Field, indent string) string {

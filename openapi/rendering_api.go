@@ -47,17 +47,13 @@ func Render(api description.API, version string) mo.Result[[]byte] {
 
 // paths is every route's operation, under its path and its method.
 func paths(api description.API) map[string]map[string]operation {
-	members := map[string]description.Member{}
-	for _, member := range api.Members {
-		members[member.Name] = member
-	}
 	written := map[string]map[string]operation{}
 	for _, group := range api.Groups {
 		for _, endpoint := range group.Endpoints {
 			path := writtenPath(endpoint.Path)
 			methods := mo.Fold(keyed.Entry(written, path), func(found map[string]operation) map[string]operation { return found },
 				func(error) map[string]operation { return map[string]operation{} })
-			methods[strings.ToLower(endpoint.Method.Name())] = routeOperation(group.Name, endpoint, members)
+			methods[strings.ToLower(endpoint.Method.Name())] = routeOperation(group.Name, endpoint)
 			written[path] = methods
 		}
 	}
@@ -81,7 +77,7 @@ func writtenPath(segments []description.PathSegment) string {
 
 // routeOperation is one route of the group named groupName: its group as its tag, an id no other
 // route takes, its parameters, its body and its responses.
-func routeOperation(groupName string, endpoint description.Endpoint, members map[string]description.Member) operation {
+func routeOperation(groupName string, endpoint description.Endpoint) operation {
 	parameters := []parameter{}
 	for _, segment := range endpoint.Path {
 		switch written := segment.(type) {
@@ -96,7 +92,7 @@ func routeOperation(groupName string, endpoint description.Endpoint, members map
 	tags := []string{groupName}
 	// Endpoint names are unique within a group, so the group's name makes the id unique.
 	operationID := groupName + "." + endpoint.Name
-	answers := responses(endpoint, members)
+	answers := responses(endpoint)
 	switch body := endpoint.Body.(type) {
 	case description.JSONBody:
 		return bodyOperation{
@@ -122,19 +118,16 @@ type statusMember struct {
 
 // responses is every status a route answers with, each holding the members it answers under that
 // status, in the order the route lists them.
-func responses(endpoint description.Endpoint, members map[string]description.Member) map[string]response {
+func responses(endpoint description.Endpoint) map[string]response {
 	answered := []statusMember{}
-	for _, name := range slices.Concat(endpoint.Successes, endpoint.Failures) {
-		mo.Fold(keyed.Entry(members, name), func(member description.Member) struct{} {
-			switch answer := member.Answer.(type) {
-			case description.Succeeds:
-				answered = append(answered, statusMember{status: answer.Status.Code(), member: member})
-			case description.Fails:
-				answered = append(answered, statusMember{status: answer.Status.Code(), member: member})
-			case nil:
-			}
-			return struct{}{}
-		}, func(error) struct{} { return struct{}{} })
+	for _, member := range slices.Concat(endpoint.Successes, endpoint.Failures) {
+		switch answer := member.Answer.(type) {
+		case description.Succeeds:
+			answered = append(answered, statusMember{status: answer.Status.Code(), member: member})
+		case description.Fails:
+			answered = append(answered, statusMember{status: answer.Status.Code(), member: member})
+		case nil:
+		}
 	}
 	written := map[string]response{}
 	for _, first := range keyed.FirstOfEach(answered, func(each statusMember) int { return each.status }) {

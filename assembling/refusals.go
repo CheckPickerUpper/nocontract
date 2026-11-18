@@ -119,6 +119,15 @@ type EndpointNameRepeated struct {
 	First string
 }
 
+// MemberUndeclared is a member a route answers with that no declaration describes.
+//
+//ergo:code NC-1067
+//ergo:message The route {Endpoint} answers with {Member}, which no declaration describes.
+type MemberUndeclared struct {
+	Endpoint string
+	Member   string
+}
+
 // APIRefused is a declared API with declarations it cannot hold, in source order.
 //
 //ergo:code NC-1062

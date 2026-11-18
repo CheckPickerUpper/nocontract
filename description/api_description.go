@@ -164,8 +164,8 @@ type Endpoint struct {
 	Path      []PathSegment
 	Query     []Field
 	Body      Body
-	Successes []string
-	Failures  []string
+	Successes []Member
+	Failures  []Member
 }
 
 // PathSegment is one part of a route's path between two slashes: text the path holds, or a

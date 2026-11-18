@@ -41,6 +41,12 @@ func field(name string, schema description.Schema) description.Field {
 func itemAPI(t *testing.T) description.API {
 	t.Helper()
 	itemID := field("item_id", description.Integer{})
+	itemRead := description.Member{Name: "ItemRead", Answer: answered(t, 200, ""), Fields: []description.Field{field("item", description.StructRef{Name: "Item"})}}
+	itemAdded := description.Member{Name: "ItemAdded", Answer: answered(t, 201, ""), Fields: []description.Field{field("id", description.Integer{})}}
+	itemRemoved := description.Member{Name: "ItemRemoved", Answer: answered(t, 200, ""), Fields: []description.Field{}}
+	itemMissing := description.Member{Name: "ItemMissing", Answer: answered(t, 404, "IT-1001"), Fields: []description.Field{itemID}}
+	shopClosed := description.Member{Name: "ShopClosed", Answer: answered(t, 404, "IT-1002"), Fields: []description.Field{field("reopens", description.Instant{})}}
+	requestRefused := description.Member{Name: "RequestRefused", Answer: answered(t, 400, "NC-1001"), Fields: []description.Field{field("reason", description.Text{})}}
 	return description.API{
 		Name: "ItemApi",
 		Groups: []description.Group{{Name: "items", Endpoints: []description.Endpoint{
@@ -48,7 +54,7 @@ func itemAPI(t *testing.T) description.API {
 				Name: "readItem", Method: description.Get{},
 				Path:  []description.PathSegment{description.PathText{Text: "items"}, description.PathParameter{Field: itemID}},
 				Query: []description.Field{field("sort", description.Literals{Values: []string{"name", "price"}})},
-				Body:  description.NoBody{}, Successes: []string{"ItemRead"}, Failures: []string{"ItemMissing", "ShopClosed", "RequestRefused"},
+				Body:  description.NoBody{}, Successes: []description.Member{itemRead}, Failures: []description.Member{itemMissing, shopClosed, requestRefused},
 			},
 			{
 				Name: "addItem", Method: description.Post{},
@@ -57,23 +63,16 @@ func itemAPI(t *testing.T) description.API {
 				Body: description.JSONBody{Schema: description.InlineStruct{Fields: []description.Field{
 					field("item", description.StructRef{Name: "Item"}),
 				}}},
-				Successes: []string{"ItemAdded"}, Failures: []string{"RequestRefused"},
+				Successes: []description.Member{itemAdded}, Failures: []description.Member{requestRefused},
 			},
 			{
 				Name: "removeItem", Method: description.Delete{},
 				Path:  []description.PathSegment{description.PathText{Text: "items"}, description.PathParameter{Field: itemID}},
 				Query: []description.Field{}, Body: description.NoBody{},
-				Successes: []string{"ItemRemoved"}, Failures: []string{"ItemMissing"},
+				Successes: []description.Member{itemRemoved}, Failures: []description.Member{itemMissing},
 			},
 		}}},
-		Members: []description.Member{
-			{Name: "ItemRead", Answer: answered(t, 200, ""), Fields: []description.Field{field("item", description.StructRef{Name: "Item"})}},
-			{Name: "ItemAdded", Answer: answered(t, 201, ""), Fields: []description.Field{field("id", description.Integer{})}},
-			{Name: "ItemRemoved", Answer: answered(t, 200, ""), Fields: []description.Field{}},
-			{Name: "ItemMissing", Answer: answered(t, 404, "IT-1001"), Fields: []description.Field{itemID}},
-			{Name: "ShopClosed", Answer: answered(t, 404, "IT-1002"), Fields: []description.Field{field("reopens", description.Instant{})}},
-			{Name: "RequestRefused", Answer: answered(t, 400, "NC-1001"), Fields: []description.Field{field("reason", description.Text{})}},
-		},
+		Members: []description.Member{itemRead, itemAdded, itemRemoved, itemMissing, shopClosed, requestRefused},
 		Structs: []description.NamedStruct{
 			{Name: "Item", Fields: []description.Field{
 				field("name", description.Text{}),
