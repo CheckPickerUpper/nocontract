@@ -112,11 +112,11 @@ type routeGuard struct {
 }
 
 // readRouteGuard reads a handler's //nocontract:guard line, naming a declared guard and the one
-// argument it is handed.
-func readRouteGuard(index projectIndex, guards guardTable, lines directiveLines) reading[routeGuard] {
+// argument it is handed, for a route of the package at from.
+func readRouteGuard(index projectIndex, guards guardTable, lines directiveLines, from string) reading[routeGuard] {
 	switch read := lines.(type) {
 	case oneLine:
-		return readNamedRouteGuard(index, guards, read.line)
+		return readNamedRouteGuard(index, guards, read.line, from)
 	case repeatedLines:
 		return notRead[routeGuard](index.refused(read.second.position, GuardDirectiveMalformed{Text: read.second.argument}))
 	case noLine, nil:
@@ -124,7 +124,7 @@ func readRouteGuard(index projectIndex, guards guardTable, lines directiveLines)
 	return readAs(routeGuard{plan: serverplan.Unguarded{}, members: []string{}}, nothingFound())
 }
 
-func readNamedRouteGuard(index projectIndex, guards guardTable, line directive) reading[routeGuard] {
+func readNamedRouteGuard(index projectIndex, guards guardTable, line directive, from string) reading[routeGuard] {
 	malformed := notRead[routeGuard](index.refused(line.position, GuardDirectiveMalformed{Text: line.argument}))
 	words := strings.Fields(line.argument)
 	if len(words) != 2 {
@@ -138,7 +138,11 @@ func readNamedRouteGuard(index projectIndex, guards guardTable, line directive) 
 				for _, member := range members {
 					names = append(names, member.declared.object.Name())
 				}
-				return readAs(routeGuard{plan: serverplan.Guarded{Name: name, Argument: argument}, members: names}, nothingFound())
+				// The route's generated code names the refusal, which types what the guard decides.
+				return mapped(reachableName(index, guard.declared.object, from, line.position), func(refusal serverplan.GoName) routeGuard {
+					guarding := serverplan.Guarding{Name: name, Refusal: refusal}
+					return routeGuard{plan: serverplan.Guarded{Guard: guarding, Argument: argument}, members: names}
+				})
 			}, func(error) reading[routeGuard] { return notRead[routeGuard](nothingFound()) })
 		}, func() reading[routeGuard] {
 			return notRead[routeGuard](index.refused(line.position, GuardUndeclared{Guard: name}))

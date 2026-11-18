@@ -107,13 +107,13 @@ type receiverField struct{ name string }
 // guardField holds one guard the package's routes name.
 //
 //ergo:not-an-error
-type guardField struct{ name string }
+type guardField struct{ guard serverplan.Guarding }
 
 func (receiverField) isServingField() {}
 func (guardField) isServingField()    {}
 
 func (field receiverField) fieldName() string { return field.name }
-func (field guardField) fieldName() string    { return field.name }
+func (field guardField) fieldName() string    { return field.guard.Name }
 
 // servingFieldsNeeded is every field one route needs in what its package is served with.
 func servingFieldsNeeded(route serverplan.Route) []servingField {
@@ -125,7 +125,7 @@ func servingFieldsNeeded(route serverplan.Route) []servingField {
 	}
 	switch guard := route.Guard.(type) {
 	case serverplan.Guarded:
-		fields = append(fields, guardField{name: guard.Name})
+		fields = append(fields, guardField{guard: guard.Guard})
 	case serverplan.Unguarded, nil:
 	}
 	return fields
@@ -230,13 +230,13 @@ func servedRoutes(group packageRoutes) serverplan.ServesRoutes {
 		fields = append(fields, servingFieldsNeeded(entry.route)...)
 		outcomes = append(outcomes, entry.outcome)
 	}
-	serving := serverplan.Serving{Receivers: []serverplan.GoName{}, Guards: []string{}}
+	serving := serverplan.Serving{Receivers: []serverplan.GoName{}, Guards: []serverplan.Guarding{}}
 	for _, field := range keyed.FirstOfEach(fields, func(field servingField) servingField { return field }) {
 		switch needed := field.(type) {
 		case receiverField:
 			serving = serverplan.Serving{Receivers: append(slices.Clone(serving.Receivers), serverplan.GoName{Package: group.loaded.PkgPath, Name: needed.name}), Guards: serving.Guards}
 		case guardField:
-			serving = serverplan.Serving{Receivers: serving.Receivers, Guards: append(slices.Clone(serving.Guards), needed.name)}
+			serving = serverplan.Serving{Receivers: serving.Receivers, Guards: append(slices.Clone(serving.Guards), needed.guard)}
 		case nil:
 		}
 	}

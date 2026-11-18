@@ -100,7 +100,7 @@ func Render(served serverplan.Package) outcome.Result[[]byte] {
 		name := serverplan.AnswerPrefix + sealed.Outcome.Name
 		switch use := sealed.Use.(type) {
 		case serverplan.GuardAnswers:
-			fmt.Fprintf(body, "\n// %s answers a refusal of the %s guard with its status, tag and code; the guard writes it\n// with nocontract.Write.", name, use.Guard)
+			fmt.Fprintf(body, "\n// %s answers a refusal of the %s guard with its status, tag and code, in place of the route\n// the guard refused.", name, use.Guard)
 		case serverplan.RuntimeAnswers:
 			fmt.Fprintf(body, "\n// %s answers each failure nocontract answers on a route's behalf\n// with its status, tag and code.", name)
 		case nil:
@@ -144,19 +144,20 @@ func servingText(served serverplan.ServesRoutes, names *imports) string {
 		fmt.Fprintf(text, "\t%s %s\n", receiver.Name, names.qualified(receiver))
 	}
 	for _, guard := range served.Serving.Guards {
-		fmt.Fprintf(text, "\t%s %s\n", guard, names.runtime("Guard"))
+		fmt.Fprintf(text, "\t%s %s[%s]\n", guard.Name, names.runtime("Guard"), names.qualified(guard.Refusal))
 	}
 	fmt.Fprintf(text, "}\n\n// %s is every route this package declares, each behind the guard it names, or why a guard\n// cannot check one.\nfunc %s(serving %s) mo.Result[[]%s] {\n\treturn %s(\n",
 		serverplan.RoutesFunction, serverplan.RoutesFunction, serverplan.ServingType, names.runtime("Route"), names.runtime("Collect"))
 	for _, route := range served.Routes {
-		serve := fmt.Sprintf("nocontractServe%s(serving)", exported(route.Name))
+		answer := fmt.Sprintf("func(request *http.Request) %s { return nocontractAnswer%s(serving, request) }", names.runtime("Answer"), exported(route.Name))
 		switch guard := route.Guard.(type) {
 		case serverplan.Guarded:
-			fmt.Fprintf(text, "\t\t%s(serving.%s, %s{Method: %s, Path: %s, Argument: %s}, %s),\n", names.runtime("GuardedBy"), guard.Name,
-				names.runtime("GuardedRoute"), strconv.Quote(route.Method.Name()), strconv.Quote(route.Path), strconv.Quote(guard.Argument), serve)
+			refused := names.qualified(serverplan.GoName{Package: guard.Guard.Refusal.Package, Name: serverplan.AnswerPrefix + guard.Guard.Refusal.Name})
+			fmt.Fprintf(text, "\t\t%s(serving.%s, %s{Method: %s, Path: %s, Argument: %s}, %s, %s),\n", names.runtime("GuardedBy"), guard.Guard.Name,
+				names.runtime("GuardedRoute"), strconv.Quote(route.Method.Name()), strconv.Quote(route.Path), strconv.Quote(guard.Argument), refused, answer)
 		case serverplan.Unguarded, nil:
 			fmt.Fprintf(text, "\t\t%s(%s{Method: %s, Path: %s}, %s),\n", names.runtime("Served"), names.runtime("RouteAt"),
-				strconv.Quote(route.Method.Name()), strconv.Quote(route.Path), serve)
+				strconv.Quote(route.Method.Name()), strconv.Quote(route.Path), answer)
 		}
 	}
 	text.WriteString("\t)\n}\n")
@@ -178,8 +179,6 @@ func handlerCall(handler serverplan.Handler) string {
 func routeText(route serverplan.Route, names *imports) string {
 	name := exported(route.Name)
 	text := &strings.Builder{}
-	fmt.Fprintf(text, "\nfunc nocontractServe%s(serving %s) http.Handler {\n\treturn http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {\n\t\t%s(writer, nocontractAnswer%s(serving, request))\n\t})\n}\n",
-		name, serverplan.ServingType, names.runtime("Write"), name)
 	fmt.Fprintf(text, "\nfunc nocontractAnswer%s(serving %s, request *http.Request) %s {\n\tvar input %s\n", name, serverplan.ServingType, names.runtime("Answer"), names.qualified(route.Input))
 	steps := []string{}
 	for _, param := range route.Params {

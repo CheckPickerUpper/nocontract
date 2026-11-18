@@ -136,7 +136,13 @@ type OutcomeAnswer struct {
 // type, and each guard its routes name, in order.
 type Serving struct {
 	Receivers []GoName
-	Guards    []string
+	Guards    []Guarding
+}
+
+// Guarding is a guard by its name and the sealed refusal it declares, which types what it decides.
+type Guarding struct {
+	Name    string
+	Refusal GoName
 }
 
 // SealedAnswer is a sealed type the package declares whose members code outside the generated
@@ -225,11 +231,11 @@ type RouteGuard interface{ isRouteGuard() }
 //ergo:not-an-error
 type Unguarded struct{}
 
-// Guarded is a route served behind the guard Name, which is handed Argument.
+// Guarded is a route served behind a guard, which is handed Argument.
 //
 //ergo:not-an-error
 type Guarded struct {
-	Name     string
+	Guard    Guarding
 	Argument string
 }
 

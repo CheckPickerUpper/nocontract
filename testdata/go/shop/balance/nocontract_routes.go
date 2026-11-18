@@ -4,6 +4,7 @@ package balance
 
 import (
 	json "encoding/json"
+	shopperrefusal "example.com/shop/shopperauth/shopperrefusal"
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
 	mo "github.com/samber/mo"
 	http "net/http"
@@ -13,22 +14,16 @@ import (
 // and each guard its routes name.
 type Serving struct {
 	Ledger  Ledger
-	Shopper nocontract.Guard
+	Shopper nocontract.Guard[shopperrefusal.Refusal]
 }
 
 // Routes is every route this package declares, each behind the guard it names, or why a guard
 // cannot check one.
 func Routes(serving Serving) mo.Result[[]nocontract.Route] {
 	return nocontract.Collect(
-		nocontract.GuardedBy(serving.Shopper, nocontract.GuardedRoute{Method: "GET", Path: "/shoppers/{shopper_id}/balance", Argument: "read-balance"}, nocontractServeReadBalance(serving)),
-		nocontract.Served(nocontract.RouteAt{Method: "POST", Path: "/shoppers/{shopper_id}/top-ups"}, nocontractServeTopUp(serving)),
+		nocontract.GuardedBy(serving.Shopper, nocontract.GuardedRoute{Method: "GET", Path: "/shoppers/{shopper_id}/balance", Argument: "read-balance"}, shopperrefusal.NocontractAnswerRefusal, func(request *http.Request) nocontract.Answer { return nocontractAnswerReadBalance(serving, request) }),
+		nocontract.Served(nocontract.RouteAt{Method: "POST", Path: "/shoppers/{shopper_id}/top-ups"}, func(request *http.Request) nocontract.Answer { return nocontractAnswerTopUp(serving, request) }),
 	)
-}
-
-func nocontractServeReadBalance(serving Serving) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		nocontract.Write(writer, nocontractAnswerReadBalance(serving, request))
-	})
 }
 
 func nocontractAnswerReadBalance(serving Serving, request *http.Request) nocontract.Answer {
@@ -53,12 +48,6 @@ func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
 	case nil:
 	}
 	return nocontract.NoOutcome()
-}
-
-func nocontractServeTopUp(serving Serving) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		nocontract.Write(writer, nocontractAnswerTopUp(serving, request))
-	})
 }
 
 func nocontractAnswerTopUp(serving Serving, request *http.Request) nocontract.Answer {

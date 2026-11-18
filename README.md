@@ -156,19 +156,22 @@ A route names its guard and the one argument the guard is handed:
 func (ledger Ledger) ReadBalance(ctx context.Context, input ReadInput) ReadOutcome {
 ```
 
-The guard implements `nocontract.Guard`, and answers a refusal through the function NoContract
-writes into the refusal's package, `NocontractAnswerRefusal`. Declare the guard in another package
-than its refusal: a package NoContract reads never calls the functions NoContract writes into it.
+The guard implements `nocontract.Guard[refusal.Refusal]`, typed by its own refusal. It decides
+and never answers: `CheckRoute` is asked once for each route when the routes are built, and
+returns how the guard decides each request to that route, or why it cannot check the route at all.
+Each request's decision is `nocontract.Admitted` or `nocontract.Refused` holding one member of
+the guard's refusal. The generated code writes the refusal with its status and code, or runs the
+route. A decision typed by one guard's refusal cannot hold another guard's refusal or a route's
+failure.
 
 ```go
-func (Check) Guarded(route nocontract.GuardedRoute, serve http.Handler) mo.Result[http.Handler] {
-	return mo.Ok[http.Handler](http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+func (Check) CheckRoute(route nocontract.GuardedRoute) mo.Result[nocontract.RequestCheck[refusal.Refusal]] {
+	return mo.Ok[nocontract.RequestCheck[refusal.Refusal]](func(request *http.Request) nocontract.Decision[refusal.Refusal] {
 		if request.Header.Get("X-Shopper") == "" {
-			nocontract.Write(writer, refusal.NocontractAnswerRefusal(refusal.NotSignedIn{Scope: route.Argument}))
-			return
+			return nocontract.Refused[refusal.Refusal]{Refusal: refusal.NotSignedIn{Scope: route.Argument}}
 		}
-		serve.ServeHTTP(writer, request)
-	}))
+		return nocontract.Admitted[refusal.Refusal]{}
+	})
 }
 ```
 

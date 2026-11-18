@@ -177,7 +177,7 @@ func servedHandler(index projectIndex, loaded *packages.Package, handler handler
 // readRoute reads one handler's route whole: its line, signature, guard, input and outcome.
 func readRoute(index projectIndex, guards guardTable, handler handlerDeclaration) reading[routeEntry] {
 	position := handler.function.Name.Pos()
-	declared := paired(paired(readRouteDirective(index, handler), readHandlerTypes(index, handler)), readRouteGuard(index, guards, writtenLines(handler.doc, guardKind{})))
+	declared := paired(paired(readRouteDirective(index, handler), readHandlerTypes(index, handler)), readRouteGuard(index, guards, writtenLines(handler.doc, guardKind{}), handler.loaded.PkgPath))
 	return alongside(andThen(declared, func(read pair[pair[routeLine, handlerTypes], routeGuard]) reading[routeEntry] {
 		route, signature, guard := read.first.first, read.first.second, read.second
 		parts := paired(readInput(index, handler.loaded, signature.input, position), readOutcome(index, handler.loaded, signature.outcome, position))

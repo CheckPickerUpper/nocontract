@@ -8,8 +8,8 @@ import (
 	mo "github.com/samber/mo"
 )
 
-// NocontractAnswerRefusal answers a refusal of the Shopper guard with its status, tag and code; the guard writes it
-// with nocontract.Write.
+// NocontractAnswerRefusal answers a refusal of the Shopper guard with its status, tag and code, in place of the route
+// the guard refused.
 func NocontractAnswerRefusal(outcome Refusal) nocontract.Answer {
 	switch member := outcome.(type) {
 	case NotSignedIn:

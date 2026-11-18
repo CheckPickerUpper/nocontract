@@ -18,13 +18,12 @@ const ShopperHeader = "X-Shopper"
 // route's scope.
 type Check struct{}
 
-// Guarded admits a request naming a shopper to serve and refuses every other.
-func (Check) Guarded(route nocontract.GuardedRoute, serve http.Handler) mo.Result[http.Handler] {
-	return mo.Ok[http.Handler](http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+// CheckRoute checks every route: it admits a request naming a shopper and refuses every other.
+func (Check) CheckRoute(route nocontract.GuardedRoute) mo.Result[nocontract.RequestCheck[shopperrefusal.Refusal]] {
+	return mo.Ok[nocontract.RequestCheck[shopperrefusal.Refusal]](func(request *http.Request) nocontract.Decision[shopperrefusal.Refusal] {
 		if request.Header.Get(ShopperHeader) == "" {
-			nocontract.Write(writer, shopperrefusal.NocontractAnswerRefusal(shopperrefusal.NotSignedIn{Scope: route.Argument}))
-			return
+			return nocontract.Refused[shopperrefusal.Refusal]{Refusal: shopperrefusal.NotSignedIn{Scope: route.Argument}}
 		}
-		serve.ServeHTTP(writer, request)
-	}))
+		return nocontract.Admitted[shopperrefusal.Refusal]{}
+	})
 }
