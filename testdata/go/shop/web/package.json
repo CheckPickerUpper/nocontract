@@ -2,13 +2,17 @@
   "name": "shop-web",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.20.0",
   "scripts": {
+    "generate:openapi": "bun --bun run openapigen --spec ../shop_api.openapi.json --format httpapi --name ShopApi --string-formats decoded",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "effect": "4.1.4"
+    "effect": "git+https://github.com/CheckPickerUpper/effect.git#e5a83f94b925af502937f3df1ea357a98f0d890b&path:packages/effect"
   },
   "devDependencies": {
+    "@effect/openapi-generator": "git+https://github.com/CheckPickerUpper/effect.git#e5a83f94b925af502937f3df1ea357a98f0d890b&path:packages/tools/openapi-generator",
+    "@effect/platform-node": "4.1.4",
     "@types/node": "26.6.6",
     "typescript": "7.0.2"
   }

@@ -11,9 +11,7 @@ import (
 	"github.com/CheckPickerUpper/outcome"
 )
 
-// readWebProject reads every file of the web project outside node_modules. bun reads them in a
-// child process, which Go's test cache does not see, so the test reads them itself and a change to
-// any of them runs it again.
+// readWebProject exposes the files the package tools read to Go's test cache.
 func readWebProject(t *testing.T, web string) {
 	t.Helper()
 	walked := filepath.WalkDir(web, func(path string, entry fs.DirEntry, walkError error) error {
@@ -30,24 +28,33 @@ func readWebProject(t *testing.T, web string) {
 	outcome.ForEachOption(outcome.EmptyableToOption(walked), func(cause error) { t.Fatalf("reading the web project %s: %v", web, cause) })
 }
 
-// The shop example's committed client, and the TypeScript calling it, type-check against the
-// effect release the web project pins: a failure a route never answers is a type error in
-// catchTag, and a decimal is a type error where the route reads a whole number. Its tests then
-// pass under bun's test runner: the client decodes and encodes a 64-bit whole number whole.
+// The shop generates a client from OpenAPI with the pinned Effect fork, type-checks the committed
+// client, and tests that 64-bit values survive decoding and encoding.
 func TestTheShopsGeneratedClientTypeChecksAndPassesItsTests(t *testing.T) {
 	t.Parallel()
-	bun := outcome.Fold(outcome.TupleToResult(exec.LookPath("bun")), func(path string) string { return path }, func(cause error) string {
-		t.Fatalf("looked for bun on PATH to type-check the shop's web project: %v", cause)
-		return ""
-	})
-	web := filepath.Join("..", "testdata", "go", "shop", "web")
+	shop := filepath.Join("..", "testdata", "go", "shop")
+	web := filepath.Join(shop, "web")
 	readWebProject(t, web)
-	for _, arguments := range [][]string{{"install", "--frozen-lockfile"}, {"run", "typecheck"}, {"test"}} {
-		command := exec.CommandContext(t.Context(), bun, arguments...)
+	spec := filepath.Join(shop, "shop_api.openapi.json")
+	_, readError := os.ReadFile(spec)
+	outcome.ForEachOption(outcome.EmptyableToOption(readError), func(cause error) {
+		t.Fatalf("reading the shop's OpenAPI document %s: %v", spec, cause)
+	})
+	commands := []struct {
+		program   string
+		arguments []string
+	}{
+		{program: "pnpm", arguments: []string{"install", "--frozen-lockfile"}},
+		{program: "bun", arguments: []string{"run", "generate:openapi"}},
+		{program: "bun", arguments: []string{"run", "typecheck"}},
+		{program: "bun", arguments: []string{"test"}},
+	}
+	for _, step := range commands {
+		command := exec.CommandContext(t.Context(), step.program, step.arguments...)
 		command.Dir = web
 		output, runError := command.CombinedOutput()
 		outcome.ForEachOption(outcome.EmptyableToOption(runError), func(cause error) {
-			t.Fatalf("bun %s in %s: %v\n%s", strings.Join(arguments, " "), web, cause, output)
+			t.Fatalf("%s %s in %s: %v\n%s", step.program, strings.Join(step.arguments, " "), web, cause, output)
 		})
 	}
 }
