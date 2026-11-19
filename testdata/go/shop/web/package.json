@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@11.20.0",
   "scripts": {
-    "generate:openapi": "bun --bun run openapigen --spec ../shop_api.openapi.json --format httpapi --name ShopApi --string-formats decoded",
+    "generate:openapi": "bun --bun run openapigen --format httpapi --string-formats decoded",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

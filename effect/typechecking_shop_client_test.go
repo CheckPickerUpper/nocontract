@@ -11,6 +11,11 @@ import (
 	"testing"
 
 	"github.com/CheckPickerUpper/outcome"
+
+	"github.com/CheckPickerUpper/nocontract/assembling"
+	"github.com/CheckPickerUpper/nocontract/internal/projectfile"
+	"github.com/CheckPickerUpper/nocontract/internal/running"
+	"github.com/CheckPickerUpper/nocontract/internal/scratchproject"
 )
 
 // readWebProject exposes the files the package tools read to Go's test cache.
@@ -48,27 +53,21 @@ func writeShopOpenAPITypecheckProject(t *testing.T, web string, generatedClient 
 	directory := t.TempDir()
 	dependencies := filepath.Join(web, "node_modules")
 	linkedDependencies := filepath.Join(directory, "node_modules")
-	outcome.ForEachOption(outcome.EmptyableToOption(os.Symlink(dependencies, linkedDependencies)), func(cause error) {
-		t.Fatalf("linking shop dependencies from %s to %s: %v", dependencies, linkedDependencies, cause)
-	})
+	scratchproject.StopOn(t, "linking shop dependencies from "+dependencies+" to "+linkedDependencies,
+		os.Symlink(dependencies, linkedDependencies))
 
 	contractName := "shop_openapi_client_contract.mts"
 	contractPath := filepath.Join(web, contractName)
-	contract := outcome.Fold(outcome.TupleToResult(os.ReadFile(contractPath)), func(contents []byte) []byte {
-		return contents
-	}, func(cause error) []byte {
-		t.Fatalf("reading the OpenAPI shop client contract %s: %v", contractPath, cause)
-		return []byte{}
-	})
+	contract := scratchproject.BytesOrStop(t, "reading the OpenAPI shop client contract "+contractPath,
+		outcome.TupleToResult(os.ReadFile(contractPath)))
 	projectName := "tsconfig.json"
 	project := struct {
 		Extends string   `json:"extends"`
 		Files   []string `json:"files"`
 	}{Extends: filepath.Join(web, projectName), Files: []string{contractName}}
 	var projectJSON bytes.Buffer
-	outcome.ForEachOption(outcome.EmptyableToOption(json.NewEncoder(&projectJSON).Encode(project)), func(cause error) {
-		t.Fatalf("encoding the OpenAPI shop type-check project for %s: %v", contractPath, cause)
-	})
+	scratchproject.StopOn(t, "encoding the OpenAPI shop type-check project for "+contractPath,
+		json.NewEncoder(&projectJSON).Encode(project))
 	for _, file := range []struct {
 		name     string
 		contents []byte
@@ -78,9 +77,7 @@ func writeShopOpenAPITypecheckProject(t *testing.T, web string, generatedClient 
 		{name: projectName, contents: projectJSON.Bytes()},
 	} {
 		path := filepath.Join(directory, file.name)
-		outcome.ForEachOption(outcome.EmptyableToOption(os.WriteFile(path, file.contents, 0o600)), func(cause error) {
-			t.Fatalf("writing the OpenAPI shop type-check file %s: %v", path, cause)
-		})
+		scratchproject.StopOn(t, "writing the OpenAPI shop type-check file "+path, os.WriteFile(path, file.contents, 0o600))
 	}
 	return filepath.Join(directory, projectName)
 }
@@ -89,22 +86,26 @@ func writeShopOpenAPITypecheckProject(t *testing.T, web string, generatedClient 
 // survive decoding and encoding.
 func TestTheShopsGeneratedClientTypeChecksAndPassesItsTests(t *testing.T) {
 	t.Parallel()
-	shop := filepath.Join("..", "testdata", "go", "shop")
-	web := outcome.Fold(outcome.TupleToResult(filepath.Abs(filepath.Join(shop, "web"))), func(path string) string {
-		return path
-	}, func(cause error) string {
-		t.Fatalf("locating the web project for %s: %v", shop, cause)
-		return ""
+	projectPath := scratchproject.PathOrStop(t, "locating the shop's project file",
+		outcome.TupleToResult(filepath.Abs(filepath.Join("..", "testdata", "go", "shop", "nocontract.json"))))
+	projectfile.Read(projectPath, func(project projectfile.Project) struct{} {
+		web := filepath.Join(project.Directory(), "web")
+		spec := project.OpenAPI().File()
+		readWebProject(t, web)
+		scratchproject.BytesOrStop(t, "reading the shop's OpenAPI document "+spec, outcome.TupleToResult(os.ReadFile(spec)))
+
+		runShopWebCommand(t, web, "pnpm", "install", "--frozen-lockfile")
+		generatedClient := runShopWebCommand(t, web, "bun", "run", "--silent", "generate:openapi",
+			"--spec", spec, "--name", project.API().Name.Text())
+		typecheckProject := writeShopOpenAPITypecheckProject(t, web, generatedClient)
+		runShopWebCommand(t, web, "bun", "run", "tsc", "--project", typecheckProject)
+		runShopWebCommand(t, web, "bun", "test")
+		return struct{}{}
+	}, func(cause error) struct{} {
+		t.Fatal(strings.Join((running.ProjectUnreadable{Path: projectPath, Cause: cause}).Lines(), "\n"))
+		return struct{}{}
+	}, func(refusals []assembling.Refusal) struct{} {
+		t.Fatal(strings.Join((running.ProjectFileRefused{Path: projectPath, Refusals: refusals}).Lines(), "\n"))
+		return struct{}{}
 	})
-	readWebProject(t, web)
-	spec := filepath.Join(shop, "shop_api.openapi.json")
-	_, readError := os.ReadFile(spec)
-	outcome.ForEachOption(outcome.EmptyableToOption(readError), func(cause error) {
-		t.Fatalf("reading the shop's OpenAPI document %s: %v", spec, cause)
-	})
-	runShopWebCommand(t, web, "pnpm", "install", "--frozen-lockfile")
-	generatedClient := runShopWebCommand(t, web, "bun", "run", "--silent", "generate:openapi")
-	typecheckProject := writeShopOpenAPITypecheckProject(t, web, generatedClient)
-	runShopWebCommand(t, web, "bun", "run", "tsc", "--project", typecheckProject)
-	runShopWebCommand(t, web, "bun", "test")
 }
