@@ -298,9 +298,9 @@ import { ShopApi } from "./shop_api.generated.js"
 
 const cents = Effect.gen(function*() {
   const client = yield* HttpApiClient.make(ShopApi, { baseUrl: "https://shop.example" })
-  const read = yield* client.balance.readBalance({ params: { shopper_id: 7 }, query: { currency: "CAD" } })
-  return read.cents
-}).pipe(Effect.catchTag("ShopperNotFound", (missing) => Effect.succeed(0)))
+  const read = yield* client.balance.readBalance({ params: { shopper_id: 7n }, query: { currency: "CAD" } })
+  return read.balance.cents
+}).pipe(Effect.catchTag("ShopperNotFound", () => Effect.succeed(0n)))
 ```
 
 The client's methods are grouped by Go package and named for each handler. A failure the route
@@ -313,7 +313,7 @@ permanent code; then the member's fields, named as `encoding/json` names them. I
 member's `//nocontract:status`.
 
 ```json
-{"_tag":"ShopperNotFound","code":"SH-1001","shopper_id":8}
+{"_tag":"ShopperNotFound","code":"SH-1001","shopper_id":"8"}
 ```
 
 Two failures can answer any route. `RequestRefused` (400, `NC-1001`) is a path segment, query
