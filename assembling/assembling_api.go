@@ -12,7 +12,6 @@ import (
 	"github.com/CheckPickerUpper/outcome"
 
 	"github.com/CheckPickerUpper/nocontract/description"
-	"github.com/CheckPickerUpper/nocontract/effect"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 )
 
@@ -292,20 +291,11 @@ type nameClaim struct {
 	position Position
 }
 
-// repeatedNames refuses every declaration taking a name the client already declares: the names its
-// file imports and nocontract's own failures, which it declares itself, the API, each group's class,
-// and every member and named struct.
+// repeatedNames prevents two schemas from claiming the same OpenAPI component.
 func repeatedNames(declared Declared, shared []description.SharedFailure) []Refusal {
 	claims := []nameClaim{}
-	for _, name := range effect.ImportedNames() {
-		claims = append(claims, nameClaim{name: name, takenBy: "a name the client imports", position: declared.API.Position})
-	}
 	for _, failure := range shared {
 		claims = append(claims, nameClaim{name: failure.Name, takenBy: "one of nocontract's own failures", position: declared.API.Position})
-	}
-	claims = append(claims, nameClaim{name: declared.API.Name.Text(), takenBy: "the API's name", position: declared.API.Position})
-	for _, group := range declared.Groups {
-		claims = append(claims, nameClaim{name: description.GroupClassName(group.Name), takenBy: group.Position.String(), position: group.Position})
 	}
 	for _, member := range declared.Members {
 		claims = append(claims, nameClaim{name: member.Member.Name, takenBy: member.Position.String(), position: member.Position})

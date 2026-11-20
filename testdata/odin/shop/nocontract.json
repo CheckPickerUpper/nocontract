@@ -1,7 +1,6 @@
 {
   "language": "odin",
   "packages": ["balance", "orders", "shopperauth"],
-  "typescript": "web/src/shop_api.generated.ts",
   "api": "ShopApi",
   "openapi": { "file": "shop_api.openapi.json", "version": "1.0.0" },
   "server": "server"

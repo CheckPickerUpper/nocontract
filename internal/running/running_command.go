@@ -21,13 +21,11 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
-	"github.com/CheckPickerUpper/nocontract/effect"
 	"github.com/CheckPickerUpper/nocontract/go/reading"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 	"github.com/CheckPickerUpper/nocontract/go/writing"
 	"github.com/CheckPickerUpper/nocontract/internal/projectfile"
 	"github.com/CheckPickerUpper/nocontract/messages"
-	"github.com/CheckPickerUpper/nocontract/openapi"
 )
 
 // DefaultProjectFile is the project file read when -project names none.
@@ -380,7 +378,7 @@ func absolute(projectFile string, next func(string) Outcome) Outcome {
 // generatedFile is one file generate owns: what it must hold, or that it must not exist.
 type generatedFile struct {
 	path    string
-	content outcome.Option[[]byte]
+	content outcome.Option[renderOutput]
 	owner   outputOwner
 }
 
@@ -417,7 +415,7 @@ func generatedGo(ctx context.Context, project projectfile.Project, finish finish
 			case reading.RoutesRead:
 				switch assembled := assembling.Assemble(routes.Declared).(type) {
 				case assembling.APIAssembled:
-					return outcome.Fold(renderedFiles(assembled.API, routes.Plan, project, existing), func(files []generatedFile) Outcome {
+					return outcome.Fold(renderedFiles(ctx, assembled.API, routes.Plan, project, existing), func(files []generatedFile) Outcome {
 						return onDisk(files, func(held []fileOnDisk) Outcome { return judgedServing(ctx, project, held, finish) })
 					}, func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
 				case assembling.APIRefused:
@@ -443,20 +441,11 @@ type loadedProject struct {
 // renderedFiles is the TypeScript file, the OpenAPI file, each package's Go file, the server file,
 // the test of them all, and every Go file NoContract wrote, at the paths existing names, that this
 // run no longer writes, which must go.
-func renderedFiles(api description.API, plan serverplan.Plan, project projectfile.Project, existing []string) outcome.Result[[]generatedFile] {
+func renderedFiles(ctx context.Context, api description.API, plan serverplan.Plan, project projectfile.Project, existing []string) outcome.Result[[]generatedFile] {
 	return outcome.Fold(servedFiles(plan, project.File()), func(served []generatedFile) outcome.Result[[]generatedFile] {
-		return outcome.Fold(renderedClientAndOpenAPI(api, project), func(publicFiles []generatedFile) outcome.Result[[]generatedFile] {
+		return outcome.Fold(renderedClientAndOpenAPI(ctx, api, project), func(publicFiles []generatedFile) outcome.Result[[]generatedFile] {
 			return plannedGeneratedFiles(project.File(), slices.Concat(publicFiles, served), existing)
 		}, outcome.Err[[]generatedFile])
-	}, outcome.Err[[]generatedFile])
-}
-
-func renderedClientAndOpenAPI(api description.API, project projectfile.Project) outcome.Result[[]generatedFile] {
-	return outcome.Fold(openapi.Render(api, project.OpenAPI().Version()), func(document []byte) outcome.Result[[]generatedFile] {
-		return outcome.Ok([]generatedFile{
-			{path: project.TypeScriptFile(), content: outcome.Some(effect.Render(api)), owner: headedOutput{header: description.GeneratedHeader, source: "typescript"}},
-			{path: project.OpenAPI().File(), content: outcome.Some(document), owner: openAPIOutput{}},
-		})
 	}, outcome.Err[[]generatedFile])
 }
 
@@ -511,9 +500,9 @@ func loadPackages(ctx context.Context, directory string, patterns []string, exis
 func judgedServing(ctx context.Context, project projectfile.Project, files []fileOnDisk, finish finisher) Outcome {
 	overlay, generatedGo := map[string][]byte{}, []string{}
 	for _, each := range files {
-		if filepath.Ext(each.file.path) == ".go" {
-			overlay[each.file.path] = outcome.FoldOption(each.file.content, func(content []byte) []byte { return content }, func() []byte { return []byte(setAsideFile) })
-			generatedGo = append(generatedGo, each.file.path)
+		if filepath.Ext(each.path) == ".go" {
+			overlay[each.path] = outcome.FoldOption(each.content, func(content []byte) []byte { return content }, func() []byte { return []byte(setAsideFile) })
+			generatedGo = append(generatedGo, each.path)
 		}
 	}
 	config := &packages.Config{

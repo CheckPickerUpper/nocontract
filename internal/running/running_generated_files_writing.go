@@ -35,10 +35,10 @@ func prepareOutputs(files []fileOnDisk, staged []preparedOutput, finish func([]p
 		return finish(staged)
 	}
 	file := files[0]
-	path := file.file.path
+	path := file.path
 	return outcome.Fold(stageRevision(path, file.held), func(prior outcome.Option[string]) Outcome {
 		defer discardRevision(prior)
-		next := outcome.FoldOption(file.file.content, func(content []byte) outcome.Option[fileContents] {
+		next := outcome.FoldOption(file.content, func(content []byte) outcome.Option[fileContents] {
 			return outcome.Some(fileContents{bytes: content, mode: 0o644})
 		}, outcome.None[fileContents])
 		return outcome.Fold(stageRevision(path, next), func(pending outcome.Option[string]) Outcome {

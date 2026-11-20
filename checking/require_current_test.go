@@ -134,7 +134,6 @@ func TestAFailureAddedWithoutGeneratingFailsTheProjectsTest(t *testing.T) {
 		"NC-1034 These files differ from what nocontract generate writes; run it again:",
 		filepath.Join(directory, "ledger", "nocontract_routes.go"),
 		filepath.Join(directory, "ledger_api.openapi.json"),
-		filepath.Join(directory, "web", "ledger_api.generated.ts"),
 		"Run go tool nocontract generate to write the generated files again.",
 	}
 	if want := []string{strings.Join(wantLines, "\n") + "\n"}; !slices.Equal(stale, want) {

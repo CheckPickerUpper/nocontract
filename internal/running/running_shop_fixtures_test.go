@@ -1,6 +1,7 @@
 package running_test
 
 import (
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -54,12 +55,23 @@ func readShopFixture(t *testing.T, directory string) shopFixture {
 	return shopFixture{directory: directory, files: files}
 }
 
-func useAuthoredGoShop(t *testing.T, fixture shopFixture) string {
+func copyGoShop(t *testing.T, fixture shopFixture) string {
 	t.Helper()
-	return filepath.Join(fixture.directory, "nocontract.json")
+	project := copyShop(t, fixture)
+	directory := filepath.Dir(project)
+	checkout := filepath.Clean(filepath.Join(fixture.directory, "..", "..", ".."))
+	module := heldOrStop(t, filepath.Join(directory, "go.mod"))
+	scratchproject.WriteFile(t, directory, "go.mod", scratchproject.BytesOrStop(t, "pointing the shop at NoContract", scratchproject.LocalModule([]byte(module), checkout)))
+
+	projectFields := map[string]json.RawMessage{}
+	scratchproject.StopOn(t, "reading the Go shop test project", json.Unmarshal([]byte(heldOrStop(t, project)), &projectFields))
+	delete(projectFields, "typescript")
+	config := scratchproject.BytesOrStop(t, "encoding the Go shop test project", outcome.TupleToResult(json.Marshal(projectFields)))
+	scratchproject.WriteFile(t, directory, filepath.Base(project), config)
+	return project
 }
 
-func copyNativeShop(t *testing.T, fixture shopFixture) string {
+func copyShop(t *testing.T, fixture shopFixture) string {
 	t.Helper()
 	directory := t.TempDir()
 	for _, file := range fixture.files {

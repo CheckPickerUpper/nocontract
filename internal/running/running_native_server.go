@@ -31,7 +31,7 @@ type projectRunFailed struct{ failed Outcome }
 
 func (failed projectRunFailed) Error() string { return strings.Join(failed.failed.Lines(), "\n") }
 
-// OpenNativeServer checks generated files and starts the native dispatcher.
+// OpenNativeServer checks the server bindings and starts their native dispatcher.
 func OpenNativeServer(context context.Context, projectFile string, layers []nocontract.Layer) outcome.Result[NativeServer] {
 	return outcome.Fold(outcome.TupleToResult(filepath.Abs(projectFile)), func(path string) outcome.Result[NativeServer] {
 		refused := func(failed Outcome) outcome.Result[NativeServer] {

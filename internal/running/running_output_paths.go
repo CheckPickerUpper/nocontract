@@ -36,7 +36,7 @@ func plannedGeneratedFiles(project string, writes []generatedFile, existing []st
 			occupied := map[string]outputClaim{projectEntry: projectClaim, projectSource: projectClaim}
 			files := slices.Clone(writes)
 			for _, path := range existing {
-				files = append(files, generatedFile{path: path, content: outcome.None[[]byte](), owner: headedOutput{header: description.GeneratedHeader, source: "generated source"}})
+				files = append(files, generatedFile{path: path, content: outcome.None[renderOutput](), owner: headedOutput{header: description.GeneratedHeader, source: "generated source"}})
 			}
 			planned := outcome.Ok(make([]generatedFile, 0, len(files)))
 			for _, file := range files {
@@ -45,7 +45,7 @@ func plannedGeneratedFiles(project string, writes []generatedFile, existing []st
 						claim := outputClaim{file: file.path, owner: outputSource(file.owner)}
 						if first, taken := occupied[location]; taken {
 							// A current artifact takes the place of any planned removal at its path.
-							return outcome.FoldOption(file.content, func([]byte) outcome.Result[[]generatedFile] {
+							return outcome.FoldOption(file.content, func(renderOutput) outcome.Result[[]generatedFile] {
 								return outcome.Err[[]generatedFile](generatedPathsOverlap{location: location, first: first, second: claim})
 							}, func() outcome.Result[[]generatedFile] { return outcome.Ok(accepted) })
 						}

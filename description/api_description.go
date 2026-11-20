@@ -4,8 +4,6 @@ package description
 
 import (
 	"net/http"
-	"unicode"
-	"unicode/utf8"
 
 	ergo "github.com/CheckPickerUpper/ErGo"
 	"github.com/CheckPickerUpper/outcome"
@@ -32,12 +30,6 @@ type API struct {
 type Group struct {
 	Name      string
 	Endpoints []Endpoint
-}
-
-// GroupClassName is the TypeScript class of the routes a module named name declares.
-func GroupClassName(name string) string {
-	first, size := utf8.DecodeRuneInString(name)
-	return string(unicode.ToUpper(first)) + name[size:] + "Group"
 }
 
 // Method is the HTTP method a route answers: its name as a request spells it, and whether its

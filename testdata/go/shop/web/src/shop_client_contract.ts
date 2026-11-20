@@ -1,6 +1,6 @@
 import { type DateTime, Effect } from "effect"
 import { HttpApiClient } from "effect/http-api"
-import { ShopApi } from "./shop_openapi_client.generated.mjs"
+import { ShopApi } from "./shop_api.generated.js"
 
 const shopClient = HttpApiClient.make(ShopApi, { baseUrl: "https://shop.example" })
 

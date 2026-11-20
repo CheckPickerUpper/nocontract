@@ -60,15 +60,10 @@ func TestEachWrongDeclarationIsRefusedWithItsCode(t *testing.T) {
 	codes := []string{}
 	for _, refusal := range refused.Refusals {
 		codes = append(codes, refusal.Problem.ErrorCode().String())
-		// The project names its API Schema, which the client imports, so the name is refused
-		// where the project file gives it.
-		if refusal.Position.File == project(t, "refused") && (refusal.Position.Line != 5 || refusal.Position.Column != 10) {
-			t.Errorf("the API's name was refused at %s; want line 5, column 10", refusal.Position)
-		}
 	}
 	slices.Sort(codes)
 	want := []string{
-		"NC-1005", "NC-1012", "NC-1013", "NC-1014", "NC-1015", "NC-1016", "NC-1017", "NC-1018",
+		"NC-1005", "NC-1012", "NC-1013", "NC-1014", "NC-1015", "NC-1016", "NC-1017",
 		"NC-1022", "NC-1025", "NC-1027", "NC-1029", "NC-1033", "NC-1046", "NC-1048", "NC-1049", "NC-1050",
 		"NC-1051", "NC-1051", "NC-1052", "NC-1056", "NC-1090", "NC-1091", "NC-1092", "NC-1093", "NC-1094", "NC-1095",
 		"NC-1096", "NC-1097", "NC-1096", "NC-1098", "NC-1099", "NC-1100", "NC-1101", "NC-1102", "NC-1103", "NC-1104",

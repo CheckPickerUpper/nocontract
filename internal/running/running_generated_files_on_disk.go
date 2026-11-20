@@ -144,6 +144,12 @@ func fileStart(path string, length int64) outcome.Result[[]byte] {
 // fileOnDisk is one file generate owns, and what its path holds now: nothing, or a file generate
 // may overwrite, with its content.
 type fileOnDisk struct {
+	path    string
+	content outcome.Option[[]byte]
+	held    outcome.Option[fileContents]
+}
+
+type claimedOutput struct {
 	file generatedFile
 	held outcome.Option[fileContents]
 }
@@ -201,7 +207,7 @@ func (headedOutput) isOutputOwner()  {}
 func (openAPIOutput) isOutputOwner() {}
 
 func goFileAt(path string, content []byte) generatedFile {
-	return generatedFile{path: path, content: outcome.Some(content), owner: headedOutput{header: description.GeneratedHeader, source: "generated source"}}
+	return generatedFile{path: path, content: outcome.Some(renderedOutput(content)), owner: headedOutput{header: description.GeneratedHeader, source: "generated source"}}
 }
 
 // readHolding checks ownership before replacing a file.
@@ -238,13 +244,13 @@ func ownsContent(owner outputOwner, content []byte) bool {
 // onDisk hands next each file with what its path holds. It stops at the first path holding a file
 // it cannot read, and refuses every file the project wrote at one of the paths.
 func onDisk(files []generatedFile, next func([]fileOnDisk) Outcome) Outcome {
-	read, taken := []fileOnDisk{}, []string{}
+	read, taken := []claimedOutput{}, []string{}
 	for _, file := range files {
 		switch held := readHolding(file).(type) {
 		case pathEmpty:
-			read = append(read, fileOnDisk{file: file, held: outcome.None[fileContents]()})
+			read = append(read, claimedOutput{file: file, held: outcome.None[fileContents]()})
 		case pathOwned:
-			read = append(read, fileOnDisk{file: file, held: outcome.Some(held.contents)})
+			read = append(read, claimedOutput{file: file, held: outcome.Some(held.contents)})
 		case pathTaken:
 			taken = append(taken, file.path)
 		case pathUnreadable:
@@ -255,13 +261,13 @@ func onDisk(files []generatedFile, next func([]fileOnDisk) Outcome) Outcome {
 	if len(taken) > 0 {
 		return FilesNotGenerated{Paths: taken}
 	}
-	return next(read)
+	return renderClaimedOutputs(read, nil, next)
 }
 
 // current is whether the file's path holds what generate writes there: its content, or nothing for
 // a file that must not exist.
 func (file fileOnDisk) current() bool {
-	return outcome.FoldOption(file.file.content, func(content []byte) bool {
+	return outcome.FoldOption(file.content, func(content []byte) bool {
 		return outcome.FoldOption(file.held, func(held fileContents) bool { return bytes.Equal(held.bytes, content) }, func() bool { return false })
 	}, func() bool {
 		return outcome.FoldOption(file.held, func(fileContents) bool { return false }, func() bool { return true })
@@ -274,10 +280,10 @@ func compareFiles(files []fileOnDisk) Outcome {
 	stale, current := []string{}, []string{}
 	for _, file := range files {
 		if file.current() {
-			current = append(current, file.file.path)
+			current = append(current, file.path)
 			continue
 		}
-		stale = append(stale, file.file.path)
+		stale = append(stale, file.path)
 	}
 	if len(stale) > 0 {
 		return FilesStale{Paths: stale}

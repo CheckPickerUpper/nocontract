@@ -82,8 +82,8 @@ func WriteFile(t testing.TB, directory string, path string, content []byte) {
 	StopOn(t, "writing "+file, os.WriteFile(file, content, 0o644))
 }
 
-// modFile is the shop's go.mod with nocontract read from checkout.
-func modFile(shopModFile []byte, checkout string) outcome.Result[[]byte] {
+// LocalModule is a go.mod with NoContract resolved from checkout.
+func LocalModule(shopModFile []byte, checkout string) outcome.Result[[]byte] {
 	return outcome.Fold(outcome.TupleToResult(modfile.Parse("go.mod", shopModFile, nil)), func(module *modfile.File) outcome.Result[[]byte] {
 		return outcome.FoldOption(outcome.EmptyableToOption(module.AddReplace("github.com/CheckPickerUpper/nocontract", "", checkout, "")), outcome.Err[[]byte],
 			func() outcome.Result[[]byte] { return outcome.TupleToResult(module.Format()) })
@@ -102,12 +102,12 @@ func ledgerFiles(checkout string) outcome.Result[[]ledgerFile] {
 	return outcome.Fold(outcome.TupleToResult(filepath.Abs(checkout)), func(root string) outcome.Result[[]ledgerFile] {
 		shop := filepath.Join(root, "testdata", "go", "shop")
 		return outcome.Fold(outcome.TupleToResult(os.ReadFile(filepath.Join(shop, "go.mod"))), func(shopModFile []byte) outcome.Result[[]ledgerFile] {
-			return outcome.Fold(modFile(shopModFile, root), func(scratchModFile []byte) outcome.Result[[]ledgerFile] {
+			return outcome.Fold(LocalModule(shopModFile, root), func(scratchModFile []byte) outcome.Result[[]ledgerFile] {
 				return outcome.Fold(outcome.TupleToResult(os.ReadFile(filepath.Join(shop, "go.sum"))), func(sums []byte) outcome.Result[[]ledgerFile] {
 					return outcome.Ok([]ledgerFile{
 						{path: "go.mod", content: scratchModFile},
 						{path: "go.sum", content: sums},
-						{path: "nocontract.json", content: []byte(`{"language": "go", "packages": ["./..."], "typescript": "web/ledger_api.generated.ts", "api": "LedgerApi", ` +
+						{path: "nocontract.json", content: []byte(`{"language": "go", "packages": ["./..."], "api": "LedgerApi", ` +
 							`"openapi": {"file": "ledger_api.openapi.json", "version": "1.0.0"}, "server": "server"}`)},
 						{path: "ledger/ledger_routes.go", content: []byte(LedgerRoutes)},
 					})

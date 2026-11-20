@@ -29,7 +29,6 @@ type shopServerAddress struct {
 
 type shopBackend struct {
 	language string
-	command  string
 	prepare  func(*testing.T, shopFixture) string
 	open     func(*testing.T, string) shopServerAddress
 }
@@ -41,16 +40,18 @@ func TestShopBackendsConformToTheSameHTTPContract(t *testing.T) {
 	expected := readShopContract(t, filepath.Join(checkout, "testdata", "go", "shop", "shop_api.openapi.json"))
 	requests := shopRequests()
 	for _, backend := range []shopBackend{
-		{language: "go", command: "check", prepare: useAuthoredGoShop, open: openGoShop},
-		{language: "odin", command: "generate", prepare: copyNativeShop, open: openNativeShop},
-		{language: "gleam", command: "generate", prepare: copyNativeShop, open: openNativeShop},
+		{language: "go", prepare: copyGoShop, open: openGoShop},
+		{language: "odin", prepare: copyShop, open: openNativeShop},
+		{language: "gleam", prepare: copyShop, open: openNativeShop},
 	} {
 		t.Run(backend.language, func(t *testing.T) {
 			fixture := readShopFixture(t, filepath.Join(checkout, "testdata", backend.language, "shop"))
 			project := backend.prepare(t, fixture)
-			generated := running.Run(running.Request{Arguments: []string{backend.command, "-project", project}, Context: t.Context()})
-			if generated.ExitCode() != 0 {
-				t.Fatalf("%s %s exited %d:\n%s", backend.command, project, generated.ExitCode(), strings.Join(generated.Lines(), "\n"))
+			for _, command := range []string{"generate", "check"} {
+				result := running.Run(running.Request{Arguments: []string{command, "-project", project}, Context: t.Context()})
+				if result.ExitCode() != 0 {
+					t.Fatalf("%s %s exited %d:\n%s", command, project, result.ExitCode(), strings.Join(result.Lines(), "\n"))
+				}
 			}
 			readShopProjectContract(t, project, func(contract shopContract) {
 				assertShopContract(t, expected, contract)

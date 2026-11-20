@@ -182,12 +182,11 @@ Every route behind a guard lists the guard's refusals among its failures in the 
 
 ## Generating
 
-A `nocontract.json` beside `go.mod` names the backend's language, the packages holding routes,
-the TypeScript file to write, the name of the API class, the OpenAPI 3.1 file to write with the
-version of the API it declares, and the folder of the server package to write. Each path is
-relative to `nocontract.json`. Every key is required, written once, and not empty; no other key
-is read. The API's name is the TypeScript class the client declares, so it is an identifier and
-no reserved word. Each wrong place in the file is refused with its line and column:
+A `nocontract.json` names the backend language, the packages holding routes, the API name, the
+OpenAPI output and version, and the server output folder. Paths are relative to
+`nocontract.json`. Include `typescript` to generate an Effect client for the same OpenAPI
+document. The API name must be a TypeScript identifier. Configuration errors name their
+line and column.
 
 ```json
 {
@@ -211,9 +210,14 @@ It also writes `nocontract_files_test.go` into the first package that declares a
 guard's refusal, in folder order, so `go test ./...` fails while any generated file differs from
 what `generate` writes, listing each one. `check` runs the same comparison on its own.
 
-A Go file is one NoContract wrote when its first line is Go's generated-code header naming
-`nocontract`, whatever the file is called. `generate` never overwrites a Go file you wrote: when one
-sits at a path it writes, it stops and names the file.
+With `typescript` set, both commands use Bun to run the installed `@effect/openapi-generator`
+from the frontend. Use the Effect and generator pins in the [shop's package manifest](testdata/go/shop/web/package.json)
+and its [pnpm overrides](testdata/go/shop/web/pnpm-workspace.yaml). Run `pnpm install` in the
+frontend before generation. A project that publishes only OpenAPI can omit `typescript`.
+
+Source outputs carry a generated header. OpenAPI documents carry an ownership marker in
+`info`. Generation refuses files without the appropriate marker. To regenerate an older,
+unmarked NoContract document, move the old document aside before running `generate`.
 
 The OpenAPI file lists each route's path and query parameters, its body, and every member it
 answers with under that member's status. Each member is its own schema, whose `_tag` and, for a

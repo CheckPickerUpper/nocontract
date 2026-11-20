@@ -15,6 +15,7 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
+	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 )
 
 // Project is a project file read: the file itself, its backend's language, the package patterns
@@ -25,7 +26,7 @@ type Project struct {
 	file       string
 	backend    Backend
 	packages   []string
-	typeScript string
+	typeScript outcome.Option[string]
 	api        assembling.NamedAPI
 	openAPI    OpenAPIFile
 	server     string
@@ -43,8 +44,8 @@ func (project Project) Backend() Backend { return project.backend }
 // Packages is every package pattern holding routes, none of them empty, at least one.
 func (project Project) Packages() []string { return slices.Clone(project.packages) }
 
-// TypeScriptFile is the TypeScript file to write.
-func (project Project) TypeScriptFile() string { return project.typeScript }
+// TypeScriptFile is the configured TypeScript output, if the project has one.
+func (project Project) TypeScriptFile() outcome.Option[string] { return project.typeScript }
 
 // API is the API's name and where the project file gives it.
 func (project Project) API() assembling.NamedAPI { return project.api }
@@ -157,20 +158,22 @@ func (parse *projectParse) project(root readValue) outcome.Option[Project] {
 	directory := filepath.Dir(parse.file)
 	language := parse.backend(fields, root.start)
 	packages := parse.patterns(fields, root.start)
-	typeScript := parse.path(fields, "", "typescript", root.start)
+	typeScript := outcome.FoldOption(keyed.Entry(fields, "typescript"), func(field jsonField) outcome.Option[string] {
+		return foldSome(parse.text("typescript", field.value), func(file string) outcome.Option[string] {
+			return outcome.Some(filepath.Join(directory, file))
+		})
+	}, outcome.None[string])
 	api := parse.apiName(fields, root.start)
 	openAPI := parse.openAPI(fields, root.start)
 	server := parse.path(fields, "", "server", root.start)
 	return foldSome(language, func(backend Backend) outcome.Option[Project] {
 		return foldSome(packages, func(patterns []string) outcome.Option[Project] {
-			return foldSome(typeScript, func(typeScriptFile string) outcome.Option[Project] {
-				return foldSome(api, func(named assembling.NamedAPI) outcome.Option[Project] {
-					return foldSome(openAPI, func(document OpenAPIFile) outcome.Option[Project] {
-						return foldSome(server, func(serverFolder string) outcome.Option[Project] {
-							return outcome.Some(Project{
-								file: parse.file, backend: backend, packages: patterns, typeScript: filepath.Join(directory, typeScriptFile),
-								api: named, openAPI: document, server: filepath.Join(directory, serverFolder),
-							})
+			return foldSome(api, func(named assembling.NamedAPI) outcome.Option[Project] {
+				return foldSome(openAPI, func(document OpenAPIFile) outcome.Option[Project] {
+					return foldSome(server, func(serverFolder string) outcome.Option[Project] {
+						return outcome.Some(Project{
+							file: parse.file, backend: backend, packages: patterns, typeScript: typeScript,
+							api: named, openAPI: document, server: filepath.Join(directory, serverFolder),
 						})
 					})
 				})

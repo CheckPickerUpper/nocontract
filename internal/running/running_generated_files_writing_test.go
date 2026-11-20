@@ -17,37 +17,37 @@ func TestPublishingRestoresAnUpdatedAndADeletedOutputAfterARenameFails(t *testin
 		t.Helper()
 		outcome.ForEachOption(outcome.EmptyableToOption(failure), func(cause error) { t.Fatalf("%s: %v", operation, cause) })
 	}
-	update := goFileAt(filepath.Join(directory, "new.go"), []byte("new contents"))
-	remove := generatedFile{path: filepath.Join(directory, "stale.go"), content: outcome.None[[]byte](), owner: update.owner}
-	added := goFileAt(filepath.Join(directory, "added.go"), []byte("added contents"))
-	blocked := goFileAt(filepath.Join(directory, "blocked.go"), []byte("blocked contents"))
+	update := filepath.Join(directory, "new.go")
+	remove := filepath.Join(directory, "stale.go")
+	added := filepath.Join(directory, "added.go")
+	blocked := filepath.Join(directory, "blocked.go")
 	original := fileContents{bytes: []byte("previous contents"), mode: 0o640}
-	for _, path := range []string{update.path, remove.path} {
+	for _, path := range []string{update, remove} {
 		require("writing "+path, os.WriteFile(path, original.bytes, original.mode))
 	}
 
 	result := prepareOutputs([]fileOnDisk{
-		{file: update, held: outcome.Some(original)},
-		{file: remove, held: outcome.Some(original)},
-		{file: added, held: outcome.None[fileContents]()},
-		{file: blocked, held: outcome.None[fileContents]()},
+		{path: update, content: outcome.Some([]byte("new contents")), held: outcome.Some(original)},
+		{path: remove, content: outcome.None[[]byte](), held: outcome.Some(original)},
+		{path: added, content: outcome.Some([]byte("added contents")), held: outcome.None[fileContents]()},
+		{path: blocked, content: outcome.Some([]byte("blocked contents")), held: outcome.None[fileContents]()},
 	}, nil, func(changes []preparedOutput) Outcome {
-		require("occupying "+blocked.path, os.Mkdir(blocked.path, 0o755))
+		require("occupying "+blocked, os.Mkdir(blocked, 0o755))
 		return publishOutputs(changes, 0, []string{})
 	})
 
 	failure, wasBlocked := result.(FileNotWritten)
-	if !wasBlocked || failure.Path != blocked.path {
-		t.Fatalf("publishing answered %v; want %s refused", result.Lines(), blocked.path)
+	if !wasBlocked || failure.Path != blocked {
+		t.Fatalf("publishing answered %v; want %s refused", result.Lines(), blocked)
 	}
-	for _, path := range []string{update.path, remove.path} {
+	for _, path := range []string{update, remove} {
 		observed, readError := os.ReadFile(path)
 		require("reading "+path, readError)
 		if string(observed) != string(original.bytes) {
 			t.Errorf("%s holds %q after the failed publish; want %q", path, observed, original.bytes)
 		}
 	}
-	if _, err := os.Stat(added.path); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("unexpected result reading %s: %v", added.path, err)
+	if _, err := os.Stat(added); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("unexpected result reading %s: %v", added, err)
 	}
 }

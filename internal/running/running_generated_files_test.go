@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -64,6 +65,13 @@ func TestAGoFileTheProjectWroteWhereGenerateWritesIsRefusedAndKept(t *testing.T)
 	}
 }
 
+func setTypeScriptOutput(t *testing.T, directory, path string) {
+	t.Helper()
+	project := heldOrStop(t, filepath.Join(directory, "nocontract.json"))
+	config := strings.Replace(project, `"api":`, `"typescript": `+strconv.Quote(path)+`, "api":`, 1)
+	scratchproject.WriteFile(t, directory, "nocontract.json", []byte(config))
+}
+
 func TestGenerateLeavesHandwrittenClientAndOpenAPIFilesAlone(t *testing.T) {
 	t.Parallel()
 	for _, file := range []struct {
@@ -75,6 +83,9 @@ func TestGenerateLeavesHandwrittenClientAndOpenAPIFilesAlone(t *testing.T) {
 	} {
 		t.Run(file.path, func(t *testing.T) {
 			directory := scratchproject.Ledger(t, filepath.Join("..", ".."))
+			if filepath.Ext(file.path) == ".ts" {
+				setTypeScriptOutput(t, directory, file.path)
+			}
 			target := filepath.Join(directory, filepath.FromSlash(file.path))
 			scratchproject.WriteFile(t, directory, file.path, []byte(file.content))
 
@@ -93,19 +104,22 @@ func TestGenerateLeavesHandwrittenClientAndOpenAPIFilesAlone(t *testing.T) {
 func TestGenerateKeepsEveryOutputWhenALaterOutputCannotBePrepared(t *testing.T) {
 	t.Parallel()
 	directory := scratchproject.Ledger(t, filepath.Join("..", ".."))
-	web := filepath.Join(directory, "web")
-	scratchproject.StopOn(t, "creating "+web, os.Mkdir(web, 0o555))
-	t.Cleanup(func() { scratchproject.StopOn(t, "unlocking "+web, os.Chmod(web, 0o755)) })
+	blocked := filepath.Join(directory, "zz-openapi")
+	scratchproject.StopOn(t, "creating "+blocked, os.Mkdir(blocked, 0o555))
+	t.Cleanup(func() { scratchproject.StopOn(t, "unlocking "+blocked, os.Chmod(blocked, 0o755)) })
+	project := heldOrStop(t, filepath.Join(directory, "nocontract.json"))
+	config := strings.Replace(project, `"ledger_api.openapi.json"`, `"zz-openapi/ledger_api.openapi.json"`, 1)
+	scratchproject.WriteFile(t, directory, "nocontract.json", []byte(config))
 
 	result := runOn(t, "generate", directory)
 
-	if refused, isRefused := result.(running.FileNotWritten); !isRefused || filepath.Dir(refused.Path) != web {
-		t.Errorf("generate answered %v; want the unwritable client reported", result.Lines())
+	if refused, isRefused := result.(running.FileNotWritten); !isRefused || filepath.Dir(refused.Path) != blocked {
+		t.Errorf("generate answered %v; want the unwritable OpenAPI file reported", result.Lines())
 	}
-	document := filepath.Join(directory, "ledger_api.openapi.json")
-	_, statError := os.Stat(document)
+	routes := filepath.Join(directory, "ledger", "nocontract_routes.go")
+	_, statError := os.Stat(routes)
 	if !errors.Is(statError, fs.ErrNotExist) {
-		t.Errorf("%s must remain absent when the client cannot be prepared, stat returned %v", document, statError)
+		t.Errorf("%s must remain absent when OpenAPI cannot be prepared, stat returned %v", routes, statError)
 	}
 }
 
@@ -126,9 +140,9 @@ func TestGenerateRefusesConflictingOutputPathsBeforeWriting(t *testing.T) {
 			if target.alias {
 				scratchproject.StopOn(t, "linking output folder", os.Symlink(directory, filepath.Join(directory, "alias")))
 			}
+			setTypeScriptOutput(t, directory, target.path)
 			projectFile := filepath.Join(directory, "nocontract.json")
-			config := strings.Replace(heldOrStop(t, projectFile), "web/ledger_api.generated.ts", target.path, 1)
-			scratchproject.WriteFile(t, directory, "nocontract.json", []byte(config))
+			config := heldOrStop(t, projectFile)
 			result := runOn(t, "generate", directory)
 			location := filepath.Join(directory, target.path)
 			diagnostic := strings.Join(result.Lines(), "\n")
