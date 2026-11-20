@@ -1430,7 +1430,7 @@ Message: `The file {Path} could not be read.`
 ## NC-1129 FilesNotGenerated
 
 FilesNotGenerated is a run that found files the project wrote at paths generate writes: each
-begins with no generated header, so generate leaves it as it is.
+has no NoContract ownership marker, so generate leaves it as it is.
 
 Declared in `internal/running/running_generated_files_on_disk.go`.
 

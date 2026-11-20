@@ -10,10 +10,9 @@ import (
 	"strings"
 
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/creachadair/atomicfile"
-	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/description"
+	"github.com/CheckPickerUpper/nocontract/openapi"
 )
 
 // FolderUnreadable is a folder of the project the run could not list, with the operating system's
@@ -38,7 +37,7 @@ type FileUnreadable struct {
 }
 
 // FilesNotGenerated is a run that found files the project wrote at paths generate writes: each
-// begins with no generated header, so generate leaves it as it is.
+// has no NoContract ownership marker, so generate leaves it as it is.
 //
 //ergo:code NC-1129
 //ergo:message These files are where nocontract generate writes its own, and NoContract did not write them; move or rename them:
@@ -105,7 +104,7 @@ func generatedGoFiles(directory string, next func([]string) Outcome) Outcome {
 		case entry.IsDir() && path != directory &&
 			(strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "testdata" || name == "vendor" || name == "node_modules"):
 			return filepath.SkipDir
-		case entry.IsDir() || filepath.Ext(name) != ".go":
+		case !entry.Type().IsRegular() || filepath.Ext(name) != ".go":
 			return nil
 		}
 		return outcome.Fold(fileStart(path, int64(len(description.GeneratedHeader))), func(start []byte) error {
@@ -146,7 +145,7 @@ func fileStart(path string, length int64) outcome.Result[[]byte] {
 // may overwrite, with its content.
 type fileOnDisk struct {
 	file generatedFile
-	held mo.Option[[]byte]
+	held outcome.Option[fileContents]
 }
 
 // pathHolding is what the disk holds at a path generate writes.
@@ -159,11 +158,15 @@ type pathHolding interface{ isPathHolding() }
 //ergo:not-an-error
 type pathEmpty struct{}
 
-// pathOwned is a path holding a file generate may overwrite: a Go file NoContract wrote, or the
-// TypeScript or OpenAPI file at the path the project file names for it.
+// pathOwned is a path holding a regular file with the ownership marker for its output format.
 //
 //ergo:not-an-error
-type pathOwned struct{ content []byte }
+type pathOwned struct{ contents fileContents }
+
+type fileContents struct {
+	bytes []byte
+	mode  fs.FileMode
+}
 
 // pathTaken is a path holding a file the project wrote.
 //
@@ -186,39 +189,50 @@ func (pathUnreadable) isPathHolding() {}
 type outputOwner interface{ isOutputOwner() }
 
 //ergo:not-an-error
-type declaredOutput struct{ setting string }
+type headedOutput struct {
+	header string
+	source string
+}
 
 //ergo:not-an-error
-type headedOutput struct{ header string }
+type openAPIOutput struct{}
 
-func (declaredOutput) isOutputOwner() {}
-func (headedOutput) isOutputOwner()   {}
+func (headedOutput) isOutputOwner()  {}
+func (openAPIOutput) isOutputOwner() {}
 
 func goFileAt(path string, content []byte) generatedFile {
-	return generatedFile{path: path, content: mo.Some(content), owner: headedOutput{header: description.GeneratedHeader}}
+	return generatedFile{path: path, content: outcome.Some(content), owner: headedOutput{header: description.GeneratedHeader, source: "generated source"}}
 }
 
 // readHolding checks ownership before replacing a file.
 func readHolding(file generatedFile) pathHolding {
-	return outcome.Fold(outcome.TupleToResult(os.ReadFile(file.path)), func(content []byte) pathHolding {
-		switch owner := file.owner.(type) {
-		case headedOutput:
-			if bytes.HasPrefix(content, []byte(owner.header)) {
-				return pathOwned{content: content}
-			}
-		case declaredOutput:
-			if filepath.Ext(file.path) != ".go" || bytes.HasPrefix(content, []byte(description.GeneratedHeader)) {
-				return pathOwned{content: content}
-			}
-		case nil:
+	return outcome.Fold(outcome.TupleToResult(os.Lstat(file.path)), func(info fs.FileInfo) pathHolding {
+		if !info.Mode().IsRegular() {
+			return pathTaken{}
 		}
-		return pathTaken{}
+		return outcome.Fold(outcome.TupleToResult(os.ReadFile(file.path)), func(content []byte) pathHolding {
+			if ownsContent(file.owner, content) {
+				return pathOwned{contents: fileContents{bytes: content, mode: info.Mode()}}
+			}
+			return pathTaken{}
+		}, func(cause error) pathHolding { return pathUnreadable{cause: cause} })
 	}, func(cause error) pathHolding {
 		if errors.Is(cause, fs.ErrNotExist) {
 			return pathEmpty{}
 		}
 		return pathUnreadable{cause: cause}
 	})
+}
+
+func ownsContent(owner outputOwner, content []byte) bool {
+	switch marker := owner.(type) {
+	case headedOutput:
+		return bytes.HasPrefix(content, []byte(marker.header))
+	case openAPIOutput:
+		return openapi.IsGenerated(content)
+	case nil:
+	}
+	return false
 }
 
 // onDisk hands next each file with what its path holds. It stops at the first path holding a file
@@ -228,9 +242,9 @@ func onDisk(files []generatedFile, next func([]fileOnDisk) Outcome) Outcome {
 	for _, file := range files {
 		switch held := readHolding(file).(type) {
 		case pathEmpty:
-			read = append(read, fileOnDisk{file: file, held: mo.None[[]byte]()})
+			read = append(read, fileOnDisk{file: file, held: outcome.None[fileContents]()})
 		case pathOwned:
-			read = append(read, fileOnDisk{file: file, held: mo.Some(held.content)})
+			read = append(read, fileOnDisk{file: file, held: outcome.Some(held.contents)})
 		case pathTaken:
 			taken = append(taken, file.path)
 		case pathUnreadable:
@@ -247,10 +261,10 @@ func onDisk(files []generatedFile, next func([]fileOnDisk) Outcome) Outcome {
 // current is whether the file's path holds what generate writes there: its content, or nothing for
 // a file that must not exist.
 func (file fileOnDisk) current() bool {
-	return mo.Fold(file.file.content, func(content []byte) bool {
-		return mo.Fold(file.held, func(held []byte) bool { return bytes.Equal(held, content) }, func(error) bool { return false })
-	}, func(error) bool {
-		return mo.Fold(file.held, func([]byte) bool { return false }, func(error) bool { return true })
+	return outcome.FoldOption(file.file.content, func(content []byte) bool {
+		return outcome.FoldOption(file.held, func(held fileContents) bool { return bytes.Equal(held.bytes, content) }, func() bool { return false })
+	}, func() bool {
+		return outcome.FoldOption(file.held, func(fileContents) bool { return false }, func() bool { return true })
 	})
 }
 
@@ -269,44 +283,4 @@ func compareFiles(files []fileOnDisk) Outcome {
 		return FilesStale{Paths: stale}
 	}
 	return FilesCurrent{Paths: current}
-}
-
-func writeFiles(files []fileOnDisk) Outcome {
-	return writeEach(writeProgress{all: files, remaining: files, written: []string{}})
-}
-
-// writeProgress is a generate's progress through its files: every file, those not yet written,
-// and the paths written or deleted so far.
-type writeProgress struct {
-	all       []fileOnDisk
-	remaining []fileOnDisk
-	written   []string
-}
-
-// next is the progress past the first remaining file, having written it or not.
-func (progress writeProgress) next(written []string) writeProgress {
-	return writeProgress{all: progress.all, remaining: progress.remaining[1:], written: written}
-}
-
-// writeEach writes or deletes each remaining file that is not current, stopping at the first
-// that cannot be.
-func writeEach(progress writeProgress) Outcome {
-	if len(progress.remaining) == 0 {
-		if len(progress.written) == 0 {
-			return compareFiles(progress.all)
-		}
-		return FilesWritten{Paths: progress.written}
-	}
-	file := progress.remaining[0]
-	if file.current() {
-		return writeEach(progress.next(progress.written))
-	}
-	path := file.file.path
-	failure := mo.Fold(file.file.content, func(content []byte) error {
-		return mo.Fold(mo.EmptyableToOption(os.MkdirAll(filepath.Dir(path), 0o755)), func(cause error) error { return cause },
-			func(error) error { return atomicfile.WriteData(path, content, 0o644) })
-	}, func(error) error { return os.Remove(path) })
-	return mo.Fold(mo.EmptyableToOption(failure), func(cause error) Outcome {
-		return FileNotWritten{Path: path, Cause: cause}
-	}, func(error) Outcome { return writeEach(progress.next(append(progress.written, path))) })
 }

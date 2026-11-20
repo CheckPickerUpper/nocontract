@@ -35,7 +35,7 @@ func Render(api description.API, version string) outcome.Result[[]byte] {
 	}
 	written := document{
 		OpenAPI:    documentVersion,
-		Info:       info{Title: api.Name.Text(), Version: version},
+		Info:       info{Title: api.Name.Text(), Version: version, GeneratedBy: description.GeneratedNotice},
 		Tags:       tags,
 		Paths:      paths(api),
 		Components: components{Schemas: componentSchemas(api)},
@@ -43,6 +43,17 @@ func Render(api description.API, version string) outcome.Result[[]byte] {
 	return outcome.Fold(outcome.TupleToResult(json.MarshalIndent(written, "", "  ")), func(encoded []byte) outcome.Result[[]byte] {
 		return outcome.Ok(append(encoded, '\n'))
 	}, outcome.Err[[]byte])
+}
+
+// IsGenerated reports whether the document carries NoContract's OpenAPI ownership marker.
+func IsGenerated(encoded []byte) bool {
+	metadata := struct {
+		Info info `json:"info"`
+	}{Info: info{Title: "", Version: "", GeneratedBy: ""}}
+	decoded := outcome.TupleToResult(struct{}{}, json.Unmarshal(encoded, &metadata))
+	return outcome.Fold(decoded, func(struct{}) bool {
+		return metadata.Info.GeneratedBy == description.GeneratedNotice
+	}, func(error) bool { return false })
 }
 
 // paths is every route's operation, under its path and its method.

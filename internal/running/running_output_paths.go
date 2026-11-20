@@ -11,7 +11,6 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/samber/mo"
 )
 
 type outputClaim struct {
@@ -37,7 +36,7 @@ func plannedGeneratedFiles(project string, writes []generatedFile, existing []st
 			occupied := map[string]outputClaim{projectEntry: projectClaim, projectSource: projectClaim}
 			files := slices.Clone(writes)
 			for _, path := range existing {
-				files = append(files, generatedFile{path: path, content: mo.None[[]byte](), owner: headedOutput{header: description.GeneratedHeader}})
+				files = append(files, generatedFile{path: path, content: outcome.None[[]byte](), owner: headedOutput{header: description.GeneratedHeader, source: "generated source"}})
 			}
 			planned := outcome.Ok(make([]generatedFile, 0, len(files)))
 			for _, file := range files {
@@ -46,9 +45,9 @@ func plannedGeneratedFiles(project string, writes []generatedFile, existing []st
 						claim := outputClaim{file: file.path, owner: outputSource(file.owner)}
 						if first, taken := occupied[location]; taken {
 							// A current artifact takes the place of any planned removal at its path.
-							return mo.Fold(file.content, func([]byte) outcome.Result[[]generatedFile] {
+							return outcome.FoldOption(file.content, func([]byte) outcome.Result[[]generatedFile] {
 								return outcome.Err[[]generatedFile](generatedPathsOverlap{location: location, first: first, second: claim})
-							}, func(error) outcome.Result[[]generatedFile] { return outcome.Ok(accepted) })
+							}, func() outcome.Result[[]generatedFile] { return outcome.Ok(accepted) })
 						}
 						occupied[location] = claim
 						return outcome.Ok(append(accepted, file))
@@ -65,9 +64,11 @@ func plannedGeneratedFiles(project string, writes []generatedFile, existing []st
 
 func outputSource(owner outputOwner) string {
 	switch source := owner.(type) {
-	case declaredOutput:
-		return source.setting
-	case headedOutput, nil:
+	case headedOutput:
+		return source.source
+	case openAPIOutput:
+		return "openapi.file"
+	case nil:
 	}
 	return "generated source"
 }

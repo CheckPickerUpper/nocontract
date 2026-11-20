@@ -380,7 +380,7 @@ func absolute(projectFile string, next func(string) Outcome) Outcome {
 // generatedFile is one file generate owns: what it must hold, or that it must not exist.
 type generatedFile struct {
 	path    string
-	content mo.Option[[]byte]
+	content outcome.Option[[]byte]
 	owner   outputOwner
 }
 
@@ -454,8 +454,8 @@ func renderedFiles(api description.API, plan serverplan.Plan, project projectfil
 func renderedClientAndOpenAPI(api description.API, project projectfile.Project) outcome.Result[[]generatedFile] {
 	return outcome.Fold(openapi.Render(api, project.OpenAPI().Version()), func(document []byte) outcome.Result[[]generatedFile] {
 		return outcome.Ok([]generatedFile{
-			{path: project.TypeScriptFile(), content: mo.Some(effect.Render(api)), owner: declaredOutput{setting: "typescript"}},
-			{path: project.OpenAPI().File(), content: mo.Some(document), owner: declaredOutput{setting: "openapi.file"}},
+			{path: project.TypeScriptFile(), content: outcome.Some(effect.Render(api)), owner: headedOutput{header: description.GeneratedHeader, source: "typescript"}},
+			{path: project.OpenAPI().File(), content: outcome.Some(document), owner: openAPIOutput{}},
 		})
 	}, outcome.Err[[]generatedFile])
 }
@@ -512,7 +512,7 @@ func judgedServing(ctx context.Context, project projectfile.Project, files []fil
 	overlay, generatedGo := map[string][]byte{}, []string{}
 	for _, each := range files {
 		if filepath.Ext(each.file.path) == ".go" {
-			overlay[each.file.path] = mo.Fold(each.file.content, func(content []byte) []byte { return content }, func(error) []byte { return []byte(setAsideFile) })
+			overlay[each.file.path] = outcome.FoldOption(each.file.content, func(content []byte) []byte { return content }, func() []byte { return []byte(setAsideFile) })
 			generatedGo = append(generatedGo, each.file.path)
 		}
 	}

@@ -13,8 +13,9 @@ type document struct {
 
 // info names the API and its own version.
 type info struct {
-	Title   string `json:"title"`
-	Version string `json:"version"`
+	Title       string `json:"title"`
+	Version     string `json:"version"`
+	GeneratedBy string `json:"x-nocontract-generated"`
 }
 
 // tag is a group of routes, by name.

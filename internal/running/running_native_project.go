@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
@@ -72,7 +71,7 @@ func renderNativeFiles(api description.API, project projectfile.Project, artifac
 			if strings.TrimLeft(first, "/#% ") != description.GeneratedNotice {
 				return outcome.Err[[]generatedFile](nativeSourceHeaderMissing{Path: artifact.Path, FirstLine: first})
 			}
-			files = append(files, generatedFile{path: filepath.Clean(artifact.Path), content: mo.Some(artifact.Contents), owner: headedOutput{header: first + "\n"}})
+			files = append(files, generatedFile{path: filepath.Clean(artifact.Path), content: outcome.Some(artifact.Contents), owner: headedOutput{header: first + "\n", source: "generated source"}})
 		}
 		return plannedGeneratedFiles(project.File(), files, []string{})
 	}, outcome.Err[[]generatedFile])

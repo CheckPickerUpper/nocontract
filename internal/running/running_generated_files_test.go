@@ -64,6 +64,51 @@ func TestAGoFileTheProjectWroteWhereGenerateWritesIsRefusedAndKept(t *testing.T)
 	}
 }
 
+func TestGenerateLeavesHandwrittenClientAndOpenAPIFilesAlone(t *testing.T) {
+	t.Parallel()
+	for _, file := range []struct {
+		path    string
+		content string
+	}{
+		{path: "web/ledger_api.generated.ts", content: "export const currency = \"CAD\"\n"},
+		{path: "ledger_api.openapi.json", content: "{\"name\":\"ledger-web\"}\n"},
+	} {
+		t.Run(file.path, func(t *testing.T) {
+			directory := scratchproject.Ledger(t, filepath.Join("..", ".."))
+			target := filepath.Join(directory, filepath.FromSlash(file.path))
+			scratchproject.WriteFile(t, directory, file.path, []byte(file.content))
+
+			result := runOn(t, "generate", directory)
+
+			if refused, isRefused := result.(running.FilesNotGenerated); !isRefused || !slices.Equal(refused.Paths, []string{target}) {
+				t.Errorf("generate answered %v; want %s refused as handwritten", result.Lines(), target)
+			}
+			if held := heldOrStop(t, target); held != file.content {
+				t.Errorf("%s changed after generation", target)
+			}
+		})
+	}
+}
+
+func TestGenerateKeepsEveryOutputWhenALaterOutputCannotBePrepared(t *testing.T) {
+	t.Parallel()
+	directory := scratchproject.Ledger(t, filepath.Join("..", ".."))
+	web := filepath.Join(directory, "web")
+	scratchproject.StopOn(t, "creating "+web, os.Mkdir(web, 0o555))
+	t.Cleanup(func() { scratchproject.StopOn(t, "unlocking "+web, os.Chmod(web, 0o755)) })
+
+	result := runOn(t, "generate", directory)
+
+	if refused, isRefused := result.(running.FileNotWritten); !isRefused || filepath.Dir(refused.Path) != web {
+		t.Errorf("generate answered %v; want the unwritable client reported", result.Lines())
+	}
+	document := filepath.Join(directory, "ledger_api.openapi.json")
+	_, statError := os.Stat(document)
+	if !errors.Is(statError, fs.ErrNotExist) {
+		t.Errorf("%s must remain absent when the client cannot be prepared, stat returned %v", document, statError)
+	}
+}
+
 func TestGenerateRefusesConflictingOutputPathsBeforeWriting(t *testing.T) {
 	t.Parallel()
 	for _, target := range []struct {
