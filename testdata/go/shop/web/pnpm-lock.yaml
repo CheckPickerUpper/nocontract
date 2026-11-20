@@ -13,15 +13,15 @@ importers:
   .:
     dependencies:
       effect:
-        specifier: git+https://github.com/CheckPickerUpper/effect.git#e5a83f94b925af502937f3df1ea357a98f0d890b&path:packages/effect
-        version: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect
+        specifier: git+https://github.com/CheckPickerUpper/effect.git#443d6d9f18edf1de34f7582e06cac404589e6890&path:packages/effect
+        version: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect
     devDependencies:
       '@effect/openapi-generator':
-        specifier: git+https://github.com/CheckPickerUpper/effect.git#e5a83f94b925af502937f3df1ea357a98f0d890b&path:packages/tools/openapi-generator
-        version: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/tools/openapi-generator(@effect/platform-node@4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect)(redis@6.3.1))(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect)
+        specifier: git+https://github.com/CheckPickerUpper/effect.git#443d6d9f18edf1de34f7582e06cac404589e6890&path:packages/tools/openapi-generator
+        version: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/tools/openapi-generator(@effect/platform-node@4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect)(redis@6.3.1))(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect)
       '@effect/platform-node':
         specifier: 4.1.4
-        version: 4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect)(redis@6.3.1)
+        version: 4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect)(redis@6.3.1)
       '@types/node':
         specifier: 26.6.6
         version: 26.6.6
@@ -31,8 +31,8 @@ importers:
 
 packages:
 
-  '@effect/openapi-generator@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/tools/openapi-generator':
-    resolution: {gitHosted: true, path: packages/tools/openapi-generator, tarball: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b}
+  '@effect/openapi-generator@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/tools/openapi-generator':
+    resolution: {gitHosted: true, integrity: sha512-2lysezIvDhKFGzdfnS3FK49arLotgly9AYPZp4Ph5qCoH4x8eOl1yGfd/N05pJunNScawF6uUFIspb00TsU9mQ==, path: packages/tools/openapi-generator, tarball: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890}
     version: 4.1.4
     hasBin: true
     peerDependencies:
@@ -241,8 +241,8 @@ packages:
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
 
-  effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect:
-    resolution: {gitHosted: true, path: packages/effect, tarball: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b}
+  effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect:
+    resolution: {gitHosted: true, integrity: sha512-2lysezIvDhKFGzdfnS3FK49arLotgly9AYPZp4Ph5qCoH4x8eOl1yGfd/N05pJunNScawF6uUFIspb00TsU9mQ==, path: packages/effect, tarball: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890}
     version: 4.1.4
 
   emoji-regex@8.0.0:
@@ -397,27 +397,27 @@ packages:
 
 snapshots:
 
-  '@effect/openapi-generator@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/tools/openapi-generator(@effect/platform-node@4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect)(redis@6.3.1))(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect)':
+  '@effect/openapi-generator@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/tools/openapi-generator(@effect/platform-node@4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect)(redis@6.3.1))(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect)':
     dependencies:
-      '@effect/platform-node': 4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect)(redis@6.3.1)
-      effect: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect
+      '@effect/platform-node': 4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect)(redis@6.3.1)
+      effect: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect
       swagger2openapi: 7.0.8
     transitivePeerDependencies:
       - encoding
 
-  '@effect/platform-node-shared@4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect)':
+  '@effect/platform-node-shared@4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect)':
     dependencies:
       '@types/ws': 8.18.2
-      effect: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect
+      effect: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect
       ws: 8.23.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect)(redis@6.3.1)':
+  '@effect/platform-node@4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect)(redis@6.3.1)':
     dependencies:
-      '@effect/platform-node-shared': 4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect)
-      effect: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect
+      '@effect/platform-node-shared': 4.1.4(effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect)
+      effect: https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect
       redis: 6.3.1
       undici: 8.12.4
     transitivePeerDependencies:
@@ -532,7 +532,7 @@ snapshots:
 
   color-name@1.1.4: {}
 
-  effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/e5a83f94b925af502937f3df1ea357a98f0d890b#path:packages/effect: {}
+  effect@https://codeload.github.com/CheckPickerUpper/effect/tar.gz/443d6d9f18edf1de34f7582e06cac404589e6890#path:packages/effect: {}
 
   emoji-regex@8.0.0: {}
 
