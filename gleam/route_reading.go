@@ -6,9 +6,9 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
-	"github.com/CheckPickerUpper/nocontract/gleam/authored"
 	"github.com/CheckPickerUpper/nocontract/gleam/bindings"
 	"github.com/CheckPickerUpper/nocontract/gleam/compiler"
+	"github.com/CheckPickerUpper/nocontract/gleam/directives"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 	"github.com/CheckPickerUpper/nocontract/internal/native"
 	"github.com/CheckPickerUpper/outcome"
@@ -23,7 +23,7 @@ func (index projectIndex) readRoute(source sourceRoute) outcome.Result[routeRead
 			return outcome.Err[routeRead](DirectiveRefused{Declaration: source.declaration, Requirement: "only route and guard directives on a route function"})
 		}
 	}
-	return outcome.Fold(singleDirective(source.declaration, "route"), func(outcome.Option[authored.Directive]) outcome.Result[routeRead] {
+	return outcome.Fold(singleDirective(source.declaration, "route"), func(outcome.Option[directives.Directive]) outcome.Result[routeRead] {
 		return outcome.FoldOption(description.ParseMethod(source.route.Words[0]), func(method description.Method) outcome.Result[routeRead] {
 			switch parsed := description.ParseRoutePath(source.route.Words[1]).(type) {
 			case description.RoutePathRead:
@@ -101,8 +101,8 @@ func describedRoute(source sourceRoute, method description.Method, path descript
 }
 
 func (index projectIndex) readGuard(source sourceRoute) outcome.Result[outcome.Option[guardRead]] {
-	return outcome.Fold(singleDirective(source.declaration, "guard"), func(written outcome.Option[authored.Directive]) outcome.Result[outcome.Option[guardRead]] {
-		return outcome.FoldOption(written, func(directive authored.Directive) outcome.Result[outcome.Option[guardRead]] {
+	return outcome.Fold(singleDirective(source.declaration, "guard"), func(written outcome.Option[directives.Directive]) outcome.Result[outcome.Option[guardRead]] {
+		return outcome.FoldOption(written, func(directive directives.Directive) outcome.Result[outcome.Option[guardRead]] {
 			if len(directive.Words) != 2 {
 				return outcome.Err[outcome.Option[guardRead]](DirectiveRefused{Declaration: source.declaration, Requirement: "guard module.function scope"})
 			}
@@ -124,7 +124,7 @@ func (index projectIndex) readGuard(source sourceRoute) outcome.Result[outcome.O
 	}, outcome.Err[outcome.Option[guardRead]])
 }
 
-func (index projectIndex) guardSignature(source sourceRoute, directive authored.Directive, moduleName, functionName string, function compiler.Function) outcome.Result[outcome.Option[guardRead]] {
+func (index projectIndex) guardSignature(source sourceRoute, directive directives.Directive, moduleName, functionName string, function compiler.Function) outcome.Result[outcome.Option[guardRead]] {
 	text := compiler.Named{Identity: compiler.Identity{Package: "", Module: "gleam", Name: "String"}, Arguments: []compiler.Type{}}
 	headers := compiler.Named{Identity: compiler.Identity{Package: "gleam_stdlib", Module: "gleam/dict", Name: "Dict"}, Arguments: []compiler.Type{text, text}}
 	returning, isNamed := function.Returning.(compiler.Named)

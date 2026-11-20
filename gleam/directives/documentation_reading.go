@@ -1,5 +1,5 @@
-// Package authored reads compiler-attached metadata and refines source locations for diagnostics.
-package authored
+// Package directives reads compiler-attached metadata and refines source locations for diagnostics.
+package directives
 
 import (
 	"fmt"
@@ -11,8 +11,8 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/gleam/compiler"
-	"github.com/CheckPickerUpper/nocontract/gleam/sequence"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
+	"github.com/CheckPickerUpper/nocontract/internal/sequence"
 	"github.com/CheckPickerUpper/outcome"
 )
 

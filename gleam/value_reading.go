@@ -6,11 +6,11 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
-	"github.com/CheckPickerUpper/nocontract/gleam/authored"
 	"github.com/CheckPickerUpper/nocontract/gleam/bindings"
 	"github.com/CheckPickerUpper/nocontract/gleam/compiler"
-	"github.com/CheckPickerUpper/nocontract/gleam/sequence"
+	"github.com/CheckPickerUpper/nocontract/gleam/directives"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
+	"github.com/CheckPickerUpper/nocontract/internal/sequence"
 	"github.com/CheckPickerUpper/outcome"
 )
 
@@ -45,13 +45,13 @@ func (failure LiteralRepeated) Error() string {
 
 type projectIndex struct {
 	project  compiler.Package
-	metadata map[string]authored.Module
+	metadata map[string]directives.Module
 	records  map[compiler.Identity]bindings.Record
 	outcomes map[compiler.Identity]bindings.Outcome
 }
 
 func (index projectIndex) position(identity compiler.Identity, constructor string) assembling.Position {
-	return outcome.FoldOption(authored.Constructor(index.metadata, identity, constructor), func(declaration authored.Declaration) assembling.Position { return declaration.Position }, func() assembling.Position {
+	return outcome.FoldOption(directives.Constructor(index.metadata, identity, constructor), func(declaration directives.Declaration) assembling.Position { return declaration.Position }, func() assembling.Position {
 		return assembling.Position{File: identity.Module + ".gleam", Line: 1, Column: 1}
 	})
 }

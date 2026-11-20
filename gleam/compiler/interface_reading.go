@@ -11,7 +11,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/CheckPickerUpper/nocontract/gleam/sequence"
+	"github.com/CheckPickerUpper/nocontract/internal/sequence"
 	"github.com/CheckPickerUpper/outcome"
 )
 

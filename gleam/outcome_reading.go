@@ -9,17 +9,17 @@ import (
 	ergo "github.com/CheckPickerUpper/ErGo"
 	"github.com/CheckPickerUpper/ErGo/codes"
 	"github.com/CheckPickerUpper/nocontract/description"
-	"github.com/CheckPickerUpper/nocontract/gleam/authored"
 	"github.com/CheckPickerUpper/nocontract/gleam/bindings"
 	"github.com/CheckPickerUpper/nocontract/gleam/compiler"
-	"github.com/CheckPickerUpper/nocontract/gleam/sequence"
+	"github.com/CheckPickerUpper/nocontract/gleam/directives"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
+	"github.com/CheckPickerUpper/nocontract/internal/sequence"
 	"github.com/CheckPickerUpper/outcome"
 )
 
 // DirectiveRefused preserves every directive involved and the unmet declaration rule.
 type DirectiveRefused struct {
-	Declaration authored.Declaration
+	Declaration directives.Declaration
 	Requirement string
 }
 
@@ -48,8 +48,8 @@ func (failure PrefixRefused) Error() string {
 	return fmt.Sprintf("invalid code prefix: %+v", failure.Refusal)
 }
 
-func singleDirective(declaration authored.Declaration, name string) outcome.Result[outcome.Option[authored.Directive]] {
-	matching := []authored.Directive{}
+func singleDirective(declaration directives.Declaration, name string) outcome.Result[outcome.Option[directives.Directive]] {
+	matching := []directives.Directive{}
 	for _, directive := range declaration.Directives {
 		if directive.Name == name {
 			matching = append(matching, directive)
@@ -57,23 +57,23 @@ func singleDirective(declaration authored.Declaration, name string) outcome.Resu
 	}
 	switch len(matching) {
 	case 0:
-		return outcome.Ok(outcome.None[authored.Directive]())
+		return outcome.Ok(outcome.None[directives.Directive]())
 	case 1:
 		return outcome.Ok(outcome.Some(matching[0]))
 	}
-	return outcome.Err[outcome.Option[authored.Directive]](DirectiveRefused{Declaration: declaration, Requirement: "one " + name + " directive at most"})
+	return outcome.Err[outcome.Option[directives.Directive]](DirectiveRefused{Declaration: declaration, Requirement: "one " + name + " directive at most"})
 }
 
-func (index projectIndex) declaration(identity compiler.Identity, constructor string) authored.Declaration {
-	return outcome.FoldOption(authored.Constructor(index.metadata, identity, constructor), func(declaration authored.Declaration) authored.Declaration { return declaration }, func() authored.Declaration {
-		return authored.Declaration{Position: index.position(identity, constructor), Directives: []authored.Directive{}}
+func (index projectIndex) declaration(identity compiler.Identity, constructor string) directives.Declaration {
+	return outcome.FoldOption(directives.Constructor(index.metadata, identity, constructor), func(declaration directives.Declaration) directives.Declaration { return declaration }, func() directives.Declaration {
+		return directives.Declaration{Position: index.position(identity, constructor), Directives: []directives.Directive{}}
 	})
 }
 
 func (index projectIndex) literal(identity compiler.Identity, constructor string) outcome.Result[string] {
 	declaration := index.declaration(identity, constructor)
-	return outcome.Fold(singleDirective(declaration, "literal"), func(written outcome.Option[authored.Directive]) outcome.Result[string] {
-		return outcome.FoldOption(written, func(directive authored.Directive) outcome.Result[string] {
+	return outcome.Fold(singleDirective(declaration, "literal"), func(written outcome.Option[directives.Directive]) outcome.Result[string] {
+		return outcome.FoldOption(written, func(directive directives.Directive) outcome.Result[string] {
 			if len(directive.Words) != 1 {
 				return outcome.Err[string](DirectiveRefused{Declaration: declaration, Requirement: "one wire spelling after literal"})
 			}
@@ -117,9 +117,9 @@ func answerMarkers(documentation string) []string {
 func (index projectIndex) readAnswer(named compiler.Named, constructor compiler.Constructor, open []compiler.Identity) outcome.Result[bindings.Answer] {
 	declaration := index.declaration(named.Identity, constructor.Name)
 	markers := answerMarkers(constructor.Documentation)
-	return outcome.Fold(singleDirective(declaration, "status"), func(status outcome.Option[authored.Directive]) outcome.Result[bindings.Answer] {
+	return outcome.Fold(singleDirective(declaration, "status"), func(status outcome.Option[directives.Directive]) outcome.Result[bindings.Answer] {
 		if len(markers) == 0 {
-			return outcome.FoldOption(status, func(authored.Directive) outcome.Result[bindings.Answer] {
+			return outcome.FoldOption(status, func(directives.Directive) outcome.Result[bindings.Answer] {
 				return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "ergleam:not-an-error or ergleam:code on a status constructor"})
 			}, func() outcome.Result[bindings.Answer] {
 				if len(constructor.Parameters) != 1 {
@@ -138,7 +138,7 @@ func (index projectIndex) readAnswer(named compiler.Named, constructor compiler.
 		if len(markers) != 1 {
 			return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "exactly one ErGleam success or code marker"})
 		}
-		return outcome.FoldOption(status, func(status authored.Directive) outcome.Result[bindings.Answer] {
+		return outcome.FoldOption(status, func(status directives.Directive) outcome.Result[bindings.Answer] {
 			if len(status.Words) != 1 {
 				return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "one HTTP status number"})
 			}
@@ -159,7 +159,7 @@ func (index projectIndex) readAnswer(named compiler.Named, constructor compiler.
 	}, outcome.Err[bindings.Answer])
 }
 
-func answerStatus(marker string, status description.Status, declaration authored.Declaration) outcome.Result[description.Answer] {
+func answerStatus(marker string, status description.Status, declaration directives.Declaration) outcome.Result[description.Answer] {
 	switch parsed := status.(type) {
 	case description.SuccessStatus:
 		if marker == "ergleam:not-an-error" {

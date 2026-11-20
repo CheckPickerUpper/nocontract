@@ -12,19 +12,19 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
-	"github.com/CheckPickerUpper/nocontract/gleam/authored"
 	"github.com/CheckPickerUpper/nocontract/gleam/bindings"
 	"github.com/CheckPickerUpper/nocontract/gleam/compiler"
-	"github.com/CheckPickerUpper/nocontract/gleam/sequence"
+	"github.com/CheckPickerUpper/nocontract/gleam/directives"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 	"github.com/CheckPickerUpper/nocontract/internal/native"
+	"github.com/CheckPickerUpper/nocontract/internal/sequence"
 	"github.com/CheckPickerUpper/outcome"
 )
 
 // Read resolves public signatures with Gleam, reads route metadata, and prepares typed bindings.
 func Read(context context.Context, request native.Request) outcome.Result[native.Project] {
 	return outcome.Fold(compiler.Read(context, request.Directory), func(project compiler.Package) outcome.Result[native.Project] {
-		return outcome.Fold(authored.Read(request.Directory, project), func(metadata map[string]authored.Module) outcome.Result[native.Project] {
+		return outcome.Fold(directives.Read(request.Directory, project), func(metadata map[string]directives.Module) outcome.Result[native.Project] {
 			index := projectIndex{project: project, metadata: metadata, records: map[compiler.Identity]bindings.Record{}, outcomes: map[compiler.Identity]bindings.Outcome{}}
 			return outcome.Fold(index.readRoutes(request), func(routes []routeRead) outcome.Result[native.Project] {
 				return outcome.Ok(index.projectBindings(request, routes))
@@ -37,8 +37,8 @@ type sourceRoute struct {
 	module      string
 	name        string
 	signature   compiler.Function
-	declaration authored.Declaration
-	route       authored.Directive
+	declaration directives.Declaration
+	route       directives.Directive
 }
 type routeRead struct {
 	declared assembling.DeclaredEndpoint
@@ -69,7 +69,7 @@ func (index projectIndex) readRoutes(request native.Request) outcome.Result[[]ro
 		}
 	}
 	if len(sources) == 0 {
-		return outcome.Err[[]routeRead](DirectiveRefused{Declaration: authored.Declaration{Position: request.API.Position, Directives: []authored.Directive{}}, Requirement: "at least one selected public route"})
+		return outcome.Err[[]routeRead](DirectiveRefused{Declaration: directives.Declaration{Position: request.API.Position, Directives: []directives.Directive{}}, Requirement: "at least one selected public route"})
 	}
 	return sequence.Traverse(sources, index.readRoute)
 }
