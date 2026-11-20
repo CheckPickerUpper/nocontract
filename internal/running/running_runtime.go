@@ -65,6 +65,6 @@ func runtimeDirectory(ctx context.Context) mo.Result[string] {
 func generatedRuntime(directory string, finish finisher) Outcome {
 	path := filepath.Join(directory, serverplan.RoutesFileName)
 	return mo.Fold(writing.RenderRuntime(description.SharedFailures()), func(content []byte) Outcome {
-		return onDisk([]generatedFile{{path: path, content: mo.Some(content)}}, finish)
+		return onDisk([]generatedFile{goFileAt(path, content)}, finish)
 	}, func(cause error) Outcome { return FileNotWritten{Path: path, Cause: cause} })
 }

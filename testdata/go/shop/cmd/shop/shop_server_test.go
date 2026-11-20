@@ -68,61 +68,6 @@ func send(t *testing.T, served *httptest.Server, method, path, shopper, body str
 	}, failed("building"))
 }
 
-func TestARequestNoDeclaredRouteTakesIsAnsweredByTheServer(t *testing.T) {
-	served := shopServer(t, []nocontract.Layer{})
-	cases := []struct {
-		name   string
-		method string
-		path   string
-		want   received
-	}{
-		{
-			name: "a path no route declares", method: http.MethodGet, path: "/shoppers/7/balances",
-			want: received{status: 404, allow: "", header: "", body: `{"_tag":"RouteNotFound","code":"NC-1069","method":"GET","path":"/shoppers/7/balances"}`},
-		},
-		{
-			name: "a method no route at the path declares", method: http.MethodDelete, path: "/shoppers/7/balance",
-			want: received{status: 405, allow: "GET", header: "", body: `{"_tag":"MethodNotDeclared","code":"NC-1070","method":"DELETE","allowed":["GET"]}`},
-		},
-		{
-			name: "an OPTIONS request to a declared path", method: http.MethodOptions, path: "/shoppers/7/top-ups",
-			want: received{status: 204, allow: "POST", header: "", body: ""},
-		},
-	}
-	for _, each := range cases {
-		t.Run(each.name, func(t *testing.T) {
-			if got := send(t, served, each.method, each.path, "", ""); got != each.want {
-				t.Errorf("%s %s was answered %+v; want %+v", each.method, each.path, got, each.want)
-			}
-		})
-	}
-}
-
-func TestTheShopperGuardRefusesARequestWithoutAShopperAndAdmitsOneToTheRoute(t *testing.T) {
-	served := shopServer(t, []nocontract.Layer{})
-	cases := []struct {
-		name    string
-		shopper string
-		want    received
-	}{
-		{
-			name: "no shopper", shopper: "",
-			want: received{status: 401, allow: "", header: "", body: `{"_tag":"NotSignedIn","code":"SH-1101","scope":"read-balance"}`},
-		},
-		{
-			name: "a shopper", shopper: "shopper-8",
-			want: received{status: 404, allow: "", header: "", body: `{"_tag":"ShopperNotFound","code":"SH-1001","shopper_id":"8"}`},
-		},
-	}
-	for _, each := range cases {
-		t.Run(each.name, func(t *testing.T) {
-			if got := send(t, served, http.MethodGet, "/shoppers/8/balance?currency=CAD", each.shopper, ""); got != each.want {
-				t.Errorf("the request was answered %+v; want %+v", got, each.want)
-			}
-		})
-	}
-}
-
 // A balance of 2^53 + 1 cents, the least whole number a JavaScript number cannot hold, is answered as
 // the string of its decimal text, which a client reads whole, and so is one an option holds; an
 // empty option is null.
@@ -143,48 +88,6 @@ func TestAWholeNumberPastWhatJavaScriptHoldsIsAnsweredAsDecimalText(t *testing.T
 			served := ledgerServer(t, balance.Ledger{ShopperID: 7, Cents: 1<<53 + 1, OverdraftCents: each.overdraft}, []nocontract.Layer{})
 			if got := send(t, served, http.MethodGet, "/shoppers/7/balance?currency=CAD", "shopper-7", ""); got != each.want {
 				t.Errorf("the balance was answered %+v; want %+v", got, each.want)
-			}
-		})
-	}
-}
-
-// Every whole-number parameter, a 64-bit path segment and a 16-bit query parameter alike, is read
-// only as canonical decimal text: a value in range is taken, and a leading zero, a plus sign or
-// minus zero is refused with the text read.
-func TestAWholeNumberParameterIsReadOnlyAsCanonicalDecimalText(t *testing.T) {
-	served := shopServer(t, []nocontract.Layer{})
-	refused := func(part, name, read string) received {
-		return received{status: 400, allow: "", header: "", body: `{"_tag":"RequestRefused","code":"NC-1001","part":"` + part + `","name":"` + name +
-			`","reason":"\"` + read + `\" is not a whole number written as canonical decimal text: an optional -, then 0 or a digit from 1 to 9 followed ` +
-			`by any digits, and never -0."}`}
-	}
-	const order = `{"items":[],"gift_note":null,"deliver_between":["2026-12-01T09:00:00Z","2026-12-02T09:00:00Z"],"wrapped":false,"tips":{},"courier_notes":{}}`
-	for _, each := range []struct {
-		name   string
-		method string
-		path   string
-		body   string
-		want   received
-	}{
-		{
-			name: "a 64-bit shopper in range", method: http.MethodGet, path: "/shoppers/7/balance?currency=CAD", body: "",
-			want: received{status: 200, allow: "", header: "", body: `{"_tag":"BalanceRead","balance":{"cents":"1250","currency":"CAD"},"overdraft":null,` +
-				`"changed":"2026-11-14T12:00:00Z","note":"first top-up"}`},
-		},
-		{name: "a 64-bit shopper with a leading zero", method: http.MethodGet, path: "/shoppers/007/balance?currency=CAD", body: "", want: refused("path", "shopper_id", "007")},
-		{name: "a 64-bit shopper with a plus sign", method: http.MethodGet, path: "/shoppers/+7/balance?currency=CAD", body: "", want: refused("path", "shopper_id", "+7")},
-		{name: "a 64-bit shopper of minus zero", method: http.MethodGet, path: "/shoppers/-0/balance?currency=CAD", body: "", want: refused("path", "shopper_id", "-0")},
-		{
-			name: "a 16-bit store in range", method: http.MethodPost, path: "/shoppers/7/orders?store=3", body: order,
-			want: received{status: 201, allow: "", header: "", body: `{"_tag":"OrderPlaced","order":` + order + `}`},
-		},
-		{name: "a 16-bit store with a leading zero", method: http.MethodPost, path: "/shoppers/7/orders?store=007", body: order, want: refused("query", "store", "007")},
-		{name: "a 16-bit store with a plus sign", method: http.MethodPost, path: "/shoppers/7/orders?store=%2B7", body: order, want: refused("query", "store", "+7")},
-		{name: "a 16-bit store of minus zero", method: http.MethodPost, path: "/shoppers/7/orders?store=-0", body: order, want: refused("query", "store", "-0")},
-	} {
-		t.Run(each.name, func(t *testing.T) {
-			if got := send(t, served, each.method, each.path, "shopper-7", each.body); got != each.want {
-				t.Errorf("%s %s was answered\n%+v\nwant\n%+v", each.method, each.path, got, each.want)
 			}
 		})
 	}

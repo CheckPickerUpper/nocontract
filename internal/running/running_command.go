@@ -339,9 +339,12 @@ func parseVerb(arguments []string, flags *flag.FlagSet) verbParse {
 }
 
 // commandUsage is how the nocontract command is run.
-const commandUsage = "nocontract generate|check [-project " + DefaultProjectFile + "]"
+const commandUsage = "nocontract generate|check [-project " + DefaultProjectFile + "]\n" + serveUsage
 
 func parseCommand(arguments []string) command {
+	if len(arguments) > 0 && arguments[0] == "serve" {
+		return parseServe(arguments[1:])
+	}
 	flags := flag.NewFlagSet("nocontract", flag.ContinueOnError)
 	projectFile := flags.String("project", DefaultProjectFile, "the project file")
 	switch parsed := parseVerb(arguments, flags).(type) {
@@ -359,6 +362,8 @@ func Run(request Request) Outcome {
 	switch parsed := parseCommand(request.Arguments).(type) {
 	case projectRun:
 		return absolute(parsed.projectFile, func(projectFile string) Outcome { return generated(request.Context, projectFile, parsed.finish) })
+	case projectServe:
+		return serveNative(request.Context, parsed)
 	case UsageRefused:
 		return parsed
 	case nil:
@@ -378,17 +383,21 @@ func absolute(projectFile string, next func(string) Outcome) Outcome {
 type generatedFile struct {
 	path    string
 	content mo.Option[[]byte]
+	owner   outputOwner
 }
 
 // generated reads the project, renders its files and hands them, with what their paths hold, to
 // finish.
 func generated(ctx context.Context, projectFile string, finish finisher) Outcome {
 	return projectfile.Read(projectFile, func(project projectfile.Project) Outcome {
-		// Go is the only backend NoContract reads.
 		switch project.Backend().(type) {
-		case projectfile.GoBackend, nil:
+		case projectfile.GoBackend:
+			return generatedGo(ctx, project, finish)
+		case projectfile.OdinBackend, projectfile.GleamBackend:
+			return generatedNative(ctx, project, finish)
+		case nil:
 		}
-		return generatedGo(ctx, project, finish)
+		return NativeBackendFailed{Path: project.File(), Cause: backendMissing{Directory: project.Directory()}}
 	}, func(cause error) Outcome {
 		return ProjectUnreadable{Path: projectFile, Cause: cause}
 	}, func(refusals []assembling.Refusal) Outcome {
@@ -438,21 +447,30 @@ type loadedProject struct {
 // run no longer writes, which must go.
 func renderedFiles(api description.API, plan serverplan.Plan, project projectfile.Project, existing []string) outcome.Result[[]generatedFile] {
 	return outcome.Fold(servedFiles(plan, project.File()), func(served []generatedFile) outcome.Result[[]generatedFile] {
-		return outcome.Fold(openapi.Render(api, project.OpenAPI().Version()), func(document []byte) outcome.Result[[]generatedFile] {
+		return outcome.Fold(renderedClients(api, project), func(clients []generatedFile) outcome.Result[[]generatedFile] {
 			// Every Go file NoContract wrote goes unless this run writes it again.
-			contents := map[string]mo.Option[[]byte]{project.TypeScriptFile(): mo.Some(effect.Render(api)), project.OpenAPI().File(): mo.Some(document)}
+			contents := map[string]generatedFile{}
 			for _, path := range existing {
-				contents[path] = mo.None[[]byte]()
+				contents[path] = generatedFile{path: path, content: mo.None[[]byte](), owner: headedOutput{header: description.GeneratedHeader}}
 			}
-			for _, file := range served {
-				contents[file.path] = file.content
+			for _, file := range slices.Concat(clients, served) {
+				contents[file.path] = file
 			}
 			files := []generatedFile{}
 			for _, path := range slices.Sorted(maps.Keys(contents)) {
-				files = append(files, generatedFile{path: path, content: contents[path]})
+				files = append(files, contents[path])
 			}
 			return outcome.Ok(files)
 		}, outcome.Err[[]generatedFile])
+	}, outcome.Err[[]generatedFile])
+}
+
+func renderedClients(api description.API, project projectfile.Project) outcome.Result[[]generatedFile] {
+	return outcome.Fold(openapi.Render(api, project.OpenAPI().Version()), func(document []byte) outcome.Result[[]generatedFile] {
+		return outcome.Ok([]generatedFile{
+			{path: project.TypeScriptFile(), content: mo.Some(effect.Render(api)), owner: declaredOutput{}},
+			{path: project.OpenAPI().File(), content: mo.Some(document), owner: declaredOutput{}},
+		})
 	}, outcome.Err[[]generatedFile])
 }
 
@@ -462,7 +480,7 @@ func goFiles(served []serverplan.Package) outcome.Result[[]generatedFile] {
 	for _, each := range served {
 		files = outcome.Fold(files, func(done []generatedFile) outcome.Result[[]generatedFile] {
 			return outcome.Fold(writing.Render(each), func(goFile []byte) outcome.Result[[]generatedFile] {
-				return outcome.Ok(append(slices.Clone(done), generatedFile{path: filepath.Join(each.Directory, serverplan.RoutesFileName), content: mo.Some(goFile)}))
+				return outcome.Ok(append(slices.Clone(done), goFileAt(filepath.Join(each.Directory, serverplan.RoutesFileName), goFile)))
 			}, outcome.Err[[]generatedFile])
 		}, outcome.Err[[]generatedFile])
 	}

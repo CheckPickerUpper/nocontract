@@ -620,3 +620,34 @@ func (failure GoListSucceeded) Report(language messages.Language) ergo.Report {
 func (failure GoListSucceeded) Causes() []error {
 	return nil
 }
+
+func (NativeBackendFailed) ErrorCode() ergo.Code { return "NC-1137" }
+
+// NativeBackendFailedArguments holds the arguments NativeBackendFailed's message names, in the order the message first names them.
+type NativeBackendFailedArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks NativeBackendFailedArguments as the arguments of a report.
+func (NativeBackendFailedArguments) ReportArguments() {}
+
+// Report is NativeBackendFailed's code, its message in language and the arguments the message names.
+func (failure NativeBackendFailed) Report(language messages.Language) ergo.Report {
+	arguments := NativeBackendFailedArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The native backend for "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " could not run."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1137", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error NativeBackendFailed holds, then the causes of every failure it holds.
+func (failure NativeBackendFailed) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}

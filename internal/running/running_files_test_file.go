@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 	"github.com/CheckPickerUpper/nocontract/go/writing"
@@ -17,7 +16,7 @@ import (
 func servedFiles(plan serverplan.Plan, projectFile string) outcome.Result[[]generatedFile] {
 	return outcome.Fold(goFiles(plan.Packages), func(goFile []generatedFile) outcome.Result[[]generatedFile] {
 		return outcome.Fold(writing.RenderServer(plan), func(server []byte) outcome.Result[[]generatedFile] {
-			serverFile := generatedFile{path: filepath.Join(plan.Server.Directory, serverplan.ServerFileName), content: mo.Some(server)}
+			serverFile := goFileAt(filepath.Join(plan.Server.Directory, serverplan.ServerFileName), server)
 			return outcome.Fold(filesTestFiles(plan.Packages, projectFile), func(tests []generatedFile) outcome.Result[[]generatedFile] {
 				return outcome.Ok(slices.Concat(goFile, []generatedFile{serverFile}, tests))
 			}, outcome.Err[[]generatedFile])
@@ -37,7 +36,7 @@ func filesTestFiles(served []serverplan.Package, projectFile string) outcome.Res
 	return outcome.Fold(outcome.TupleToResult(filepath.Rel(first.Directory, projectFile)), func(relative string) outcome.Result[[]generatedFile] {
 		test := serverplan.FilesTest{PackageName: first.Name, ProjectFile: filepath.ToSlash(relative)}
 		return outcome.Fold(writing.RenderFilesTest(test), func(content []byte) outcome.Result[[]generatedFile] {
-			return outcome.Ok([]generatedFile{{path: filepath.Join(first.Directory, serverplan.FilesTestFileName), content: mo.Some(content)}})
+			return outcome.Ok([]generatedFile{goFileAt(filepath.Join(first.Directory, serverplan.FilesTestFileName), content)})
 		}, outcome.Err[[]generatedFile])
 	}, outcome.Err[[]generatedFile])
 }

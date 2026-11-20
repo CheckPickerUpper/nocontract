@@ -12,7 +12,8 @@ func (LanguageUnknown) ErrorCode() ergo.Code { return "NC-1055" }
 
 // LanguageUnknownArguments holds the arguments LanguageUnknown's message names, in the order the message first names them.
 type LanguageUnknownArguments struct {
-	Language string `json:"Language"`
+	Language  string `json:"Language"`
+	Supported string `json:"Supported"`
 }
 
 // ReportArguments marks LanguageUnknownArguments as the arguments of a report.
@@ -20,14 +21,14 @@ func (LanguageUnknownArguments) ReportArguments() {}
 
 // Report is LanguageUnknown's code, its message in language and the arguments the message names.
 func (failure LanguageUnknown) Report(language messages.Language) ergo.Report {
-	arguments := LanguageUnknownArguments{Language: string(failure.Language)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names the language \""}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "\"; NoContract reads go."}}}
+	arguments := LanguageUnknownArguments{Language: string(failure.Language), Supported: string(failure.Supported)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The project file names the language \""}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "\". NoContract reads "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:
 	case nil:
 	}
-	return ergo.Report{Code: "NC-1055", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Language}}}), Arguments: arguments}
+	return ergo.Report{Code: "NC-1055", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Language}, messageformat.TextValue{Text: arguments.Supported}}}), Arguments: arguments}
 }
 
 // Causes is every error LanguageUnknown holds, then the causes of every failure it holds.

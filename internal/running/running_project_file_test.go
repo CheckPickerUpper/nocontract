@@ -98,7 +98,7 @@ func TestAProjectFileIsRefusedAtEachPlaceItIsWrong(t *testing.T) {
 		{
 			name:    "a language NoContract does not read",
 			content: projectFileLines(map[string]string{"language": `"language": "rust",`}),
-			want:    []string{`2:15: NC-1055 The project file names the language "rust"; NoContract reads go.`},
+			want:    []string{`2:15: NC-1055 The project file names the language "rust". NoContract reads go, odin, gleam.`},
 		},
 		{
 			name:    "a value that is not an object",

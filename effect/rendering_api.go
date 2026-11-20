@@ -107,7 +107,7 @@ func writtenPath(segments []description.PathSegment) pathText {
 			parts = append(parts, written.Text)
 		case description.PathParameter:
 			parts = append(parts, ":"+written.Field.Name.Text())
-			params = append(params, written.Field)
+			params = append(params, description.Field{Name: written.Field.Name, Schema: written.Field.Schema})
 		case nil:
 		}
 	}
@@ -121,7 +121,11 @@ func endpointText(endpoint description.Endpoint) string {
 		options = append(options, "params: "+fieldsText(path.params, "    "))
 	}
 	if len(endpoint.Query) > 0 {
-		options = append(options, "query: "+fieldsText(endpoint.Query, "    "))
+		fields := make([]description.Field, 0, len(endpoint.Query))
+		for _, parameter := range endpoint.Query {
+			fields = append(fields, description.Field{Name: parameter.Name, Schema: parameter.Schema})
+		}
+		options = append(options, "query: "+fieldsText(fields, "    "))
 	}
 	switch body := endpoint.Body.(type) {
 	case description.JSONBody:

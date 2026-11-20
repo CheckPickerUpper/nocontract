@@ -227,3 +227,62 @@ func (failure APIRefused) Report(language messages.Language) ergo.Report {
 func (failure APIRefused) Causes() []error {
 	return nil
 }
+
+func (URLParameterUnsupported) ErrorCode() ergo.Code { return "NC-1138" }
+
+// URLParameterUnsupportedArguments holds the arguments URLParameterUnsupported's message names, in the order the message first names them.
+type URLParameterUnsupportedArguments struct {
+	Part   string `json:"Part"`
+	Field  string `json:"Field"`
+	Schema string `json:"Schema"`
+}
+
+// ReportArguments marks URLParameterUnsupportedArguments as the arguments of a report.
+func (URLParameterUnsupportedArguments) ReportArguments() {}
+
+// Report is URLParameterUnsupported's code, its message in language and the arguments the message names.
+func (failure URLParameterUnsupported) Report(language messages.Language) ergo.Report {
+	arguments := URLParameterUnsupportedArguments{Part: string(failure.Part), Field: string(failure.Field), Schema: string(failure.Schema)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " parameter "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " cannot be read as "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1138", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Part}, messageformat.TextValue{Text: arguments.Field}, messageformat.TextValue{Text: arguments.Schema}}}), Arguments: arguments}
+}
+
+// Causes is every error URLParameterUnsupported holds, then the causes of every failure it holds.
+func (failure URLParameterUnsupported) Causes() []error {
+	return nil
+}
+
+func (FailureCodeTaken) ErrorCode() ergo.Code { return "NC-1139" }
+
+// FailureCodeTakenArguments holds the arguments FailureCodeTaken's message names, in the order the message first names them.
+type FailureCodeTakenArguments struct {
+	Member        string `json:"Member"`
+	Code          string `json:"Code"`
+	First         string `json:"First"`
+	FirstDeclared string `json:"FirstDeclared"`
+}
+
+// ReportArguments marks FailureCodeTakenArguments as the arguments of a report.
+func (FailureCodeTakenArguments) ReportArguments() {}
+
+// Report is FailureCodeTaken's code, its message in language and the arguments the message names.
+func (failure FailureCodeTaken) Report(language messages.Language) ergo.Report {
+	arguments := FailureCodeTakenArguments{Member: string(failure.Member), Code: string(failure.Code), First: string(failure.First), FirstDeclared: string(failure.FirstDeclared)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "Failure "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " uses "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", which already identifies "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: " declared at "}, messageformat.Argument{Index: 3}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1139", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Member}, messageformat.TextValue{Text: arguments.Code}, messageformat.TextValue{Text: arguments.First}, messageformat.TextValue{Text: arguments.FirstDeclared}}}), Arguments: arguments}
+}
+
+// Causes is every error FailureCodeTaken holds, then the causes of every failure it holds.
+func (failure FailureCodeTaken) Causes() []error {
+	return nil
+}

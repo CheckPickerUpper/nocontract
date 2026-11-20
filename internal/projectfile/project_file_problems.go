@@ -57,8 +57,11 @@ type KeyRepeated struct {
 // LanguageUnknown is a project file naming a language NoContract reads no backend in.
 //
 //ergo:code NC-1055
-//ergo:message The project file names the language "{Language}"; NoContract reads go.
-type LanguageUnknown struct{ Language string }
+//ergo:message The project file names the language "{Language}". NoContract reads {Supported}.
+type LanguageUnknown struct {
+	Language  string
+	Supported string
+}
 
 // JSONType is the JSON type a key's value must have.
 //

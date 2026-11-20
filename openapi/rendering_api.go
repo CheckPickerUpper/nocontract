@@ -91,7 +91,7 @@ func routeOperation(groupName string, endpoint description.Endpoint) operation {
 	}
 	tags := []string{groupName}
 	// Endpoint names are unique within a group, so the group's name makes the id unique.
-	operationID := groupName + "." + endpoint.Name
+	operationID := description.OperationID(groupName, endpoint.Name)
 	answers := responses(endpoint)
 	switch body := endpoint.Body.(type) {
 	case description.JSONBody:

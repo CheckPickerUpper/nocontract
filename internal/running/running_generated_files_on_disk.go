@@ -37,7 +37,7 @@ type FileUnreadable struct {
 	Cause error
 }
 
-// FilesNotGenerated is a run that found Go files the project wrote at paths generate writes: each
+// FilesNotGenerated is a run that found files the project wrote at paths generate writes: each
 // begins with no generated header, so generate leaves it as it is.
 //
 //ergo:code NC-1129
@@ -165,7 +165,7 @@ type pathEmpty struct{}
 //ergo:not-an-error
 type pathOwned struct{ content []byte }
 
-// pathTaken is a path holding a Go file the project wrote.
+// pathTaken is a path holding a file the project wrote.
 //
 //ergo:not-an-error
 type pathTaken struct{}
@@ -180,18 +180,37 @@ func (pathOwned) isPathHolding()      {}
 func (pathTaken) isPathHolding()      {}
 func (pathUnreadable) isPathHolding() {}
 
-// readHolding is what the disk holds at path. A Go file there is generate's when NoContract wrote
-// it; the project file names the other paths generate writes, which makes the file at each one
-// generate's.
-func readHolding(path string) pathHolding {
-	return outcome.Fold(outcome.TupleToResult(os.ReadFile(path)), func(content []byte) pathHolding {
-		if filepath.Ext(path) != ".go" {
-			return pathOwned{content: content}
-		}
-		switch readGoFileWriter(content).(type) {
-		case writtenByNoContract:
-			return pathOwned{content: content}
-		case writtenByProject, nil:
+// outputOwner is the evidence that a file's current contents belong to NoContract.
+//
+//sumtype:decl
+type outputOwner interface{ isOutputOwner() }
+
+//ergo:not-an-error
+type declaredOutput struct{}
+
+//ergo:not-an-error
+type headedOutput struct{ header string }
+
+func (declaredOutput) isOutputOwner() {}
+func (headedOutput) isOutputOwner()   {}
+
+func goFileAt(path string, content []byte) generatedFile {
+	return generatedFile{path: path, content: mo.Some(content), owner: headedOutput{header: description.GeneratedHeader}}
+}
+
+// readHolding checks ownership before replacing a file.
+func readHolding(file generatedFile) pathHolding {
+	return outcome.Fold(outcome.TupleToResult(os.ReadFile(file.path)), func(content []byte) pathHolding {
+		switch owner := file.owner.(type) {
+		case headedOutput:
+			if bytes.HasPrefix(content, []byte(owner.header)) {
+				return pathOwned{content: content}
+			}
+		case declaredOutput:
+			if filepath.Ext(file.path) != ".go" || bytes.HasPrefix(content, []byte(description.GeneratedHeader)) {
+				return pathOwned{content: content}
+			}
+		case nil:
 		}
 		return pathTaken{}
 	}, func(cause error) pathHolding {
@@ -203,11 +222,11 @@ func readHolding(path string) pathHolding {
 }
 
 // onDisk hands next each file with what its path holds. It stops at the first path holding a file
-// it cannot read, and refuses every Go file the project wrote at one of the paths.
+// it cannot read, and refuses every file the project wrote at one of the paths.
 func onDisk(files []generatedFile, next func([]fileOnDisk) Outcome) Outcome {
 	read, taken := []fileOnDisk{}, []string{}
 	for _, file := range files {
-		switch held := readHolding(file.path).(type) {
+		switch held := readHolding(file).(type) {
 		case pathEmpty:
 			read = append(read, fileOnDisk{file: file, held: mo.None[[]byte]()})
 		case pathOwned:

@@ -1,6 +1,7 @@
 package assembling
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 
@@ -47,7 +48,13 @@ func boundPath(declared DeclaredEndpoint) pathBinding {
 		case description.RouteParameter:
 			outcome.FoldOption(keyed.Entry(unbound, each.Name()), func(field description.Field) struct{} {
 				delete(unbound, each.Name())
-				segments = append(segments, description.PathParameter{Field: field})
+				outcome.FoldOption(description.ParseParameter(field), func(parameter description.Parameter) struct{} {
+					segments = append(segments, description.PathParameter{Field: parameter})
+					return struct{}{}
+				}, func() struct{} {
+					refused(parameterNotReadable(field, "path"))
+					return struct{}{}
+				})
 				return struct{}{}
 			}, func() struct{} {
 				refused(PathParameterUndeclared{Parameter: each.Name()})
@@ -63,4 +70,8 @@ func boundPath(declared DeclaredEndpoint) pathBinding {
 		return pathRefused{refusals: refusals}
 	}
 	return pathBound{segments: segments}
+}
+
+func parameterNotReadable(field description.Field, part string) URLParameterUnsupported {
+	return URLParameterUnsupported{Part: part, Field: field.Name.Text(), Schema: fmt.Sprintf("%T", field.Schema)}
 }

@@ -5,8 +5,6 @@ import (
 	"go/token"
 	"go/types"
 	"slices"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
@@ -91,12 +89,6 @@ func readRouteLine(index projectIndex, text directiveText) reading[routeLine] {
 	return mapped(paired(method, path), func(read pair[description.Method, description.RoutePath]) routeLine {
 		return routeLine{method: read.first, path: read.second}
 	})
-}
-
-// endpointName is a handler's name with its first letter in lower case.
-func endpointName(handler string) string {
-	first, size := utf8.DecodeRuneInString(handler)
-	return string(unicode.ToLower(first)) + handler[size:]
 }
 
 // signatureReading is a handler's signature read as its input and outcome, or refused.
@@ -196,7 +188,7 @@ type routeName struct {
 // readRoute reads one handler's route whole: its line, signature, guard, input and outcome.
 func readRoute(index projectIndex, guards guardTable, handler handlerDeclaration) reading[routeEntry] {
 	position := handler.function.Name.Pos()
-	named := routeName{endpoint: endpointName(handler.function.Name.Name), position: position}
+	named := routeName{endpoint: description.EndpointName(handler.function.Name.Name), position: position}
 	declared := paired(paired(readRouteDirective(index, handler), readHandlerTypes(index, handler)), readRouteGuard(index, guards, directiveTexts(handler.doc, guardKind{})))
 	return alongside(andThen(declared, func(read pair[pair[routeLine, handlerTypes], routeGuard]) reading[routeEntry] {
 		route, signature, guard := read.first.first, read.first.second, read.second
@@ -218,7 +210,7 @@ type routeParts struct {
 
 // readEntry is a route read whole, as its endpoint, served route and outcome answer.
 func readEntry(index projectIndex, handler handlerDeclaration, parts routeParts) routeEntry {
-	name := endpointName(handler.function.Name.Name)
+	name := description.EndpointName(handler.function.Name.Name)
 	return routeEntry{
 		loaded: handler.loaded, position: handler.function.Name.Pos(),
 		endpoint: assembling.DeclaredEndpoint{

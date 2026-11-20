@@ -2,11 +2,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
@@ -32,9 +35,19 @@ func serve(api server.API) int {
 		MaxHeaderValueCount: 0, TLSNextProto: nil, ConnState: nil, ErrorLog: nil, BaseContext: nil, ConnContext: nil,
 		HTTP2: nil, Protocols: nil, DisableClientPriority: false,
 	}
-	// ListenAndServe always returns the error that stopped it.
-	fmt.Fprintln(os.Stderr, listening.ListenAndServe())
-	return 1
+	return outcome.Fold(outcome.TupleToResult(net.Listen("tcp", listening.Addr)), func(listener net.Listener) int {
+		return outcome.Fold(outcome.TupleToResult(fmt.Fprintln(os.Stdout, listener.Addr().String())), func(int) int {
+			// Serve closes the listener and always returns the error that stopped it.
+			fmt.Fprintln(os.Stderr, listening.Serve(listener))
+			return 1
+		}, func(cause error) int {
+			fmt.Fprintln(os.Stderr, errors.Join(cause, listener.Close()))
+			return 1
+		})
+	}, func(cause error) int {
+		fmt.Fprintln(os.Stderr, cause)
+		return 1
+	})
 }
 
 // logRequest writes each request's method, the route it matched, and the status and code it was

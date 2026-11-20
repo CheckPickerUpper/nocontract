@@ -9,6 +9,8 @@ import (
 	"cmp"
 	"slices"
 
+	"github.com/CheckPickerUpper/outcome"
+
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/effect"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
@@ -126,6 +128,7 @@ func checkedAPI(declared Declared) apiCheck {
 	slices.SortFunc(groups, func(left, right description.Group) int { return cmp.Compare(left.Name, right.Name) })
 	refusals = append(refusals, repeatedRoutes(endpoints)...)
 	refusals = append(refusals, repeatedNames(declared, shared)...)
+	refusals = append(refusals, repeatedFailureCodes(declared.Members, shared)...)
 	refusals = append(refusals, reservedFields(declared.Members)...)
 	return apiCheck{groups: groups, shared: shared, refusals: refusals}
 }
@@ -169,13 +172,23 @@ func (endpointRefused) isEndpointCheck() {}
 // every shared failure it can answer.
 func checkedEndpoint(declared DeclaredEndpoint, shared []description.SharedFailure) endpointCheck {
 	refusals := bodyRefusals(declared)
+	query := make([]description.Parameter, 0, len(declared.Query))
+	for _, field := range declared.Query {
+		outcome.FoldOption(description.ParseParameter(field), func(parameter description.Parameter) struct{} {
+			query = append(query, parameter)
+			return struct{}{}
+		}, func() struct{} {
+			refusals = append(refusals, Refusal{Position: declared.Position, Problem: parameterNotReadable(field, "query")})
+			return struct{}{}
+		})
+	}
 	switch path := boundPath(declared).(type) {
 	case pathBound:
 		if len(refusals) > 0 {
 			return endpointRefused{refusals: refusals}
 		}
 		return endpointChecked{endpoint: description.Endpoint{
-			Name: declared.Name, Method: declared.Method, Path: path.segments, Query: declared.Query, Body: declared.Body,
+			Name: declared.Name, Method: declared.Method, Path: path.segments, Query: query, Body: declared.Body,
 			Successes: declared.Successes, Failures: slices.Concat(declared.Failures, sharedFailureMembers(declared, shared)),
 		}}
 	case pathRefused:

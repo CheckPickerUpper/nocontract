@@ -152,7 +152,7 @@ type Endpoint struct {
 	Name      string
 	Method    Method
 	Path      []PathSegment
-	Query     []Field
+	Query     []Parameter
 	Body      Body
 	Successes Successes
 	Failures  []Member
@@ -184,7 +184,7 @@ type PathText struct{ Text string }
 // PathParameter is a part of the path the route reads into Field.
 //
 //ergo:not-an-error
-type PathParameter struct{ Field Field }
+type PathParameter struct{ Field Parameter }
 
 func (PathText) isPathSegment()      {}
 func (PathParameter) isPathSegment() {}
@@ -319,6 +319,34 @@ func (Fails) isAnswer()    {}
 type Field struct {
 	Name   FieldName
 	Schema Schema
+}
+
+// Parameter describes a named value read from a path segment or query string.
+type Parameter struct {
+	Name   FieldName
+	Schema ParameterSchema
+}
+
+// ParameterSchema is a schema NoContract can read from one URL parameter.
+//
+//sumtype:decl
+type ParameterSchema interface {
+	Schema
+	isParameterSchema()
+}
+
+func (Text) isParameterSchema()     {}
+func (Integer) isParameterSchema()  {}
+func (Truth) isParameterSchema()    {}
+func (Literals) isParameterSchema() {}
+
+// ParseParameter keeps a field only when its schema can be read from a URL.
+func ParseParameter(field Field) outcome.Option[Parameter] {
+	schema, accepted := field.Schema.(ParameterSchema)
+	if !accepted {
+		return outcome.None[Parameter]()
+	}
+	return outcome.Some(Parameter{Name: field.Name, Schema: schema})
 }
 
 // NamedStruct is a named struct a member or a body uses, written once and referred to.

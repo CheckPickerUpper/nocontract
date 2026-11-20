@@ -65,16 +65,15 @@ func writeShopOpenAPITypecheckProject(t *testing.T, web string, generatedClient 
 		Extends string   `json:"extends"`
 		Files   []string `json:"files"`
 	}{Extends: filepath.Join(web, projectName), Files: []string{contractName}}
-	var projectJSON bytes.Buffer
-	scratchproject.StopOn(t, "encoding the OpenAPI shop type-check project for "+contractPath,
-		json.NewEncoder(&projectJSON).Encode(project))
+	projectJSON := scratchproject.BytesOrStop(t, "encoding the OpenAPI shop type-check project for "+contractPath,
+		outcome.TupleToResult(json.Marshal(project)))
 	for _, file := range []struct {
 		name     string
 		contents []byte
 	}{
 		{name: "shop_openapi_client.generated.mts", contents: generatedClient},
 		{name: contractName, contents: contract},
-		{name: projectName, contents: projectJSON.Bytes()},
+		{name: projectName, contents: projectJSON},
 	} {
 		path := filepath.Join(directory, file.name)
 		scratchproject.StopOn(t, "writing the OpenAPI shop type-check file "+path, os.WriteFile(path, file.contents, 0o600))

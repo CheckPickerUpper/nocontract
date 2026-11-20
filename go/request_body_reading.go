@@ -337,7 +337,19 @@ func Next[V, W any](reading BodyReading[V], next func(V) BodyReading[W]) BodyRea
 // Body is the request's JSON body read by read, refused when it holds more than the one value read
 // reads.
 func Body[V any](request *http.Request, read func(BodyValue) BodyReading[V]) Reading[V] {
-	body := BodyValue{decoder: jsontext.NewDecoder(request.Body, jsontext.AllowDuplicateNames(true)), path: bodyRoot}
+	switch reading := ReadJSONBody(request.Body, read).(type) {
+	case Read[V]:
+		return reading
+	case BodyRefused:
+		return RequestRefused{Part: RequestRefusedPartBody, Name: bodyCausePath(reading.Cause), Reason: reading.Cause.Error()}
+	case nil:
+	}
+	return RequestRefused{Part: RequestRefusedPartBody, Name: bodyRoot, Reason: "the body was not read"}
+}
+
+// ReadJSONBody reads exactly one JSON value using the same readers as an HTTP request body.
+func ReadJSONBody[V any](source io.Reader, read func(BodyValue) BodyReading[V]) BodyReading[V] {
+	body := BodyValue{decoder: jsontext.NewDecoder(source, jsontext.AllowDuplicateNames(true)), path: bodyRoot}
 	single := func(value V) BodyReading[V] {
 		return mo.Fold(mo.TupleToResult(body.decoder.ReadToken()), func(jsontext.Token) BodyReading[V] {
 			return BodyRefused{Cause: BodyNotSingle{}}
@@ -348,14 +360,7 @@ func Body[V any](request *http.Request, read func(BodyValue) BodyReading[V]) Rea
 			return body.unread(cause)
 		})
 	}
-	switch reading := Next(read(body), single).(type) {
-	case Read[V]:
-		return reading
-	case BodyRefused:
-		return RequestRefused{Part: RequestRefusedPartBody, Name: bodyCausePath(reading.Cause), Reason: reading.Cause.Error()}
-	case nil:
-	}
-	return RequestRefused{Part: RequestRefusedPartBody, Name: bodyRoot, Reason: "the body was not read"}
+	return Next(read(body), single)
 }
 
 // BodyText is a JSON string as the text type T its field holds.
@@ -620,13 +625,18 @@ func BodyDictionary[M ~map[K]V, K ~string, V any](key func(BodyMember) BodyReadi
 // BodyNullable reads JSON null as no T and any other value as the T inner reads, for a field
 // holding a mo.Option.
 func BodyNullable[T any](inner func(BodyValue) BodyReading[T]) func(BodyValue) BodyReading[mo.Option[T]] {
-	return func(value BodyValue) BodyReading[mo.Option[T]] {
+	return BodyNullableAs(inner, mo.Some[T], mo.None[T])
+}
+
+// BodyNullableAs reads a nullable value into the caller's representation of present and null.
+func BodyNullableAs[T, V any](inner func(BodyValue) BodyReading[T], present func(T) V, absent func() V) func(BodyValue) BodyReading[V] {
+	return func(value BodyValue) BodyReading[V] {
 		if value.decoder.PeekKind() == jsontext.KindNull {
-			return Next(value.token("null", jsontext.KindNull), func(jsontext.Token) BodyReading[mo.Option[T]] {
-				return Read[mo.Option[T]]{Value: mo.None[T]()}
+			return Next(value.token("null", jsontext.KindNull), func(jsontext.Token) BodyReading[V] {
+				return Read[V]{Value: absent()}
 			})
 		}
-		return Next(inner(value), func(read T) BodyReading[mo.Option[T]] { return Read[mo.Option[T]]{Value: mo.Some(read)} })
+		return Next(inner(value), func(read T) BodyReading[V] { return Read[V]{Value: present(read)} })
 	}
 }
 

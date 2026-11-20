@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/CheckPickerUpper/outcome"
 
@@ -70,14 +71,35 @@ func (document OpenAPIFile) Version() string { return document.version }
 // Backend is the language a project's backend is written in.
 //
 //sumtype:decl
-type Backend interface{ isBackend() }
+type Backend interface {
+	isBackend()
+	language() string
+}
 
 // GoBackend is a backend written in Go.
 //
 //ergo:not-an-error
 type GoBackend struct{}
 
-func (GoBackend) isBackend() {}
+// OdinBackend is a backend written in Odin.
+//
+//ergo:not-an-error
+type OdinBackend struct{}
+
+// GleamBackend is a backend written in Gleam.
+//
+//ergo:not-an-error
+type GleamBackend struct{}
+
+func (GoBackend) isBackend()    {}
+func (OdinBackend) isBackend()  {}
+func (GleamBackend) isBackend() {}
+
+func (GoBackend) language() string    { return "go" }
+func (OdinBackend) language() string  { return "odin" }
+func (GleamBackend) language() string { return "gleam" }
+
+func backends() []Backend { return []Backend{GoBackend{}, OdinBackend{}, GleamBackend{}} }
 
 // Read is read applied to the project projectFile describes, unreadable applied to the error the
 // operating system gave reading it, or refused applied to every place it is wrong, in file order.
@@ -225,10 +247,16 @@ func (parse *projectParse) path(fields map[string]jsonField, prefix, name string
 func (parse *projectParse) backend(fields map[string]jsonField, objectStart int) outcome.Option[Backend] {
 	return foldSome(parse.required(fields, "", "language", objectStart), func(value readValue) outcome.Option[Backend] {
 		return foldSome(parse.text("language", value), func(language string) outcome.Option[Backend] {
-			if language == "go" {
-				return outcome.Some[Backend](GoBackend{})
+			types := backends()
+			known := make([]string, 0, len(types))
+			for _, backend := range types {
+				name := backend.language()
+				if name == language {
+					return outcome.Some(backend)
+				}
+				known = append(known, name)
 			}
-			parse.refuse(value.start, LanguageUnknown{Language: language})
+			parse.refuse(value.start, LanguageUnknown{Language: language, Supported: strings.Join(known, ", ")})
 			return outcome.None[Backend]()
 		})
 	})

@@ -109,12 +109,19 @@ func TestEachRuleSpanningRoutesRefusesWithItsCode(t *testing.T) {
 	}
 	withBody := route(t, "readBody", "/body", 5)
 	withBody.Body = description.JSONBody{Schema: description.Text{}}
+	withRecordQuery := route(t, "list", "/items", 2)
+	withRecordQuery.Query = []description.Field{{Name: fieldName(t, "filter"), Schema: description.StructRef{Name: "Filter"}}}
 	repeatsShared := api(t, route(t, "list", "/items", 2))
 	repeatsShared.Members = append(repeatsShared.Members, assembling.DeclaredMember{
 		Member: description.Member{Name: "RequestRefused", Answer: description.Succeeds{Status: description.SuccessStatus{}}, Fields: []description.Field{}}, Position: at(101),
 	})
 	reservedField := api(t, route(t, "list", "/items", 2))
 	reservedField.Members[0].Member.Fields = []description.Field{{Name: description.CodeField(), Schema: description.Text{}}}
+	repeatsFailureCode := api(t, route(t, "list", "/items", 2))
+	sharedFailure := description.SharedFailures()[0]
+	repeatsFailureCode.Members = append(repeatsFailureCode.Members, assembling.DeclaredMember{
+		Member: description.Member{Name: "DifferentFailure", Answer: sharedFailure.Member().Answer, Fields: []description.Field{}}, Position: at(102),
+	})
 	for _, each := range []struct {
 		name     string
 		declared assembling.Declared
@@ -122,6 +129,12 @@ func TestEachRuleSpanningRoutesRefusesWithItsCode(t *testing.T) {
 	}{
 		{name: "a path segment no field reads", declared: api(t, route(t, "read", "/items/{item_id}", 2)), want: []string{"NC-1022"}},
 		{name: "a field reading no path segment", declared: api(t, withParams(route(t, "read", "/items", 2), text)), want: []string{"NC-1023"}},
+		{
+			name:     "a number type unsupported in a path segment",
+			declared: api(t, withParams(route(t, "read", "/items/{item_id}", 2), description.Field{Name: text.Name, Schema: description.Finite{}})),
+			want:     []string{"NC-1138"},
+		},
+		{name: "a record in one query parameter", declared: api(t, withRecordQuery), want: []string{"NC-1138"}},
 		{name: "a body on a GET route", declared: api(t, withBody), want: []string{"NC-1025"}},
 		{name: "two routes on one pattern", declared: api(t, route(t, "first", "/items", 2), route(t, "second", "/items", 3)), want: []string{"NC-1026"}},
 		{
@@ -133,6 +146,7 @@ func TestEachRuleSpanningRoutesRefusesWithItsCode(t *testing.T) {
 		{name: "a member field named code", declared: reservedField, want: []string{"NC-1033"}},
 		{name: "two routes of a group with one name", declared: api(t, route(t, "read", "/a", 2), route(t, "read", "/b", 3)), want: []string{"NC-1050"}},
 		{name: "a member taking a shared failure's name", declared: repeatsShared, want: []string{"NC-1018"}},
+		{name: "a distinct failure taking a shared failure's code", declared: repeatsFailureCode, want: []string{"NC-1139"}},
 		{name: "a path parameter its field reads", declared: api(t, withParams(route(t, "read", "/items/{item_id}", 2), text)), want: []string{}},
 	} {
 		if got := refusedCodes(t, each.declared); !slices.Equal(got, each.want) {
@@ -179,7 +193,10 @@ func TestARouteIsDescribedWithItsBoundPathAndTheMembersItAnswersWith(t *testing.
 		if len(endpoints) != 2 || endpoints[0].Name != "list" || endpoints[1].Name != "read" {
 			t.Fatalf("described the endpoints %v; want list then read", endpoints)
 		}
-		wantPath := []description.PathSegment{description.PathText{Text: "items"}, description.PathParameter{Field: item}}
+		wantPath := []description.PathSegment{
+			description.PathText{Text: "items"},
+			description.PathParameter{Field: description.Parameter{Name: item.Name, Schema: description.Text{}}},
+		}
 		if !slices.EqualFunc(endpoints[1].Path, wantPath, func(left, right description.PathSegment) bool { return left == right }) {
 			t.Errorf("read's path is %v; want %v", endpoints[1].Path, wantPath)
 		}

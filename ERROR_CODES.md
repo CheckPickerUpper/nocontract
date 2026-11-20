@@ -558,11 +558,12 @@ LanguageUnknown is a project file naming a language NoContract reads no backend 
 
 Declared in `internal/projectfile/project_file_problems.go`.
 
-Message: `The project file names the language "{Language}"; NoContract reads go.`
+Message: `The project file names the language "{Language}". NoContract reads {Supported}.`
 
 | Field | Type |
 | --- | --- |
 | `Language` | `string` |
+| `Supported` | `string` |
 
 ## NC-1056 DirectiveUnknown
 
@@ -1428,7 +1429,7 @@ Message: `The file {Path} could not be read.`
 
 ## NC-1129 FilesNotGenerated
 
-FilesNotGenerated is a run that found Go files the project wrote at paths generate writes: each
+FilesNotGenerated is a run that found files the project wrote at paths generate writes: each
 begins with no generated header, so generate leaves it as it is.
 
 Declared in `internal/running/running_generated_files_on_disk.go`.
@@ -1535,3 +1536,45 @@ Message: `"{Text}" is not a whole number written as canonical decimal text: an o
 | Field | Type |
 | --- | --- |
 | `Text` | `string` |
+
+## NC-1137 NativeBackendFailed
+
+NativeBackendFailed is a project whose compiler, generator, or dispatcher could not run.
+
+Declared in `internal/running/running_native_project.go`.
+
+Message: `The native backend for {Path} could not run.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Cause` | `error` |
+
+## NC-1138 URLParameterUnsupported
+
+URLParameterUnsupported is a field that cannot be read from one path or query parameter.
+
+Declared in `assembling/refusals.go`.
+
+Message: `The {Part} parameter {Field} cannot be read as {Schema}.`
+
+| Field | Type |
+| --- | --- |
+| `Part` | `string` |
+| `Field` | `string` |
+| `Schema` | `string` |
+
+## NC-1139 FailureCodeTaken
+
+FailureCodeTaken is an HTTP failure using a permanent code another response already owns.
+
+Declared in `assembling/failure_code_claims.go`.
+
+Message: `Failure {Member} uses {Code}, which already identifies {First} declared at {FirstDeclared}.`
+
+| Field | Type |
+| --- | --- |
+| `Code` | `string` |
+| `Member` | `string` |
+| `First` | `string` |
+| `FirstDeclared` | `string` |
