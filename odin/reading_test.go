@@ -49,6 +49,53 @@ func TestCompilerFailureRetainsTheCommandAndSourceDiagnostics(t *testing.T) {
 	}
 }
 
+func TestMissingRouteArgumentsAreRefusedBesideAValidRoute(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	routes := filepath.Join(directory, "routes")
+	checkError(t, os.MkdirAll(routes, 0o755))
+	source := filepath.Join(routes, "example_routes.odin")
+	checkError(t, os.WriteFile(source, []byte(`package routes
+
+Input :: struct #all_or_none { value: i64 }
+
+//nocontract:status 200
+@(not_an_error)
+Answer :: struct #all_or_none { value: i64 }
+
+//nocontract:status 202
+@(not_an_error)
+Accepted :: struct #all_or_none {}
+
+Outcome :: union #no_nil { Answer, Accepted }
+
+//nocontract:route GET /values
+Read :: proc(input: Input) -> Outcome {
+	return Answer{value = input.value}
+}
+
+//nocontract:route
+Missing :: proc(input: Input) -> Outcome {
+	return Answer{value = input.value}
+}
+`), 0o644))
+	name, named := description.ParseAPIName("ExampleApi").(description.APINameRead)
+	if !named {
+		t.Fatal("ExampleApi did not parse")
+	}
+	request := native.Request{Directory: directory, Packages: []string{"routes"}, API: assembling.NamedAPI{Name: name.Name, Position: assembling.Position{File: filepath.Join(directory, "nocontract.json"), Line: 1, Column: 1}}, Server: filepath.Join(directory, "server")}
+	outcome.Fold(odin.Read(t.Context(), request), func(project native.Project) struct{} {
+		t.Fatalf("reader silently omitted the invalid route: %+v", project.Declared)
+		return struct{}{}
+	}, func(cause error) struct{} {
+		refused, exact := errors.AsType[odin.RouteArgumentsWrong](cause)
+		if !exact || refused.Position.File != source || refused.Position.Line != 21 || refused.Procedure != "Missing" || refused.Written != "//nocontract:route" {
+			t.Fatalf("refusal = %v; want Missing's route syntax and location", cause)
+		}
+		return struct{}{}
+	})
+}
+
 func checkError(t *testing.T, cause error) {
 	t.Helper()
 	outcome.ForEachOption(outcome.EmptyableToOption(cause), func(cause error) { t.Fatal(cause) })

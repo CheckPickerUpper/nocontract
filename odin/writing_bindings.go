@@ -25,7 +25,7 @@ type bindingWriter struct {
 	problems []error
 }
 
-func generateBindings(request native.Request, graph compiler.Graph, routes []routeBinding, _ assembling.APIAssembled) outcome.Result[[]native.File] {
+func generateBindings(request native.Request, graph compiler.Graph, routes []routeBinding) outcome.Result[[]native.File] {
 	writer := &bindingWriter{request: request, graph: graph, imports: []string{}, from: []int{}, to: []int{}, source: &strings.Builder{}, problems: []error{}}
 	for _, route := range routes {
 		writer.collect(route.input, &writer.from)

@@ -186,7 +186,7 @@ func (pathUnreadable) isPathHolding() {}
 type outputOwner interface{ isOutputOwner() }
 
 //ergo:not-an-error
-type declaredOutput struct{}
+type declaredOutput struct{ setting string }
 
 //ergo:not-an-error
 type headedOutput struct{ header string }

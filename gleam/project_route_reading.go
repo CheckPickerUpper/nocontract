@@ -4,6 +4,7 @@ package gleam
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"maps"
 	"path"
 	"path/filepath"
@@ -24,21 +25,22 @@ import (
 // Read resolves public signatures with Gleam, reads route metadata, and prepares typed bindings.
 func Read(context context.Context, request native.Request) outcome.Result[native.Project] {
 	return outcome.Fold(compiler.Read(context, request.Directory), func(project compiler.Package) outcome.Result[native.Project] {
-		return outcome.Fold(directives.Read(request.Directory, project), func(metadata map[string]directives.Module) outcome.Result[native.Project] {
-			index := projectIndex{project: project, metadata: metadata, records: map[compiler.Identity]bindings.Record{}, outcomes: map[compiler.Identity]bindings.Outcome{}}
-			return outcome.Fold(index.readRoutes(request), func(routes []routeRead) outcome.Result[native.Project] {
-				return outcome.Ok(index.projectBindings(request, routes))
+		return outcome.Fold(selectedModules(request, project.Modules), func(selection []string) outcome.Result[native.Project] {
+			return outcome.Fold(directives.Read(request.Directory, project), func(metadata map[string]directives.Module) outcome.Result[native.Project] {
+				index := projectIndex{project: project, metadata: metadata, records: map[compiler.Identity]bindings.Record{}, outcomes: map[compiler.Identity]bindings.Outcome{}}
+				return outcome.Fold(index.readRoutes(request, selection), func(routes []routeRead) outcome.Result[native.Project] {
+					return outcome.Ok(index.projectBindings(request, routes))
+				}, outcome.Err[native.Project])
 			}, outcome.Err[native.Project])
 		}, outcome.Err[native.Project])
 	}, outcome.Err[native.Project])
 }
 
 type sourceRoute struct {
-	module      string
-	name        string
-	signature   compiler.Function
-	declaration directives.Declaration
-	route       directives.Directive
+	module    string
+	name      string
+	signature compiler.Function
+	route     directives.Route
 }
 type routeRead struct {
 	declared assembling.DeclaredEndpoint
@@ -50,37 +52,48 @@ type guardRead struct {
 	route  native.GuardedRoute
 }
 
-func (index projectIndex) readRoutes(request native.Request) outcome.Result[[]routeRead] {
+func (index projectIndex) readRoutes(request native.Request, selection []string) outcome.Result[[]routeRead] {
 	sources := []sourceRoute{}
-	for _, moduleName := range slices.Sorted(maps.Keys(index.project.Modules)) {
-		if !selectedModule(request.Packages, moduleName) {
-			continue
-		}
+	for _, moduleName := range selection {
 		module := index.project.Modules[moduleName]
-		for _, name := range slices.Sorted(maps.Keys(module.Functions)) {
-			metadata := index.metadata[moduleName]
-			if declaration, declared := metadata.Functions[name]; declared {
-				for _, directive := range declaration.Directives {
-					if directive.Name == "route" {
-						sources = append(sources, sourceRoute{module: moduleName, name: name, signature: module.Functions[name], declaration: declaration, route: directive})
-					}
-				}
-			}
+		routes := index.metadata[moduleName].Routes
+		for _, name := range slices.Sorted(maps.Keys(routes)) {
+			sources = append(sources, sourceRoute{module: moduleName, name: name, signature: module.Functions[name], route: routes[name]})
 		}
 	}
 	if len(sources) == 0 {
-		return outcome.Err[[]routeRead](DirectiveRefused{Declaration: directives.Declaration{Position: request.API.Position, Directives: []directives.Directive{}}, Requirement: "at least one selected public route"})
+		return outcome.Err[[]routeRead](DirectiveRefused{Declaration: directives.Declaration{Position: request.API.Position, Directives: []string{}}, Requirement: "at least one selected public route"})
 	}
 	return sequence.Traverse(sources, index.readRoute)
 }
 
-func selectedModule(patterns []string, module string) bool {
-	for _, pattern := range patterns {
-		if pattern == "./..." || pattern == module {
-			return true
+// ModuleNotFound records the requested module and those the Gleam compiler exported.
+type ModuleNotFound struct {
+	ProjectFile string
+	Module      string
+	Available   []string
+}
+
+// Error identifies the entry in packages that could not be resolved.
+func (failure ModuleNotFound) Error() string {
+	return fmt.Sprintf("%s: packages names unknown Gleam module %q (compiled modules: %q)", failure.ProjectFile, failure.Module, failure.Available)
+}
+
+func selectedModules(request native.Request, modules map[string]compiler.Module) outcome.Result[[]string] {
+	selected := map[string]struct{}{}
+	for _, pattern := range request.Packages {
+		if pattern == "./..." {
+			for module := range modules {
+				selected[module] = struct{}{}
+			}
+			continue
 		}
+		if _, known := modules[pattern]; !known {
+			return outcome.Err[[]string](ModuleNotFound{ProjectFile: request.API.Position.File, Module: pattern, Available: slices.Sorted(maps.Keys(modules))})
+		}
+		selected[pattern] = struct{}{}
 	}
-	return false
+	return outcome.Ok(slices.Sorted(maps.Keys(selected)))
 }
 
 func (index projectIndex) projectBindings(request native.Request, routes []routeRead) native.Project {
@@ -117,9 +130,9 @@ func (index projectIndex) projectBindings(request native.Request, routes []route
 		structs = append(structs, assembling.DeclaredStruct{Struct: description.NamedStruct{Name: identity.Name, Fields: bindings.Fields(record.Fields)}, Position: index.position(identity, record.Constructor.Name)})
 	}
 	declared := assembling.Declared{API: request.API, Groups: declaredGroups, Members: members, Structs: structs}
-	return native.Project{Declared: declared, Guards: guards, Generate: func(assembled assembling.APIAssembled) outcome.Result[[]native.File] {
-		return bindings.Generate(bindings.Project{Directory: request.Directory, Server: request.Server, Package: index.project.Name, Routes: nativeRoutes, Guards: nativeGuards}, assembled)
-	}, Command: native.Command{Directory: request.Server, Arguments: []string{"gleam", "run", "--no-print-progress", "-m", "nocontract_bridge"}}}
+	return native.Project{Declared: declared, Guards: guards, Generate: func() outcome.Result[[]native.File] {
+		return bindings.Generate(bindings.Project{Directory: request.Directory, Server: request.Server, Package: index.project.Name, Routes: nativeRoutes, Guards: nativeGuards})
+	}, Command: native.Command{Directory: request.Server, Executable: "gleam", Arguments: []string{"run", "--no-print-progress", "-m", "nocontract_bridge"}}}
 }
 
 func sortedIdentities[T any](values map[compiler.Identity]T) []compiler.Identity {

@@ -16,38 +16,36 @@ func indexLanguage() messages.Language { return messages.Match("") }
 
 func (index *readIndex) schema(id int, open []int, position assembling.Position) outcome.Result[description.Schema] {
 	refuse := func(reason string) outcome.Result[description.Schema] {
-		return outcome.Err[description.Schema](DeclarationRefused{Position: position, Declaration: fmt.Sprintf("%#v", index.snapshot.Graph.Types[id]), Rule: reason})
+		return outcome.Err[description.Schema](DeclarationRefused{Position: position, Declaration: fmt.Sprintf("%#v", index.graph.Types[id]), Rule: reason})
 	}
-	switch checked := index.snapshot.Graph.Types[id].(type) {
+	switch checked := index.graph.Types[id].(type) {
 	case compiler.Named:
 		if slices.Contains(open, id) {
 			return refuse("recursive structs cannot be declared on the wire")
 		}
 		return outcome.FoldOption(index.declaration(checked.Package, checked.Name), func(declaration compiler.Declaration) outcome.Result[description.Schema] {
-			return outcome.Fold(directive(declaration, "instant"), func(instant outcome.Option[string]) outcome.Result[description.Schema] {
-				return outcome.FoldOption(instant, func(argument string) outcome.Result[description.Schema] {
-					return outcome.Fold(requireType[compiler.String](index.base(id), DeclarationRefused{Position: placed(declaration), Declaration: checked.Name, Rule: "//nocontract:instant requires Instant :: distinct string"}), func(compiler.String) outcome.Result[description.Schema] {
-						if checked.Name != "Instant" || argument != "" {
-							return refuse("//nocontract:instant designates Instant :: distinct string")
+			return outcome.FoldOption(index.documentation.typeDirective(declaration, "instant"), func(argument string) outcome.Result[description.Schema] {
+				return outcome.Fold(requireType[compiler.String](index.base(id), DeclarationRefused{Position: placed(declaration), Declaration: checked.Name, Rule: "//nocontract:instant requires Instant :: distinct string"}), func(compiler.String) outcome.Result[description.Schema] {
+					if checked.Name != "Instant" || argument != "" {
+						return refuse("//nocontract:instant designates Instant :: distinct string")
+					}
+					return outcome.Ok[description.Schema](description.Instant{})
+				}, outcome.Err[description.Schema])
+			}, func() outcome.Result[description.Schema] {
+				return outcome.FoldOption(compiler.Select[compiler.Struct](index.base(id)), func(structure compiler.Struct) outcome.Result[description.Schema] {
+					for _, existing := range index.structs {
+						if existing.Struct.Name == checked.Name && existing.Position == placed(declaration) {
+							return outcome.Ok[description.Schema](description.StructRef{Name: checked.Name})
 						}
-						return outcome.Ok[description.Schema](description.Instant{})
+					}
+					return outcome.Fold(index.fields(structure.Fields, append(slices.Clone(open), id), placed(declaration)), func(fields []description.Field) outcome.Result[description.Schema] {
+						index.structs = append(index.structs, assembling.DeclaredStruct{Struct: description.NamedStruct{Name: checked.Name, Fields: fields}, Position: placed(declaration)})
+						return outcome.Ok[description.Schema](description.StructRef{Name: checked.Name})
 					}, outcome.Err[description.Schema])
 				}, func() outcome.Result[description.Schema] {
-					return outcome.FoldOption(compiler.Select[compiler.Struct](index.base(id)), func(structure compiler.Struct) outcome.Result[description.Schema] {
-						for _, existing := range index.structs {
-							if existing.Struct.Name == checked.Name && existing.Position == placed(declaration) {
-								return outcome.Ok[description.Schema](description.StructRef{Name: checked.Name})
-							}
-						}
-						return outcome.Fold(index.fields(structure.Fields, append(slices.Clone(open), id), placed(declaration)), func(fields []description.Field) outcome.Result[description.Schema] {
-							index.structs = append(index.structs, assembling.DeclaredStruct{Struct: description.NamedStruct{Name: checked.Name, Fields: fields}, Position: placed(declaration)})
-							return outcome.Ok[description.Schema](description.StructRef{Name: checked.Name})
-						}, outcome.Err[description.Schema])
-					}, func() outcome.Result[description.Schema] {
-						return index.schema(checked.Base, append(slices.Clone(open), id), placed(declaration))
-					})
+					return index.schema(checked.Base, append(slices.Clone(open), id), placed(declaration))
 				})
-			}, outcome.Err[description.Schema])
+			})
 		}, func() outcome.Result[description.Schema] {
 			if checked.Package == "runtime" && strings.HasPrefix(checked.Name, "Maybe(") {
 				return index.schema(checked.Base, open, position)
@@ -153,38 +151,32 @@ func (index *readIndex) fields(fields []compiler.Field, open []int, position ass
 	return read
 }
 
-func (index *readIndex) readGuard(declaration compiler.Declaration) outcome.Result[outcome.Option[guardBinding]] {
-	return outcome.Fold(directive(declaration, "guard"), func(text outcome.Option[string]) outcome.Result[outcome.Option[guardBinding]] {
-		return outcome.FoldOption(text, func(text string) outcome.Result[outcome.Option[guardBinding]] {
-			words := strings.Fields(text)
-			refusal := DeclarationRefused{Position: placed(declaration), Declaration: text, Rule: "guard requires package.procedure scope and a procedure taking (string, map[string]string), returning a named union with one empty Admitted member"}
-			if len(words) != 2 {
-				return outcome.Err[outcome.Option[guardBinding]](refusal)
+func (index *readIndex) readGuard(source routeSource) outcome.Result[outcome.Option[guardBinding]] {
+	return outcome.FoldOption(source.guard, func(guard guardDirective) outcome.Result[outcome.Option[guardBinding]] {
+		refusal := DeclarationRefused{Position: placed(source.declaration), Declaration: guard.written, Rule: "guard must take (string, map[string]string) and return a named union with one empty Admitted member"}
+		for _, root := range index.graph.Roots {
+			if (declarationName{pkg: root.Package, name: root.Name}) != guard.target {
+				continue
 			}
-			for _, root := range index.snapshot.Graph.Roots {
-				if root.Package+"."+root.Name != words[0] {
-					continue
+			return outcome.Fold(requireType[compiler.Procedure](index.graph.Types[root.Type], refusal), func(procedure compiler.Procedure) outcome.Result[outcome.Option[guardBinding]] {
+				if len(procedure.Parameters) != 2 || len(procedure.Results) != 1 {
+					return outcome.Err[outcome.Option[guardBinding]](refusal)
 				}
-				return outcome.Fold(requireType[compiler.Procedure](index.snapshot.Graph.Types[root.Type], refusal), func(procedure compiler.Procedure) outcome.Result[outcome.Option[guardBinding]] {
-					if len(procedure.Parameters) != 2 || len(procedure.Results) != 1 {
-						return outcome.Err[outcome.Option[guardBinding]](refusal)
-					}
-					return outcome.Fold(requireType[compiler.String](index.snapshot.Graph.Types[procedure.Parameters[0]], refusal), func(compiler.String) outcome.Result[outcome.Option[guardBinding]] {
-						return outcome.Fold(requireType[compiler.Map](index.snapshot.Graph.Types[procedure.Parameters[1]], refusal), func(headers compiler.Map) outcome.Result[outcome.Option[guardBinding]] {
-							return outcome.Fold(requireType[compiler.String](index.snapshot.Graph.Types[headers.Key], refusal), func(compiler.String) outcome.Result[outcome.Option[guardBinding]] {
-								return outcome.Fold(requireType[compiler.String](index.snapshot.Graph.Types[headers.Element], refusal), func(compiler.String) outcome.Result[outcome.Option[guardBinding]] {
-									return outcome.Fold(requireType[compiler.Named](index.snapshot.Graph.Types[procedure.Results[0]], refusal), func(compiler.Named) outcome.Result[outcome.Option[guardBinding]] {
-										return index.guardMembers(root, procedure.Results[0], words[1], refusal)
-									}, outcome.Err[outcome.Option[guardBinding]])
+				return outcome.Fold(requireType[compiler.String](index.graph.Types[procedure.Parameters[0]], refusal), func(compiler.String) outcome.Result[outcome.Option[guardBinding]] {
+					return outcome.Fold(requireType[compiler.Map](index.graph.Types[procedure.Parameters[1]], refusal), func(headers compiler.Map) outcome.Result[outcome.Option[guardBinding]] {
+						return outcome.Fold(requireType[compiler.String](index.graph.Types[headers.Key], refusal), func(compiler.String) outcome.Result[outcome.Option[guardBinding]] {
+							return outcome.Fold(requireType[compiler.String](index.graph.Types[headers.Element], refusal), func(compiler.String) outcome.Result[outcome.Option[guardBinding]] {
+								return outcome.Fold(requireType[compiler.Named](index.graph.Types[procedure.Results[0]], refusal), func(compiler.Named) outcome.Result[outcome.Option[guardBinding]] {
+									return index.guardMembers(root, procedure.Results[0], guard.scope, refusal)
 								}, outcome.Err[outcome.Option[guardBinding]])
 							}, outcome.Err[outcome.Option[guardBinding]])
 						}, outcome.Err[outcome.Option[guardBinding]])
 					}, outcome.Err[outcome.Option[guardBinding]])
 				}, outcome.Err[outcome.Option[guardBinding]])
-			}
-			return outcome.Err[outcome.Option[guardBinding]](refusal)
-		}, func() outcome.Result[outcome.Option[guardBinding]] { return outcome.Ok(outcome.None[guardBinding]()) })
-	}, outcome.Err[outcome.Option[guardBinding]])
+			}, outcome.Err[outcome.Option[guardBinding]])
+		}
+		return outcome.Err[outcome.Option[guardBinding]](refusal)
+	}, func() outcome.Result[outcome.Option[guardBinding]] { return outcome.Ok(outcome.None[guardBinding]()) })
 }
 
 func (index *readIndex) guardMembers(root compiler.Root, output int, scope string, refusal DeclarationRefused) outcome.Result[outcome.Option[guardBinding]] {
@@ -193,7 +185,7 @@ func (index *readIndex) guardMembers(root compiler.Root, output int, scope strin
 		admissions := 0
 		for _, variant := range union.Variants {
 			refusals = outcome.Fold(refusals, func(previous []description.Member) outcome.Result[[]description.Member] {
-				return outcome.FoldOption(findAdmitted(index.snapshot.Graph, variant), func(compiler.Named) outcome.Result[[]description.Member] { admissions++; return outcome.Ok(previous) }, func() outcome.Result[[]description.Member] {
+				return outcome.FoldOption(findAdmitted(index.graph, variant), func(compiler.Named) outcome.Result[[]description.Member] { admissions++; return outcome.Ok(previous) }, func() outcome.Result[[]description.Member] {
 					return outcome.Fold(index.member(variant), func(member description.Member) outcome.Result[[]description.Member] {
 						switch member.Answer.(type) {
 						case description.Fails:

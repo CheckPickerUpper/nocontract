@@ -4,11 +4,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/gleam"
+	"github.com/CheckPickerUpper/nocontract/gleam/directives"
 	"github.com/CheckPickerUpper/nocontract/internal/native"
 	"github.com/CheckPickerUpper/outcome"
 )
@@ -16,30 +18,51 @@ import (
 func TestCompilerAttachmentAndUnrepresentableShapesAreRefused(t *testing.T) {
 	answer := "pub type Answer {\n/// ergleam:not-an-error\n/// nocontract:status 200\nAnswered(value: Int)\n}\n"
 	route := "/// nocontract:route POST /values\npub fn read(_input: Input) -> Answer { Answered(value: 1) }\n"
+	allModules := []string{"./..."}
 	tests := []struct {
-		name   string
-		source string
-		check  func(*testing.T, error)
+		name     string
+		source   string
+		packages []string
+		check    func(*testing.T, error)
 	}{
-		{name: "directive inside a string has no compiler attachment", source: "pub type Input { Input(value: Int) }\n" + answer + "pub fn read(_input: Input) -> Answer { Answered(value: 1) }\npub fn misleading() -> String { \"\n/// nocontract:route POST /forged\npub fn read(_input: Input) -> Answer {\n\" }\n", check: func(t *testing.T, cause error) {
+		{name: "a typo on one handler is refused even when another route is valid", source: "pub type Input { Input(value: Int) }\n" + answer + route + "/// nocontract:rouet POST /missing\npub fn missing(_input: Input) -> Answer { Answered(value: 2) }\n", packages: allModules, check: func(t *testing.T, cause error) {
+			refused, exact := errors.AsType[directives.UnknownDirective](cause)
+			if !exact || refused.Text != "nocontract:rouet POST /missing" || filepath.Base(refused.Position.File) != "reader_proof.gleam" || refused.Position.Line != 10 {
+				t.Fatalf("refusal = %v; want the misspelled directive and its function location", cause)
+			}
+		}},
+		{name: "an unknown module is refused even when another selection has routes", source: "pub type Input { Input(value: Int) }\n" + answer + route, packages: []string{"reader_proof", "reader_typo"}, check: func(t *testing.T, cause error) {
+			refused, exact := errors.AsType[gleam.ModuleNotFound](cause)
+			if !exact || filepath.Base(refused.ProjectFile) != "gleam.toml" || refused.Module != "reader_typo" || !slices.Equal(refused.Available, []string{"reader_proof"}) {
+				t.Fatalf("refusal = %v; want the requested module and compiler's module names", cause)
+			}
+		}},
+		{name: "an invalid permanent code identifies its constructor", source: "pub type Input { Input(value: Int) }\npub type Other {\nMissingEarlier\n}\npub fn decoy() -> String { \"\nMissing\n\" }\npub type Answer {\n/// ergleam:not-an-error\n/// nocontract:status 200\nAnswered(value: Int)\n/// ergleam:code SH!-1001\n/// nocontract:status 404\nMissing\n}\n" + route, packages: allModules, check: func(t *testing.T, cause error) {
+			constructor, located := errors.AsType[gleam.ConstructorCodeRefused](cause)
+			prefix, refused := errors.AsType[native.FailureCodePrefixInvalid](cause)
+			if !located || constructor.Constructor != "Missing" || filepath.Base(constructor.Declaration.Position.File) != "reader_proof.gleam" || constructor.Declaration.Position.Line != 14 || constructor.Marker != "ergleam:code SH!-1001" || !refused || prefix.Written != "SH!-1001" || prefix.Problem.Text != "SH!" {
+				t.Fatalf("refusal = %v; want the complete code and constructor location", cause)
+			}
+		}},
+		{name: "directive inside a string has no compiler attachment", source: "pub type Input { Input(value: Int) }\n" + answer + "pub fn read(_input: Input) -> Answer { Answered(value: 1) }\npub fn misleading() -> String { \"\n/// nocontract:route POST /forged\npub fn read(_input: Input) -> Answer {\n\" }\n", packages: allModules, check: func(t *testing.T, cause error) {
 			refused, exact := errors.AsType[gleam.DirectiveRefused](cause)
 			if !exact || refused.Requirement != "at least one selected public route" {
 				t.Fatalf("refusal=%+v", cause)
 			}
 		}},
-		{name: "an undecided labelled outcome cannot become a forwarded member", source: "pub type Input { Input(value: Int) }\npub type Answer {\n/// ergleam:not-an-error\n/// nocontract:status 200\nAnswered(value: Int)\nUnmarked(value: Int)\n}\n" + route, check: func(t *testing.T, cause error) {
+		{name: "an undecided labelled outcome cannot become a forwarded member", source: "pub type Input { Input(value: Int) }\npub type Answer {\n/// ergleam:not-an-error\n/// nocontract:status 200\nAnswered(value: Int)\nUnmarked(value: Int)\n}\n" + route, packages: allModules, check: func(t *testing.T, cause error) {
 			refused, exact := errors.AsType[gleam.DirectiveRefused](cause)
 			if !exact || refused.Requirement != "an unlabelled positional parameter on an unmarked answer wrapper" {
 				t.Fatalf("refusal=%+v", cause)
 			}
 		}},
-		{name: "a heterogeneous tuple cannot become a homogeneous fixed list", source: "pub type Input { Input(body: #(Int, String)) }\n" + answer + route, check: func(t *testing.T, cause error) {
+		{name: "a heterogeneous tuple cannot become a homogeneous fixed list", source: "pub type Input { Input(body: #(Int, String)) }\n" + answer + route, packages: allModules, check: func(t *testing.T, cause error) {
 			refused, exact := errors.AsType[gleam.Unsupported](cause)
 			if !exact || refused.Requirement != "identical resolved tuple element types" {
 				t.Fatalf("refusal=%+v", cause)
 			}
 		}},
-		{name: "two enum constructors cannot share a wire spelling", source: "pub type Currency {\n/// nocontract:literal CAD\nFirst\n/// nocontract:literal CAD\nSecond\n}\npub type Input { Input(currency: Currency) }\n" + answer + route, check: func(t *testing.T, cause error) {
+		{name: "two enum constructors cannot share a wire spelling", source: "pub type Currency {\n/// nocontract:literal CAD\nFirst\n/// nocontract:literal CAD\nSecond\n}\npub type Input { Input(currency: Currency) }\n" + answer + route, packages: allModules, check: func(t *testing.T, cause error) {
 			refused, exact := errors.AsType[gleam.LiteralRepeated](cause)
 			if !exact || refused.Spelling != "CAD" || refused.First.Name != "First" || refused.Repeated.Name != "Second" || refused.First.Type != refused.Repeated.Type || refused.First.Type.Package != "reader_proof" || refused.First.Type.Module != "reader_proof" || refused.First.Type.Name != "Currency" || refused.First.Position.Line != 3 || refused.Repeated.Position.Line != 5 || refused.First.Position.File != refused.Repeated.Position.File || filepath.Base(refused.First.Position.File) != "reader_proof.gleam" {
 				t.Fatalf("refusal=%+v", cause)
@@ -53,7 +76,7 @@ func TestCompilerAttachmentAndUnrepresentableShapesAreRefused(t *testing.T) {
 			if !named {
 				t.Fatal("ExampleApi did not parse")
 			}
-			request := native.Request{Directory: directory, Packages: []string{"./..."}, API: assembling.NamedAPI{Name: apiName.Name, Position: assembling.Position{File: filepath.Join(directory, "gleam.toml"), Line: 1, Column: 1}}, Server: filepath.Join(directory, "server")}
+			request := native.Request{Directory: directory, Packages: test.packages, API: assembling.NamedAPI{Name: apiName.Name, Position: assembling.Position{File: filepath.Join(directory, "gleam.toml"), Line: 1, Column: 1}}, Server: filepath.Join(directory, "server")}
 			outcome.Fold(gleam.Read(t.Context(), request), func(project native.Project) struct{} {
 				t.Fatalf("unrepresentable route was accepted: %+v", project.Declared)
 				return struct{}{}

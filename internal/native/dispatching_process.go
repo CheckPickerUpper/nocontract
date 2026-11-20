@@ -27,50 +27,15 @@ type Dispatcher struct {
 // Close allows the native process to finish reading its input before waiting for it to exit.
 func (dispatcher Dispatcher) Close() error { return dispatcher.close() }
 
-// CommandFailed keeps the command, directory, operation, phase and underlying failure.
-type CommandFailed struct {
-	Command   Command
-	Phase     string
-	Operation string
-	Output    string
-	Cause     error
-}
-
-type commandMissingExecutable struct{}
-
-func (commandMissingExecutable) Error() string { return "missing executable" }
-
-type dispatcherNotReady struct{ Line string }
-
-func (failed dispatcherNotReady) Error() string {
-	return fmt.Sprintf("expected native dispatcher readiness, got %q", failed.Line)
-}
-
-// Error identifies the failed command and phase and reports captured startup output.
-func (failed CommandFailed) Error() string {
-	operation := failed.Phase
-	if failed.Operation != "" {
-		operation += " for " + failed.Operation
-	}
-	where := fmt.Sprintf("%s in %s: %s: %v", strings.Join(failed.Command.Arguments, " "), failed.Command.Directory, operation, failed.Cause)
-	if failed.Output == "" {
-		return where
-	}
-	return where + "\n" + failed.Output
-}
-
 // Start waits for the native dispatcher to report readiness.
 func Start(lifetime context.Context, command Command) outcome.Result[Dispatcher] {
-	if len(command.Arguments) == 0 {
-		return outcome.Err[Dispatcher](CommandFailed{Command: command, Phase: "start", Operation: "", Output: "", Cause: commandMissingExecutable{}})
-	}
-	process := exec.CommandContext(lifetime, command.Arguments[0], command.Arguments[1:]...)
+	process := exec.CommandContext(lifetime, command.Executable, command.Arguments...)
 	process.Dir = command.Directory
 	process.WaitDelay = 2 * time.Second
 	stderr := &processLog{mutex: &sync.Mutex{}, capture: outcome.Some(&bytes.Buffer{})}
 	process.Stderr = io.MultiWriter(os.Stderr, stderr)
-	fail := func(phase string, cause error) outcome.Result[Dispatcher] {
-		return outcome.Err[Dispatcher](CommandFailed{Command: command, Phase: phase, Operation: "", Output: stderr.text(), Cause: cause})
+	fail := func(step string, cause error) outcome.Result[Dispatcher] {
+		return outcome.Err[Dispatcher](DispatcherStartFailed{Command: command, Step: step, Diagnostics: stderr.text(), Cause: cause})
 	}
 	return outcome.Fold(outcome.TupleToResult(process.StdinPipe()), func(input io.WriteCloser) outcome.Result[Dispatcher] {
 		return outcome.Fold(outcome.TupleToResult(process.StdoutPipe()), func(output io.ReadCloser) outcome.Result[Dispatcher] {
@@ -151,7 +116,7 @@ type waitingInvocation struct {
 }
 
 func invocationFailed(command Command, request invocation, step string, cause error) outcome.Result[reply] {
-	return outcome.Err[reply](CommandFailed{Command: command, Phase: step, Operation: request.Operation, Output: "", Cause: cause})
+	return outcome.Err[reply](InvocationFailed{Command: command, Step: step, Operation: request.Operation, Cause: cause})
 }
 
 func startInvocations(lifetime context.Context, command Command, input io.Writer, output *bufio.Reader) invocationLoop {

@@ -3,16 +3,15 @@ package gleam
 import (
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
 	ergo "github.com/CheckPickerUpper/ErGo"
-	"github.com/CheckPickerUpper/ErGo/codes"
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/gleam/bindings"
 	"github.com/CheckPickerUpper/nocontract/gleam/compiler"
 	"github.com/CheckPickerUpper/nocontract/gleam/directives"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
+	"github.com/CheckPickerUpper/nocontract/internal/native"
 	"github.com/CheckPickerUpper/nocontract/internal/sequence"
 	"github.com/CheckPickerUpper/outcome"
 )
@@ -23,63 +22,40 @@ type DirectiveRefused struct {
 	Requirement string
 }
 
+// Error locates the declaration and reports the unmet rule.
 func (failure DirectiveRefused) Error() string {
 	return fmt.Sprintf("%s: Gleam metadata requires %s; directives=%+v", failure.Declaration.Position, failure.Requirement, failure.Declaration.Directives)
 }
 
-// CodeUnresolved preserves a spelling whose code parser returned no resolved branch.
-type CodeUnresolved struct{ Text string }
-
-func (failure CodeUnresolved) Error() string {
-	return "no permanent code was parsed for " + failure.Text
+// ConstructorCodeRefused attaches a code parser refusal to its Gleam constructor.
+type ConstructorCodeRefused struct {
+	Constructor string
+	Declaration directives.Declaration
+	Marker      string
+	Cause       error
 }
 
-// CodeRefused preserves the permanent-code parser's complete refusal.
-type CodeRefused struct{ Refusal codes.InvalidCode }
-
-func (failure CodeRefused) Error() string {
-	return fmt.Sprintf("invalid permanent code: %+v", failure.Refusal)
+// Error identifies the constructor whose permanent code the parser refused.
+func (failure ConstructorCodeRefused) Error() string {
+	return fmt.Sprintf("%s: Gleam constructor %s: %v", failure.Declaration.Position, failure.Constructor, failure.Cause)
 }
 
-// PrefixRefused preserves the prefix parser's complete refusal.
-type PrefixRefused struct{ Refusal codes.InvalidPrefix }
+// Unwrap preserves the refusal produced by the permanent-code parser.
+func (failure ConstructorCodeRefused) Unwrap() error { return failure.Cause }
 
-func (failure PrefixRefused) Error() string {
-	return fmt.Sprintf("invalid code prefix: %+v", failure.Refusal)
-}
-
-func singleDirective(declaration directives.Declaration, name string) outcome.Result[outcome.Option[directives.Directive]] {
-	matching := []directives.Directive{}
-	for _, directive := range declaration.Directives {
-		if directive.Name == name {
-			matching = append(matching, directive)
+func (index projectIndex) constructor(identity compiler.Identity, name string) directives.Constructor {
+	return outcome.FoldOption(directives.FindConstructor(index.metadata, identity, name), func(parsed directives.Constructor) directives.Constructor {
+		return parsed
+	}, func() directives.Constructor {
+		return directives.Constructor{
+			Declaration: directives.Declaration{Position: index.position(identity, name), Directives: []string{}},
+			Status:      outcome.None[description.Status](), Literal: outcome.None[string](),
 		}
-	}
-	switch len(matching) {
-	case 0:
-		return outcome.Ok(outcome.None[directives.Directive]())
-	case 1:
-		return outcome.Ok(outcome.Some(matching[0]))
-	}
-	return outcome.Err[outcome.Option[directives.Directive]](DirectiveRefused{Declaration: declaration, Requirement: "one " + name + " directive at most"})
-}
-
-func (index projectIndex) declaration(identity compiler.Identity, constructor string) directives.Declaration {
-	return outcome.FoldOption(directives.Constructor(index.metadata, identity, constructor), func(declaration directives.Declaration) directives.Declaration { return declaration }, func() directives.Declaration {
-		return directives.Declaration{Position: index.position(identity, constructor), Directives: []directives.Directive{}}
 	})
 }
 
-func (index projectIndex) literal(identity compiler.Identity, constructor string) outcome.Result[string] {
-	declaration := index.declaration(identity, constructor)
-	return outcome.Fold(singleDirective(declaration, "literal"), func(written outcome.Option[directives.Directive]) outcome.Result[string] {
-		return outcome.FoldOption(written, func(directive directives.Directive) outcome.Result[string] {
-			if len(directive.Words) != 1 {
-				return outcome.Err[string](DirectiveRefused{Declaration: declaration, Requirement: "one wire spelling after literal"})
-			}
-			return outcome.Ok(directive.Words[0])
-		}, func() outcome.Result[string] { return outcome.Ok(constructor) })
-	}, outcome.Err[string])
+func (index projectIndex) literal(identity compiler.Identity, name string) string {
+	return outcome.FoldOption(index.constructor(identity, name).Literal, func(spelling string) string { return spelling }, func() string { return name })
 }
 
 func (index projectIndex) readOutcome(written compiler.Type, open []compiler.Identity) outcome.Result[bindings.Outcome] {
@@ -115,51 +91,45 @@ func answerMarkers(documentation string) []string {
 }
 
 func (index projectIndex) readAnswer(named compiler.Named, constructor compiler.Constructor, open []compiler.Identity) outcome.Result[bindings.Answer] {
-	declaration := index.declaration(named.Identity, constructor.Name)
+	metadata := index.constructor(named.Identity, constructor.Name)
+	declaration := metadata.Declaration
 	markers := answerMarkers(constructor.Documentation)
-	return outcome.Fold(singleDirective(declaration, "status"), func(status outcome.Option[directives.Directive]) outcome.Result[bindings.Answer] {
-		if len(markers) == 0 {
-			return outcome.FoldOption(status, func(directives.Directive) outcome.Result[bindings.Answer] {
-				return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "ergleam:not-an-error or ergleam:code on a status constructor"})
-			}, func() outcome.Result[bindings.Answer] {
-				if len(constructor.Parameters) != 1 {
-					return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "a marked answer or one positional named answer wrapper"})
-				}
-				parameter := constructor.Parameters[0]
-				return outcome.FoldOption(parameter.Label, func(string) outcome.Result[bindings.Answer] {
-					return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "an unlabelled positional parameter on an unmarked answer wrapper"})
-				}, func() outcome.Result[bindings.Answer] {
-					return outcome.Fold(index.readOutcome(parameter.Type, open), func(inner bindings.Outcome) outcome.Result[bindings.Answer] {
-						return outcome.Ok[bindings.Answer](bindings.Forwarded{Constructor: constructor, Inner: inner})
-					}, outcome.Err[bindings.Answer])
-				})
-			})
-		}
-		if len(markers) != 1 {
-			return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "exactly one ErGleam success or code marker"})
-		}
-		return outcome.FoldOption(status, func(status directives.Directive) outcome.Result[bindings.Answer] {
-			if len(status.Words) != 1 {
-				return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "one HTTP status number"})
-			}
-			return outcome.Fold(outcome.TupleToResult(strconv.Atoi(status.Words[0])), func(number int) outcome.Result[bindings.Answer] {
-				return description.FoldStatus(number, func(parsed description.Status) outcome.Result[bindings.Answer] {
-					return outcome.Fold(answerStatus(markers[0], parsed, declaration), func(answer description.Answer) outcome.Result[bindings.Answer] {
-						return outcome.Fold(index.readFields(constructor.Parameters, []compiler.Identity{}), func(fields []bindings.Field) outcome.Result[bindings.Answer] {
-							return outcome.Ok[bindings.Answer](bindings.Direct{Constructor: constructor, Answer: answer, Fields: fields})
-						}, outcome.Err[bindings.Answer])
-					}, outcome.Err[bindings.Answer])
-				}, func(cause description.StatusUnanswerable) outcome.Result[bindings.Answer] {
-					return outcome.Err[bindings.Answer](cause)
-				})
+	switch len(markers) {
+	case 0:
+		return outcome.FoldOption(metadata.Status, func(description.Status) outcome.Result[bindings.Answer] {
+			return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "ergleam:not-an-error or ergleam:code on a status constructor"})
+		}, func() outcome.Result[bindings.Answer] {
+			return index.forwardedAnswer(constructor, declaration, open)
+		})
+	case 1:
+		return outcome.FoldOption(metadata.Status, func(status description.Status) outcome.Result[bindings.Answer] {
+			return outcome.Fold(answerStatus(markers[0], status, constructor.Name, declaration), func(answer description.Answer) outcome.Result[bindings.Answer] {
+				return outcome.Fold(index.readFields(constructor.Parameters, []compiler.Identity{}), func(fields []bindings.Field) outcome.Result[bindings.Answer] {
+					return outcome.Ok[bindings.Answer](bindings.Direct{Constructor: constructor, Answer: answer, Fields: fields})
+				}, outcome.Err[bindings.Answer])
 			}, outcome.Err[bindings.Answer])
 		}, func() outcome.Result[bindings.Answer] {
 			return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "an HTTP status on every marked answer"})
 		})
-	}, outcome.Err[bindings.Answer])
+	}
+	return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "exactly one ErGleam success or code marker"})
 }
 
-func answerStatus(marker string, status description.Status, declaration directives.Declaration) outcome.Result[description.Answer] {
+func (index projectIndex) forwardedAnswer(constructor compiler.Constructor, declaration directives.Declaration, open []compiler.Identity) outcome.Result[bindings.Answer] {
+	if len(constructor.Parameters) != 1 {
+		return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "a marked answer or one positional named answer wrapper"})
+	}
+	parameter := constructor.Parameters[0]
+	return outcome.FoldOption(parameter.Label, func(string) outcome.Result[bindings.Answer] {
+		return outcome.Err[bindings.Answer](DirectiveRefused{Declaration: declaration, Requirement: "an unlabelled positional parameter on an unmarked answer wrapper"})
+	}, func() outcome.Result[bindings.Answer] {
+		return outcome.Fold(index.readOutcome(parameter.Type, open), func(inner bindings.Outcome) outcome.Result[bindings.Answer] {
+			return outcome.Ok[bindings.Answer](bindings.Forwarded{Constructor: constructor, Inner: inner})
+		}, outcome.Err[bindings.Answer])
+	})
+}
+
+func answerStatus(marker string, status description.Status, constructor string, declaration directives.Declaration) outcome.Result[description.Answer] {
 	switch parsed := status.(type) {
 	case description.SuccessStatus:
 		if marker == "ergleam:not-an-error" {
@@ -167,29 +137,13 @@ func answerStatus(marker string, status description.Status, declaration directiv
 		}
 	case description.FailureStatus:
 		if strings.HasPrefix(marker, "ergleam:code ") {
-			return outcome.Fold(parseCode(strings.TrimPrefix(marker, "ergleam:code ")), func(code ergo.Code) outcome.Result[description.Answer] {
+			return outcome.Fold(native.ParseFailureCode(strings.TrimPrefix(marker, "ergleam:code ")), func(code ergo.Code) outcome.Result[description.Answer] {
 				return outcome.Ok[description.Answer](description.Fails{Status: parsed, Code: code})
-			}, outcome.Err[description.Answer])
+			}, func(cause error) outcome.Result[description.Answer] {
+				return outcome.Err[description.Answer](ConstructorCodeRefused{Constructor: constructor, Declaration: declaration, Marker: marker, Cause: cause})
+			})
 		}
 	case nil:
 	}
 	return outcome.Err[description.Answer](DirectiveRefused{Declaration: declaration, Requirement: "a 2xx status for a non-error or a 4xx/5xx status for an error code"})
-}
-
-func parseCode(text string) outcome.Result[ergo.Code] {
-	prefix, _, _ := strings.Cut(text, "-")
-	switch parsed := codes.ParsePrefix(prefix).(type) {
-	case codes.ParsedPrefix:
-		switch code := codes.Parse(codes.ParseRequest{Text: text, Prefix: parsed.Prefix}).(type) {
-		case codes.ParsedCode:
-			return outcome.Ok(code.Code)
-		case codes.InvalidCode:
-			return outcome.Err[ergo.Code](CodeRefused{Refusal: code})
-		case nil:
-		}
-	case codes.InvalidPrefix:
-		return outcome.Err[ergo.Code](PrefixRefused{Refusal: parsed})
-	case nil:
-	}
-	return outcome.Err[ergo.Code](CodeUnresolved{Text: text})
 }

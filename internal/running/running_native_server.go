@@ -43,8 +43,8 @@ func OpenNativeServer(context context.Context, projectFile string, layers []noco
 				if checked.ExitCode() != 0 {
 					return refused(checked)
 				}
-				return outcome.Fold(native.Start(context, built.project.Command), func(dispatcher native.Dispatcher) outcome.Result[NativeServer] {
-					return outcome.Ok(NativeServer{Handler: native.Handler(built.checked, built.project.Guards, dispatcher, layers), Close: dispatcher.Close})
+				return outcome.Fold(native.Start(context, built.command), func(dispatcher native.Dispatcher) outcome.Result[NativeServer] {
+					return outcome.Ok(NativeServer{Handler: native.Handler(built.checked, built.guards, dispatcher, layers), Close: dispatcher.Close})
 				}, outcome.Err[NativeServer])
 			}, refused)
 		}, func(cause error) outcome.Result[NativeServer] {

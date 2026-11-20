@@ -28,12 +28,3 @@ type nativeSourceHeaderMissing struct {
 func (failed nativeSourceHeaderMissing) Error() string {
 	return fmt.Sprintf("%s: generated source needs the NoContract header, found %q", failed.Path, failed.FirstLine)
 }
-
-type generatedPathsOverlap struct {
-	First  string
-	Second string
-}
-
-func (failed generatedPathsOverlap) Error() string {
-	return fmt.Sprintf("generated output paths %q and %q refer to the same file", failed.First, failed.Second)
-}

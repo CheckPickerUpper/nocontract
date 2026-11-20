@@ -51,7 +51,7 @@ type projectIndex struct {
 }
 
 func (index projectIndex) position(identity compiler.Identity, constructor string) assembling.Position {
-	return outcome.FoldOption(directives.Constructor(index.metadata, identity, constructor), func(declaration directives.Declaration) assembling.Position { return declaration.Position }, func() assembling.Position {
+	return outcome.FoldOption(directives.FindConstructor(index.metadata, identity, constructor), func(parsed directives.Constructor) assembling.Position { return parsed.Declaration.Position }, func() assembling.Position {
 		return assembling.Position{File: identity.Module + ".gleam", Line: 1, Column: 1}
 	})
 }
@@ -143,18 +143,20 @@ func (index projectIndex) readNamed(named compiler.Named, open []compiler.Identi
 	}
 	return outcome.Fold(index.definition(named), func(definition compiler.Definition) outcome.Result[bindings.Value] {
 		if allNullary(definition.Constructors) {
-			return outcome.Fold(sequence.Traverse(definition.Constructors, func(constructor compiler.Constructor) outcome.Result[bindings.Literal] {
-				return outcome.Fold(index.literal(identity, constructor.Name), func(text string) outcome.Result[bindings.Literal] {
-					return outcome.Ok(bindings.Literal{Constructor: constructor.Name, Text: text})
-				}, outcome.Err[bindings.Literal])
-			}), func(literals []bindings.Literal) outcome.Result[bindings.Value] {
-				repeats := keyed.Repeats(literals, func(literal bindings.Literal) string { return literal.Text })
-				if len(repeats) > 0 {
-					repeat := repeats[0]
-					return outcome.Err[bindings.Value](LiteralRepeated{Spelling: repeat.Item.Text, First: LiteralConstructor{Type: identity, Name: repeat.First.Constructor, Position: index.position(identity, repeat.First.Constructor)}, Repeated: LiteralConstructor{Type: identity, Name: repeat.Item.Constructor, Position: index.position(identity, repeat.Item.Constructor)}})
-				}
-				return outcome.Ok[bindings.Value](bindings.Enumeration{Native: named, Literals: literals})
-			}, outcome.Err[bindings.Value])
+			literals := make([]bindings.Literal, 0, len(definition.Constructors))
+			for _, constructor := range definition.Constructors {
+				literals = append(literals, bindings.Literal{Constructor: constructor.Name, Text: index.literal(identity, constructor.Name)})
+			}
+			repeats := keyed.Repeats(literals, func(literal bindings.Literal) string { return literal.Text })
+			if len(repeats) > 0 {
+				repeat := repeats[0]
+				return outcome.Err[bindings.Value](LiteralRepeated{
+					Spelling: repeat.Item.Text,
+					First:    LiteralConstructor{Type: identity, Name: repeat.First.Constructor, Position: index.position(identity, repeat.First.Constructor)},
+					Repeated: LiteralConstructor{Type: identity, Name: repeat.Item.Constructor, Position: index.position(identity, repeat.Item.Constructor)},
+				})
+			}
+			return outcome.Ok[bindings.Value](bindings.Enumeration{Native: named, Literals: literals})
 		}
 		if len(definition.Constructors) != 1 {
 			return index.unsupported(named, "one labelled record constructor or only nullary enum constructors")

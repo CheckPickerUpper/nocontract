@@ -97,13 +97,6 @@ type graphJSON struct {
 	Roots []Root             `json:"roots"`
 }
 
-// Snapshot is the source metadata and resolved types of an Odin project.
-type Snapshot struct {
-	Declarations []Declaration
-	Graph        Graph
-	Packages     []string
-}
-
 // CommandFailed retains the exact command, directory, output, and operating system cause.
 type CommandFailed struct {
 	Directory      string
@@ -209,20 +202,8 @@ func Run(context context.Context, directory string, arguments []string) outcome.
 	})
 }
 
-// Read compiles each package's semantics, then compiles a reflection program
-// against the actual project imports to read structural type information.
-func Read(context context.Context, directory string, packages []string) outcome.Result[Snapshot] {
-	return outcome.Fold(outcome.TupleToResult(os.MkdirTemp(filepath.Join(directory, ".scratch"), "nocontract-odin-")), func(scratch string) outcome.Result[Snapshot] {
-		defer func() { _ = os.RemoveAll(scratch) }()
-		return outcome.Fold(readDeclarations(context, directory, scratch, packages), func(declarations []Declaration) outcome.Result[Snapshot] {
-			return outcome.Fold(reflectProject(context, directory, scratch, packages, declarations), func(graph Graph) outcome.Result[Snapshot] {
-				return outcome.Ok(Snapshot{Declarations: declarations, Graph: graph, Packages: slices.Clone(packages)})
-			}, outcome.Err[Snapshot])
-		}, outcome.Err[Snapshot])
-	}, outcome.Err[Snapshot])
-}
-
-func readDeclarations(context context.Context, directory, scratch string, packages []string) outcome.Result[[]Declaration] {
+// ReadDeclarations checks the packages and retrieves source identities and attached comments.
+func ReadDeclarations(context context.Context, directory, scratch string, packages []string) outcome.Result[[]Declaration] {
 	declarations := outcome.Ok([]Declaration{})
 	for index, path := range packages {
 		declarations = outcome.Fold(declarations, func(previous []Declaration) outcome.Result[[]Declaration] {
@@ -345,30 +326,8 @@ func attributeStart(tokens []sourceToken, end int) int {
 	return -1
 }
 
-func reflectProject(context context.Context, directory, scratch string, packages []string, declarations []Declaration) outcome.Result[Graph] {
-	needed := map[string]struct{}{}
-	for _, declaration := range declarations {
-		for _, comment := range declaration.Comments {
-			if strings.HasPrefix(comment, "//nocontract:route ") {
-				needed[declaration.Entity.Package+"."+declaration.Entity.Name] = struct{}{}
-			}
-			if guard, present := strings.CutPrefix(comment, "//nocontract:guard "); present {
-				words := strings.Fields(guard)
-				if len(words) > 0 {
-					needed[words[0]] = struct{}{}
-				}
-			}
-		}
-	}
-	roots := []Declaration{}
-	for _, declaration := range declarations {
-		if declaration.Entity.Kind != "Procedure" {
-			continue
-		}
-		if _, present := needed[declaration.Entity.Package+"."+declaration.Entity.Name]; present {
-			roots = append(roots, declaration)
-		}
-	}
+// ReflectProcedures compiles a reflection program against the selected procedures.
+func ReflectProcedures(context context.Context, directory, scratch string, packages []string, roots []Declaration) outcome.Result[Graph] {
 	if len(roots) == 0 {
 		return outcome.Ok(Graph{Types: []Type{}, Roots: []Root{}})
 	}

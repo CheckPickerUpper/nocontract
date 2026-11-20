@@ -2,10 +2,8 @@ package running
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/CheckPickerUpper/outcome"
@@ -36,7 +34,8 @@ func (failed NativeBackendFailed) Lines() []string { return described(failed) }
 
 type compiledNative struct {
 	checked assembling.APIAssembled
-	project native.Project
+	command native.Command
+	guards  []native.GuardedRoute
 	files   []generatedFile
 }
 
@@ -52,9 +51,9 @@ func compileNative[R any](context context.Context, project projectfile.Project, 
 	return outcome.Fold(readNative(context, project.Backend(), request), func(back native.Project) R {
 		switch assembled := assembling.Assemble(back.Declared).(type) {
 		case assembling.APIAssembled:
-			return outcome.Fold(back.Generate(assembled), func(nativeFiles []native.File) R {
+			return outcome.Fold(back.Generate(), func(nativeFiles []native.File) R {
 				return outcome.Fold(renderNativeFiles(assembled.API, project, nativeFiles), func(artifacts []generatedFile) R {
-					return built(compiledNative{checked: assembled, project: back, files: artifacts})
+					return built(compiledNative{checked: assembled, command: back.Command, guards: back.Guards, files: artifacts})
 				}, fail)
 			}, fail)
 		case assembling.APIRefused:
@@ -66,22 +65,15 @@ func compileNative[R any](context context.Context, project projectfile.Project, 
 }
 
 func renderNativeFiles(api description.API, project projectfile.Project, artifacts []native.File) outcome.Result[[]generatedFile] {
-	return outcome.Fold(renderedClients(api, project), func(files []generatedFile) outcome.Result[[]generatedFile] {
+	return outcome.Fold(renderedClientAndOpenAPI(api, project), func(files []generatedFile) outcome.Result[[]generatedFile] {
 		for _, artifact := range artifacts {
 			firstBytes, _, _ := bytes.Cut(artifact.Contents, []byte("\n"))
 			first := string(firstBytes)
-			marker := strings.TrimPrefix(description.GeneratedHeader, "// ")
-			if strings.TrimLeft(first, "/#% ")+"\n" != marker {
+			if strings.TrimLeft(first, "/#% ") != description.GeneratedNotice {
 				return outcome.Err[[]generatedFile](nativeSourceHeaderMissing{Path: artifact.Path, FirstLine: first})
 			}
 			files = append(files, generatedFile{path: filepath.Clean(artifact.Path), content: mo.Some(artifact.Contents), owner: headedOutput{header: first + "\n"}})
 		}
-		slices.SortFunc(files, func(first, second generatedFile) int { return cmp.Compare(first.path, second.path) })
-		for index, file := range files {
-			if index > 0 && files[index-1].path == file.path {
-				return outcome.Err[[]generatedFile](generatedPathsOverlap{First: files[index-1].path, Second: file.path})
-			}
-		}
-		return outcome.Ok(files)
+		return plannedGeneratedFiles(project.File(), files, []string{})
 	}, outcome.Err[[]generatedFile])
 }

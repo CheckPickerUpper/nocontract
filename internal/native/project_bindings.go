@@ -20,7 +20,7 @@ type Request struct {
 type Project struct {
 	Declared assembling.Declared
 	Guards   []GuardedRoute
-	Generate func(assembling.APIAssembled) outcome.Result[[]File]
+	Generate func() outcome.Result[[]File]
 	Command  Command
 }
 
@@ -39,10 +39,11 @@ type File struct {
 }
 
 // Command starts the generated dispatcher in the project that owns it.
-// Arguments starts with an executable and holds each argument separately.
+// Arguments holds the arguments to pass to Executable.
 type Command struct {
-	Directory string
-	Arguments []string
+	Directory  string
+	Executable string
+	Arguments  []string
 }
 
 // GuardOperationID identifies the native guard invocation for a route.

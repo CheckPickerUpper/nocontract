@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/CheckPickerUpper/outcome"
@@ -60,6 +61,43 @@ func TestAGoFileTheProjectWroteWhereGenerateWritesIsRefusedAndKept(t *testing.T)
 	}
 	if held := heldOrStop(t, taken); held != helper {
 		t.Fatalf("%s holds\n%s\nwant\n%s", taken, held, helper)
+	}
+}
+
+func TestGenerateRefusesConflictingOutputPathsBeforeWriting(t *testing.T) {
+	t.Parallel()
+	for _, target := range []struct {
+		name  string
+		path  string
+		other string
+		alias bool
+	}{
+		{name: "equivalent paths", path: "web/../ledger_api.openapi.json", other: "openapi.file", alias: false},
+		{name: "project file", path: "nocontract.json", other: "project file", alias: false},
+		{name: "linked directory", path: "alias/ledger_api.openapi.json", other: "openapi.file", alias: true},
+	} {
+		t.Run(target.name, func(t *testing.T) {
+			directory := scratchproject.Ledger(t, filepath.Join("..", ".."))
+			if target.alias {
+				scratchproject.StopOn(t, "linking output folder", os.Symlink(directory, filepath.Join(directory, "alias")))
+			}
+			projectFile := filepath.Join(directory, "nocontract.json")
+			config := strings.Replace(heldOrStop(t, projectFile), "web/ledger_api.generated.ts", target.path, 1)
+			scratchproject.WriteFile(t, directory, "nocontract.json", []byte(config))
+			result := runOn(t, "generate", directory)
+			location := filepath.Join(directory, target.path)
+			diagnostic := strings.Join(result.Lines(), "\n")
+			if result.ExitCode() == 0 || !strings.Contains(diagnostic, location) || !strings.Contains(diagnostic, "typescript") || !strings.Contains(diagnostic, target.other) {
+				t.Errorf("generate = %s; want %s refused for typescript and %s", diagnostic, location, target.other)
+			}
+			if held := heldOrStop(t, projectFile); held != config {
+				t.Error("generate overwrote the project file")
+			}
+			_, cause := os.Stat(filepath.Join(directory, "ledger", "nocontract_routes.go"))
+			if !errors.Is(cause, fs.ErrNotExist) {
+				t.Errorf("generated Go binding should still be absent: %v", cause)
+			}
+		})
 	}
 }
 

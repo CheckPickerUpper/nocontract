@@ -1,6 +1,5 @@
-// Package running runs the nocontract command: generate writes the Go file that serves each
-// package's routes and the Effect HttpApi of all of them, and check refuses any of those files
-// that differs from what generate would write.
+// Package running implements the NoContract CLI. Generate writes server bindings, OpenAPI, and the
+// Effect client. Check verifies those files against the project. Serve starts Odin and Gleam APIs.
 package running
 
 import (
@@ -10,7 +9,6 @@ import (
 	"go/token"
 	"go/types"
 	"io"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -447,29 +445,17 @@ type loadedProject struct {
 // run no longer writes, which must go.
 func renderedFiles(api description.API, plan serverplan.Plan, project projectfile.Project, existing []string) outcome.Result[[]generatedFile] {
 	return outcome.Fold(servedFiles(plan, project.File()), func(served []generatedFile) outcome.Result[[]generatedFile] {
-		return outcome.Fold(renderedClients(api, project), func(clients []generatedFile) outcome.Result[[]generatedFile] {
-			// Every Go file NoContract wrote goes unless this run writes it again.
-			contents := map[string]generatedFile{}
-			for _, path := range existing {
-				contents[path] = generatedFile{path: path, content: mo.None[[]byte](), owner: headedOutput{header: description.GeneratedHeader}}
-			}
-			for _, file := range slices.Concat(clients, served) {
-				contents[file.path] = file
-			}
-			files := []generatedFile{}
-			for _, path := range slices.Sorted(maps.Keys(contents)) {
-				files = append(files, contents[path])
-			}
-			return outcome.Ok(files)
+		return outcome.Fold(renderedClientAndOpenAPI(api, project), func(publicFiles []generatedFile) outcome.Result[[]generatedFile] {
+			return plannedGeneratedFiles(project.File(), slices.Concat(publicFiles, served), existing)
 		}, outcome.Err[[]generatedFile])
 	}, outcome.Err[[]generatedFile])
 }
 
-func renderedClients(api description.API, project projectfile.Project) outcome.Result[[]generatedFile] {
+func renderedClientAndOpenAPI(api description.API, project projectfile.Project) outcome.Result[[]generatedFile] {
 	return outcome.Fold(openapi.Render(api, project.OpenAPI().Version()), func(document []byte) outcome.Result[[]generatedFile] {
 		return outcome.Ok([]generatedFile{
-			{path: project.TypeScriptFile(), content: mo.Some(effect.Render(api)), owner: declaredOutput{}},
-			{path: project.OpenAPI().File(), content: mo.Some(document), owner: declaredOutput{}},
+			{path: project.TypeScriptFile(), content: mo.Some(effect.Render(api)), owner: declaredOutput{setting: "typescript"}},
+			{path: project.OpenAPI().File(), content: mo.Some(document), owner: declaredOutput{setting: "openapi.file"}},
 		})
 	}, outcome.Err[[]generatedFile])
 }
