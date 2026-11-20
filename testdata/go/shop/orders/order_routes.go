@@ -8,10 +8,11 @@ import (
 	"github.com/samber/mo"
 )
 
-// Item is one line of an order: what is ordered, and how many.
+// Item is one line of an order: the product, quantity, and items included with it.
 type Item struct {
 	SKU      string `json:"sku"`
 	Quantity uint8  `json:"quantity"`
+	Included []Item `json:"included"`
 }
 
 // Courier is who delivers an order.

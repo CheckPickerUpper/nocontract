@@ -20,9 +20,6 @@ func (index *readIndex) schema(id int, open []int, position assembling.Position)
 	}
 	switch checked := index.graph.Types[id].(type) {
 	case compiler.Named:
-		if slices.Contains(open, id) {
-			return refuse("recursive structs cannot be declared on the wire")
-		}
 		return outcome.FoldOption(index.declaration(checked.Package, checked.Name), func(declaration compiler.Declaration) outcome.Result[description.Schema] {
 			return outcome.FoldOption(index.documentation.typeDirective(declaration, "instant"), func(argument string) outcome.Result[description.Schema] {
 				return outcome.Fold(requireType[compiler.String](index.base(id), DeclarationRefused{Position: placed(declaration), Declaration: checked.Name, Rule: "//nocontract:instant requires Instant :: distinct string"}), func(compiler.String) outcome.Result[description.Schema] {
@@ -33,6 +30,9 @@ func (index *readIndex) schema(id int, open []int, position assembling.Position)
 				}, outcome.Err[description.Schema])
 			}, func() outcome.Result[description.Schema] {
 				return outcome.FoldOption(compiler.Select[compiler.Struct](index.base(id)), func(structure compiler.Struct) outcome.Result[description.Schema] {
+					if slices.Contains(open, id) {
+						return outcome.Ok[description.Schema](description.StructRef{Name: checked.Name})
+					}
 					for _, existing := range index.structs {
 						if existing.Struct.Name == checked.Name && existing.Position == placed(declaration) {
 							return outcome.Ok[description.Schema](description.StructRef{Name: checked.Name})
@@ -43,6 +43,14 @@ func (index *readIndex) schema(id int, open []int, position assembling.Position)
 						return outcome.Ok[description.Schema](description.StructRef{Name: checked.Name})
 					}, outcome.Err[description.Schema])
 				}, func() outcome.Result[description.Schema] {
+					for _, earlier := range slices.Backward(open) {
+						if earlier == id {
+							return refuse("a recursive type must pass through a named record")
+						}
+						if _, record := index.base(earlier).(compiler.Struct); record {
+							break
+						}
+					}
 					return index.schema(checked.Base, append(slices.Clone(open), id), placed(declaration))
 				})
 			})

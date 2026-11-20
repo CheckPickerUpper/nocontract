@@ -197,12 +197,12 @@ func readMember(index projectIndex, member declaredType) reading[sealedMember] {
 	if !isStruct {
 		return notRead[sealedMember](index.refused(member.spec.Pos(), MemberNotStruct{Member: name}))
 	}
-	read := structFields(index, fields, []typeKey{})
+	read := structFields(index, fields, []openBodyType{})
 	answer := andThen(readStatus(index, member), func(status description.Status) reading[description.Answer] { return readAnswer(index, member, status) })
 	return andThen(read, func(written []fieldWritten) reading[sealedMember] {
 		return andThen(answer, func(decided description.Answer) reading[sealedMember] {
 			whole := description.Member{Name: name, Answer: decided, Fields: describedFields(written)}
-			value := serverplan.BodyValue{GoType: member.object.Type(), Shape: serverplan.StructShape{Fields: bodyFields(written)}}
+			value := serverplan.BodyValue{GoType: member.object.Type(), Shape: &serverplan.StructShape{Fields: bodyFields(written)}}
 			return readAs(sealedMember{declared: member, member: whole, written: serverplan.WrittenTypes(value)},
 				memberRead(foundMember{key: typeKeyFor(member.object), position: index.placed(member.spec.Pos()), member: whole}))
 		})

@@ -131,7 +131,7 @@ func (index projectIndex) projectBindings(request native.Request, routes []route
 	}
 	declared := assembling.Declared{API: request.API, Groups: declaredGroups, Members: members, Structs: structs}
 	return native.Project{Declared: declared, Guards: guards, Generate: func() outcome.Result[[]native.File] {
-		return bindings.Generate(bindings.Project{Directory: request.Directory, Server: request.Server, Package: index.project.Name, Routes: nativeRoutes, Guards: nativeGuards})
+		return bindings.Generate(bindings.Project{Directory: request.Directory, Server: request.Server, Package: index.project.Name, Routes: nativeRoutes, Guards: nativeGuards, Records: index.records})
 	}, Command: native.Command{Directory: request.Server, Executable: "gleam", Arguments: []string{"run", "--no-print-progress", "-m", "nocontract_bridge"}}}
 }
 

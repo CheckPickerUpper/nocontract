@@ -421,7 +421,7 @@ func (ListShape) isBodyShape()       {}
 func (ArrayShape) isBodyShape()      {}
 func (DictionaryShape) isBodyShape() {}
 func (NullableShape) isBodyShape()   {}
-func (StructShape) isBodyShape()     {}
+func (*StructShape) isBodyShape()    {}
 
 // BodyStructField is one field of a struct a body holds: its Go field, the name the body writes it
 // under, and its value.
@@ -431,21 +431,30 @@ type BodyStructField struct {
 	Value   BodyValue
 }
 
-// Values is value and every value it holds, each before the values it holds.
+// Values is value and its nested values in declaration order. A recursive record's fields are
+// visited once even when several fields refer to it.
 func (value BodyValue) Values() []BodyValue {
+	return value.values(map[*StructShape]struct{}{})
+}
+
+func (value BodyValue) values(visited map[*StructShape]struct{}) []BodyValue {
 	values := []BodyValue{value}
 	switch shape := value.Shape.(type) {
 	case ListShape:
-		return append(values, shape.Item.Values()...)
+		return append(values, shape.Item.values(visited)...)
 	case ArrayShape:
-		return append(values, shape.Item.Values()...)
+		return append(values, shape.Item.values(visited)...)
 	case DictionaryShape:
-		return append(values, shape.Value.Values()...)
+		return append(values, shape.Value.values(visited)...)
 	case NullableShape:
-		return append(values, shape.Inner.Values()...)
-	case StructShape:
+		return append(values, shape.Inner.values(visited)...)
+	case *StructShape:
+		if _, seen := visited[shape]; seen {
+			return values
+		}
+		visited[shape] = struct{}{}
 		for _, field := range shape.Fields {
-			values = append(values, field.Value.Values()...)
+			values = append(values, field.Value.values(visited)...)
 		}
 	case TextShape, WholeShape, NumberShape, TruthShape, InstantShape, LiteralShape, nil:
 	}
@@ -515,10 +524,10 @@ func WrittenTypes(value BodyValue) []WrittenType {
 			case description.NumberWire, nil:
 			}
 		case NullableShape:
-			if len(WrittenTypes(shape.Inner)) > 0 {
+			if slices.ContainsFunc(shape.Inner.Values(), usesDecimalMarshal) {
 				written = append(written, NullableType{Inner: shape.Inner.GoType})
 			}
-		case TextShape, NumberShape, TruthShape, InstantShape, LiteralShape, ListShape, ArrayShape, DictionaryShape, StructShape, nil:
+		case TextShape, NumberShape, TruthShape, InstantShape, LiteralShape, ListShape, ArrayShape, DictionaryShape, *StructShape, nil:
 		}
 	}
 	once := []WrittenType{}
@@ -528,6 +537,14 @@ func WrittenTypes(value BodyValue) []WrittenType {
 		}
 	}
 	return once
+}
+
+func usesDecimalMarshal(value BodyValue) bool {
+	if whole, isWhole := value.Shape.(WholeShape); isWhole {
+		_, decimal := whole.Width.Wire().(description.DecimalTextWire)
+		return decimal
+	}
+	return false
 }
 
 // sameWrittenType is whether left and right hand the runtime a marshaler for the same Go type.

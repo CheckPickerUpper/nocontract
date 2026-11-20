@@ -60,6 +60,11 @@ type Record struct {
 	Fields      []Field
 }
 
+// RecordRef points to a checked record by its compiler identity.
+//
+//ergo:not-an-error
+type RecordRef struct{ Native compiler.Named }
+
 // Literal is one nullary constructor and its individual wire spelling.
 type Literal struct {
 	Constructor string
@@ -133,6 +138,7 @@ func (Number) isScalar()     {}
 func (Truth) isScalar()      {}
 func (Timestamp) isScalar()  {}
 func (Record) isValue()      {}
+func (RecordRef) isValue()   {}
 func (Enumeration) isValue() {}
 func (List) isValue()        {}
 func (Fixed) isValue()       {}
@@ -160,6 +166,11 @@ func (Timestamp) Schema() description.Schema { return description.Instant{} }
 
 // Schema is a reference to the compiler's named record.
 func (value Record) Schema() description.Schema {
+	return description.StructRef{Name: value.Native.Identity.Name}
+}
+
+// Schema is the record's component reference.
+func (value RecordRef) Schema() description.Schema {
 	return description.StructRef{Name: value.Native.Identity.Name}
 }
 

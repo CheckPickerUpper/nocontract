@@ -76,11 +76,18 @@ type fieldWritten struct {
 	body     serverplan.BodyValue
 }
 
+// openBodyType is a named type whose shape is currently being resolved. A record has a stable
+// shape that recursive fields can refer to while its own fields are read.
+type openBodyType struct {
+	key    typeKey
+	record outcome.Option[*serverplan.StructShape]
+}
+
 // readField reads one struct field under encoding/json's naming: nothing for an unexported field or
 // one tagged json:"-", which encoding/json never writes. An embedded field, a tag reflect cannot
 // read, a name encoding/json would not write and a tag option such as omitempty are refused. open is
 // every named struct whose fields are being read.
-func readField(index projectIndex, field indexedField, open []typeKey) reading[outcome.Option[fieldWritten]] {
+func readField(index projectIndex, field indexedField, open []openBodyType) reading[outcome.Option[fieldWritten]] {
 	position := field.variable.Pos()
 	if field.variable.Embedded() {
 		return notRead[outcome.Option[fieldWritten]](index.refused(position, EmbeddedFieldUnsupported{Field: field.variable.Name()}))
@@ -106,7 +113,7 @@ func readField(index projectIndex, field indexedField, open []typeKey) reading[o
 }
 
 // structFields reads every field encoding/json writes of a struct, each under its own name.
-func structFields(index projectIndex, fields *types.Struct, open []typeKey) reading[[]fieldWritten] {
+func structFields(index projectIndex, fields *types.Struct, open []openBodyType) reading[[]fieldWritten] {
 	reads := []reading[outcome.Option[fieldWritten]]{}
 	for _, field := range indexedFields(fields) {
 		reads = append(reads, readField(index, field, open))
@@ -143,9 +150,8 @@ func unsupported(index projectIndex, position token.Pos, written types.Type, fla
 	return notRead[valueRead](index.refused(position, TypeUnsupported{Type: types.TypeString(written, nil), Flaw: flaw}))
 }
 
-// readSchema is the JSON shape encoding/json writes a value of written as. open is every named
-// struct whose fields are being read, which written may not be again.
-func readSchema(index projectIndex, written types.Type, position token.Pos, open []typeKey) reading[description.Schema] {
+// readSchema is the JSON shape encoding/json writes a value of written as. open is the stack of named types currently being read.
+func readSchema(index projectIndex, written types.Type, position token.Pos, open []openBodyType) reading[description.Schema] {
 	return mapped(readValue(index, written, written, position, open), func(read valueRead) description.Schema { return read.schema })
 }
 
@@ -161,9 +167,8 @@ func valueAs(schema description.Schema, as types.Type, shape serverplan.BodyShap
 }
 
 // readValue is the JSON shape encoding/json writes a value of written as, and how a body reads it
-// into as: written itself, or a named type whose underlying type written is. open is every named
-// struct whose fields are being read, which written may not be again.
-func readValue(index projectIndex, written, as types.Type, position token.Pos, open []typeKey) reading[valueRead] {
+// into as: written itself, or a named type whose underlying type written is. open is the stack of named types currently being read.
+func readValue(index projectIndex, written, as types.Type, position token.Pos, open []openBodyType) reading[valueRead] {
 	switch typed := types.Unalias(written).(type) {
 	case *types.Basic:
 		return basicValue(index, typed, as, position)
@@ -192,7 +197,7 @@ func readValue(index projectIndex, written, as types.Type, position token.Pos, o
 		})
 	case *types.Struct:
 		return mapped(structFields(index, typed, open), func(fields []fieldWritten) valueRead {
-			return valueAs(description.InlineStruct{Fields: describedFields(fields)}, as, serverplan.StructShape{Fields: bodyFields(fields)})
+			return valueAs(description.InlineStruct{Fields: describedFields(fields)}, as, &serverplan.StructShape{Fields: bodyFields(fields)})
 		})
 	case *types.Pointer:
 		return unsupported(index, position, written, PointerField{})
@@ -280,7 +285,7 @@ func dictionaryKey(key types.Type) description.DictionaryKey {
 	return description.Text{}
 }
 
-func namedValue(index projectIndex, named *types.Named, as types.Type, position token.Pos, open []typeKey) reading[valueRead] {
+func namedValue(index projectIndex, named *types.Named, as types.Type, position token.Pos, open []openBodyType) reading[valueRead] {
 	object := named.Obj()
 	switch {
 	case packagePath(object) == "time" && object.Name() == "Time":
@@ -300,7 +305,17 @@ func namedValue(index projectIndex, named *types.Named, as types.Type, position 
 			return readAs(valueAs(literals, as, serverplan.LiteralShape{Literals: literals}), nothingFound())
 		}
 	}
-	return readValue(index, named.Underlying(), as, position, open)
+	key := typeKeyFor(object)
+	for _, earlier := range slices.Backward(open) {
+		if earlier.key == key {
+			return notRead[valueRead](index.refused(position, RecursiveStruct{Struct: object.Name()}))
+		}
+		if outcome.FoldOption(earlier.record, func(*serverplan.StructShape) bool { return true }, func() bool { return false }) {
+			break
+		}
+	}
+	alias := openBodyType{key: key, record: outcome.None[*serverplan.StructShape]()}
+	return readValue(index, named.Underlying(), as, position, append(slices.Clone(open), alias))
 }
 
 // stringConstants is every string constant of the named type declared in its package, sorted.
@@ -317,19 +332,29 @@ func stringConstants(named *types.Named) []string {
 	return slices.Compact(values)
 }
 
-// namedStruct reads a named struct and refers to it by name, finding it whole when every field is
-// read. A struct met again while its own fields are read holds itself.
-func namedStruct(index projectIndex, named *types.Named, fields *types.Struct, as types.Type, position token.Pos, open []typeKey) reading[valueRead] {
+// namedStruct gives a record one Go shape and one OpenAPI component. References share the shape
+// as it is filled, and the completed shape only leaves the reader after all its fields are read.
+func namedStruct(index projectIndex, named *types.Named, fields *types.Struct, as types.Type, position token.Pos, open []openBodyType) reading[valueRead] {
 	object := named.Obj()
-	key := typeKeyFor(object)
-	switch {
-	case named.TypeParams().Len() > 0 || named.TypeArgs().Len() > 0:
+	if named.TypeParams().Len() > 0 || named.TypeArgs().Len() > 0 {
 		return notRead[valueRead](index.refused(position, GenericMember{Member: object.Name()}))
-	case slices.Contains(open, key):
-		return notRead[valueRead](index.refused(position, RecursiveStruct{Struct: object.Name()}))
 	}
-	return andThen(structFields(index, fields, append(slices.Clone(open), key)), func(read []fieldWritten) reading[valueRead] {
+	key := typeKeyFor(object)
+	schema := description.StructRef{Name: object.Name()}
+	for _, earlier := range open {
+		if earlier.key == key {
+			return outcome.FoldOption(earlier.record, func(shape *serverplan.StructShape) reading[valueRead] {
+				return readAs(valueAs(schema, as, shape), nothingFound())
+			}, func() reading[valueRead] {
+				return notRead[valueRead](index.refused(position, RecursiveStruct{Struct: object.Name()}))
+			})
+		}
+	}
+	shape := &serverplan.StructShape{Fields: []serverplan.BodyStructField{}}
+	record := openBodyType{key: key, record: outcome.Some(shape)}
+	return andThen(structFields(index, fields, append(slices.Clone(open), record)), func(read []fieldWritten) reading[valueRead] {
+		shape.Fields = bodyFields(read)
 		whole := structRead(foundStruct{key: key, position: index.placed(object.Pos()), named: description.NamedStruct{Name: object.Name(), Fields: describedFields(read)}})
-		return readAs(valueAs(description.StructRef{Name: object.Name()}, as, serverplan.StructShape{Fields: bodyFields(read)}), whole)
+		return readAs(valueAs(schema, as, shape), whole)
 	})
 }

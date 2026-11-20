@@ -387,6 +387,12 @@
       "Item": {
         "type": "object",
         "properties": {
+          "included": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
+          },
           "quantity": {
             "type": "integer",
             "minimum": 0,
@@ -398,7 +404,8 @@
         },
         "required": [
           "sku",
-          "quantity"
+          "quantity",
+          "included"
         ],
         "additionalProperties": false
       },

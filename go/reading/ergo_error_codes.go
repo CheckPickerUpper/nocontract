@@ -406,7 +406,7 @@ func (RecursiveStructArguments) ReportArguments() {}
 // Report is RecursiveStruct's code, its message in language and the arguments the message names.
 func (failure RecursiveStruct) Report(language messages.Language) ergo.Report {
 	arguments := RecursiveStructArguments{Struct: string(failure.Struct)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The struct "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds itself."}}}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The recursive type "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " must pass through a named record."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:

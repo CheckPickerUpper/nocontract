@@ -74,7 +74,7 @@ func structNames(name string) []string {
 // place is where in a route's body value is held, which names the reader of an unnamed struct.
 func (readers *bodyReaders) written(value serverplan.BodyValue, place string, names *imports) string {
 	switch shape := value.Shape.(type) {
-	case serverplan.StructShape:
+	case *serverplan.StructShape:
 		return readers.structRead(value.GoType, shape.Fields, place, names).typeName()
 	case serverplan.TextShape, serverplan.WholeShape, serverplan.NumberShape, serverplan.TruthShape, serverplan.InstantShape,
 		serverplan.LiteralShape, serverplan.ListShape, serverplan.ArrayShape, serverplan.DictionaryShape, serverplan.NullableShape, nil:
@@ -110,7 +110,7 @@ func (readers *bodyReaders) reader(value serverplan.BodyValue, place string, nam
 		return instantiated("BodyDictionary") + "(" + keyReader(shape, names) + ", " + readers.reader(shape.Value, place+"Value", names) + ")"
 	case serverplan.NullableShape:
 		return names.runtime("BodyNullable") + "[" + readers.written(shape.Inner, place, names) + "](" + readers.reader(shape.Inner, place, names) + ")"
-	case serverplan.StructShape:
+	case *serverplan.StructShape:
 		return readers.structRead(value.GoType, shape.Fields, place, names).name
 	case nil:
 	}
@@ -241,7 +241,7 @@ func bodyReadNames(value serverplan.BodyValue) []string {
 	read := []string{}
 	for _, held := range value.Values() {
 		switch shape := held.Shape.(type) {
-		case serverplan.StructShape:
+		case *serverplan.StructShape:
 			for _, field := range shape.Fields {
 				read = append(read, readName(field.GoField))
 			}

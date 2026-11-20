@@ -138,8 +138,9 @@ func (index projectIndex) readNamed(named compiler.Named, open []compiler.Identi
 			}, outcome.Err[bindings.Value])
 		}, outcome.Err[bindings.Value])
 	}
-	if slices.Contains(open, identity) {
-		return index.unsupported(named, "a finite non-recursive JSON representation")
+	reference := bindings.RecordRef{Native: named}
+	if _, known := index.records[identity]; known || slices.Contains(open, identity) {
+		return outcome.Ok[bindings.Value](reference)
 	}
 	return outcome.Fold(index.definition(named), func(definition compiler.Definition) outcome.Result[bindings.Value] {
 		if allNullary(definition.Constructors) {
@@ -171,7 +172,7 @@ func (index projectIndex) readNamed(named compiler.Named, open []compiler.Identi
 			return outcome.Fold(index.readFields(constructor.Parameters, append(slices.Clone(open), identity)), func(fields []bindings.Field) outcome.Result[bindings.Value] {
 				record := bindings.Record{Native: named, Constructor: constructor, Fields: fields}
 				index.records[identity] = record
-				return outcome.Ok[bindings.Value](record)
+				return outcome.Ok[bindings.Value](reference)
 			}, outcome.Err[bindings.Value])
 		})
 	}, outcome.Err[bindings.Value])

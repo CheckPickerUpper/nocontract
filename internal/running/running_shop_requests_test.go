@@ -235,17 +235,17 @@ func shopBodyRoutes() []shopBodyRoute {
 			want: shopBodyRefused(shopBodyProblem{name: "body.amount.cents", reason: fmt.Sprintf("body.amount.cents holds %q, which %s", decimal.text, shopCanonicalDecimal)}),
 		})
 	}
-	const tea = `[{"sku":"tea","quantity":2}]`
+	const tea = `[{"sku":"tea","quantity":2,"included":[{"sku":"strainer","quantity":1,"included":[]}]}]`
 	const december = `["2026-12-01T10:00:00+01:00","2026-12-02T09:00:00Z"]`
 	const porch = `{"drone":"the porch"}`
-	const placed = `{"_tag":"OrderPlaced","order":{"items":[{"sku":"tea","quantity":2}],"gift_note":null,"deliver_between":["2026-12-01T09:00:00Z","2026-12-02T09:00:00Z"],"wrapped":true,"tips":{"CAD":2.5},"courier_notes":{"drone":"the porch"}}}`
+	const placed = `{"_tag":"OrderPlaced","order":{"items":` + tea + `,"gift_note":null,"deliver_between":["2026-12-01T09:00:00Z","2026-12-02T09:00:00Z"],"wrapped":true,"tips":{"CAD":2.5},"courier_notes":{"drone":"the porch"}}}`
 	wholeOrder := shopOrderBody(shopOrderParts{items: tea, between: december, wrapped: "true", courierNotes: porch})
 	orderCases := []shopBodyCase{
 		{name: "a whole typed nested order", body: wholeOrder, want: shopAnswer{status: 201, allow: "", body: placed}},
 		{name: "an empty typed order", body: shopEmptyOrder, want: shopAnswer{status: 201, allow: "", body: `{"_tag":"OrderPlaced","order":` + shopEmptyOrder + `}`}},
 		{
-			name: "a quantity its byte cannot hold", body: shopOrderBody(shopOrderParts{items: `[{"sku":"tea","quantity":300}]`, between: december, wrapped: "true", courierNotes: porch}),
-			want: shopBodyRefused(shopBodyProblem{name: "body.items[0].quantity", reason: "body.items[0].quantity holds 300, which is outside 0 to 255."}),
+			name: "a nested quantity its byte cannot hold", body: shopOrderBody(shopOrderParts{items: `[{"sku":"tea","quantity":2,"included":[{"sku":"strainer","quantity":300,"included":[]}]}]`, between: december, wrapped: "true", courierNotes: porch}),
+			want: shopBodyRefused(shopBodyProblem{name: "body.items[0].included[0].quantity", reason: "body.items[0].included[0].quantity holds 300, which is outside 0 to 255."}),
 		},
 		{
 			name: "a member written twice", body: shopOrderBody(shopOrderParts{items: tea, between: december, wrapped: `true,"wrapped":false`, courierNotes: porch}),

@@ -12,6 +12,7 @@ import (
 )
 
 type generator struct {
+	records  map[compiler.Identity]Record
 	imports  map[string]string
 	decoders map[string]string
 	encoders map[string]string
@@ -99,6 +100,8 @@ func (generated generator) nativeType(value Value) compiler.Type {
 		return primitiveType("Bool")
 	case Record:
 		return typed.Native
+	case RecordRef:
+		return typed.Native
 	case Enumeration:
 		return typed.Native
 	case List:
@@ -141,13 +144,25 @@ func constructorCall(module string, constructor compiler.Constructor, values []s
 func (generated generator) decoder(value Value) string {
 	typeName := generated.typeName(generated.nativeType(value))
 	name := codecName("decode", typeName)
-	if _, exists := generated.decoders[name]; exists {
-		return name + "()"
+	if _, exists := generated.decoders[name]; !exists {
+		generated.decoders[name] = ""
+		body := generated.decodeBody(value)
+		generated.decoders[name] = "fn " + name + "() -> decode.Decoder(" + typeName + ") {\n" + body + "\n}\n"
 	}
-	generated.decoders[name] = ""
-	body := generated.decodeBody(value)
-	generated.decoders[name] = "fn " + name + "() -> decode.Decoder(" + typeName + ") {\n" + body + "\n}\n"
+	if _, reference := value.(RecordRef); reference {
+		return "decode.recursive(" + name + ")"
+	}
 	return name + "()"
+}
+
+func (generated generator) recordCodec(reference RecordRef, emit func(Value) string) string {
+	identity := reference.Native.Identity
+	return outcome.FoldOption(keyed.Entry(generated.records, identity), func(record Record) string {
+		return emit(record)
+	}, func() string {
+		generated.problems[fmt.Sprintf("%+v", identity)] = ValueUnresolved{Value: reference}
+		return ""
+	})
 }
 
 func (generated generator) decodeBody(value Value) string {
@@ -160,6 +175,8 @@ func (generated generator) decodeBody(value Value) string {
 		return "decode.bool"
 	case Number:
 		return "decode.float"
+	case RecordRef:
+		return generated.recordCodec(typed, generated.decodeBody)
 	case Record:
 		lines, values := []string{}, []string{}
 		for i, field := range typed.Fields {
@@ -231,6 +248,8 @@ func (generated generator) encodeBody(value Value) string {
 		return "json.bool(value)"
 	case Number:
 		return "json.float(value)"
+	case RecordRef:
+		return generated.recordCodec(typed, generated.encodeBody)
 	case Record:
 		fields := []string{}
 		for _, field := range typed.Fields {

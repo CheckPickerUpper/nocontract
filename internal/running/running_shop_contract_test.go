@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -158,7 +159,7 @@ func assertShopSchemaEqual(t *testing.T, expected, actual shopContract, pointer 
 	t.Helper()
 	compileShopSchema(t, expected, func(left *jsonschema.Schema) {
 		compileShopSchema(t, actual, func(right *jsonschema.Schema) {
-			if difference := cmp.Diff(left, right, shopSchemaComparisons(*left)...); difference != "" {
+			if difference := cmp.Diff(left, right, shopSchemaComparisons(*left, nil)...); difference != "" {
 				t.Errorf("schema %s differs (-go +backend):\n%s", strings.Join(pointer, "/"), difference)
 			}
 		}, pointer...)
@@ -171,7 +172,9 @@ func dereferenceShopSchema(schema *jsonschema.Schema) *jsonschema.Schema {
 	}, func() *jsonschema.Schema { return schema })
 }
 
-func shopSchemaComparisons(schema jsonschema.Schema) []cmp.Option {
+type comparedShopSchemas struct{ first, second *jsonschema.Schema }
+
+func shopSchemaComparisons(schema jsonschema.Schema, open []comparedShopSchemas) []cmp.Option {
 	return []cmp.Option{
 		cmpopts.IgnoreUnexported(schema),
 		cmpopts.IgnoreFields(schema, "Location", "ID"),
@@ -195,7 +198,11 @@ func shopSchemaComparisons(schema jsonschema.Schema) []cmp.Option {
 		cmp.FilterValues(func(left, right *jsonschema.Schema) bool {
 			return dereferenceShopSchema(left) != left || dereferenceShopSchema(right) != right
 		}, cmp.Comparer(func(left, right *jsonschema.Schema) bool {
-			return cmp.Equal(dereferenceShopSchema(left), dereferenceShopSchema(right), shopSchemaComparisons(schema)...)
+			pair := comparedShopSchemas{first: dereferenceShopSchema(left), second: dereferenceShopSchema(right)}
+			if slices.Contains(open, pair) {
+				return true
+			}
+			return cmp.Equal(pair.first, pair.second, shopSchemaComparisons(schema, append(slices.Clone(open), pair))...)
 		})),
 	}
 }

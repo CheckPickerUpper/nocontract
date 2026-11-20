@@ -8,6 +8,7 @@ Instant :: distinct string
 Item :: struct #all_or_none {
 	sku:      string,
 	quantity: u8,
+	included: []Item,
 }
 
 // Courier is who delivers an order.

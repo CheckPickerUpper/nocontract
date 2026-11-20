@@ -6,7 +6,7 @@ import shop/scalars.{type Instant, type UInt16, type UInt8}
 
 /// One line of an order.
 pub type Item {
-  Item(sku: String, quantity: UInt8)
+  Item(sku: String, quantity: UInt8, included: List(Item))
 }
 
 /// Who delivers an order.

@@ -33,14 +33,17 @@ func nocontractAnswerPlaceOutcome(outcome PlaceOutcome) nocontract.Answer {
 type nocontractBodyItemMembers struct {
 	SKU      mo.Option[string]
 	Quantity mo.Option[uint8]
+	Included mo.Option[[]Item]
 }
 
 // nocontractBodyItem reads a JSON object holding each field of the struct it returns once.
 func nocontractBodyItem(value nocontract.BodyValue) nocontract.BodyReading[Item] {
-	return nocontract.Next(nocontract.BodyObject(value, nocontractBodyItemMembers{SKU: mo.None[string](), Quantity: mo.None[uint8]()}, nocontractBodyItemMember), func(members nocontractBodyItemMembers) nocontract.BodyReading[Item] {
+	return nocontract.Next(nocontract.BodyObject(value, nocontractBodyItemMembers{SKU: mo.None[string](), Quantity: mo.None[uint8](), Included: mo.None[[]Item]()}, nocontractBodyItemMember), func(members nocontractBodyItemMembers) nocontract.BodyReading[Item] {
 		return nocontract.Next(nocontract.Present(value, "sku", members.SKU), func(readSKU string) nocontract.BodyReading[Item] {
 			return nocontract.Next(nocontract.Present(value, "quantity", members.Quantity), func(readQuantity uint8) nocontract.BodyReading[Item] {
-				return nocontract.Read[Item]{Value: Item{SKU: readSKU, Quantity: readQuantity}}
+				return nocontract.Next(nocontract.Present(value, "included", members.Included), func(readIncluded []Item) nocontract.BodyReading[Item] {
+					return nocontract.Read[Item]{Value: Item{SKU: readSKU, Quantity: readQuantity, Included: readIncluded}}
+				})
 			})
 		})
 	})
@@ -51,11 +54,15 @@ func nocontractBodyItemMember(members nocontractBodyItemMembers, member nocontra
 	switch member.Name {
 	case "sku":
 		return nocontract.Once(member, members.SKU, nocontract.BodyText[string], func(read string) nocontractBodyItemMembers {
-			return nocontractBodyItemMembers{SKU: mo.Some(read), Quantity: members.Quantity}
+			return nocontractBodyItemMembers{SKU: mo.Some(read), Quantity: members.Quantity, Included: members.Included}
 		})
 	case "quantity":
 		return nocontract.Once(member, members.Quantity, nocontract.BodyUnsigned[uint8], func(read uint8) nocontractBodyItemMembers {
-			return nocontractBodyItemMembers{SKU: members.SKU, Quantity: mo.Some(read)}
+			return nocontractBodyItemMembers{SKU: members.SKU, Quantity: mo.Some(read), Included: members.Included}
+		})
+	case "included":
+		return nocontract.Once(member, members.Included, nocontract.BodyList[[]Item](nocontractBodyItem), func(read []Item) nocontractBodyItemMembers {
+			return nocontractBodyItemMembers{SKU: members.SKU, Quantity: members.Quantity, Included: mo.Some(read)}
 		})
 	}
 	return nocontract.Unknown[nocontractBodyItemMembers](member)

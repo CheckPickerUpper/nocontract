@@ -225,6 +225,8 @@ failure, `code` each allow one value. A whole number of 32 bits or fewer is an `
 least to its most value. A 64-bit whole number, a plain `int` included, is a string of format
 `int64` or `uint64` whose `pattern` takes exactly the canonical decimal text of its range, and a
 `time.Time` is a string of format `date-time`.
+A named record can contain itself, for example through a list of child records. The OpenAPI
+document refers to the named schema again for each child.
 
 ## Serving
 

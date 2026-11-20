@@ -34,7 +34,7 @@ func (index projectIndex) readInput(written compiler.Type) outcome.Result[bindin
 			return outcome.Err[bindings.Record](Unsupported{Type: written, Position: typePosition(index, written), Requirement: "one public labelled record constructor"})
 		}
 		constructor := definition.Constructors[0]
-		return outcome.Fold(index.readFields(constructor.Parameters, []compiler.Identity{named.Identity}), func(fields []bindings.Field) outcome.Result[bindings.Record] {
+		return outcome.Fold(index.readFields(constructor.Parameters, nil), func(fields []bindings.Field) outcome.Result[bindings.Record] {
 			return outcome.Ok(bindings.Record{Native: named, Constructor: constructor, Fields: fields})
 		}, outcome.Err[bindings.Record])
 	}, outcome.Err[bindings.Record])

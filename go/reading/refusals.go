@@ -152,10 +152,10 @@ type TypeUnsupported struct {
 	Flaw TypeFlaw
 }
 
-// RecursiveStruct is a named struct that holds itself.
+// RecursiveStruct is a recursive wire type whose cycle contains no named record.
 //
 //ergo:code NC-1019
-//ergo:message The struct {Struct} holds itself.
+//ergo:message The recursive type {Struct} must pass through a named record.
 type RecursiveStruct struct{ Struct string }
 
 // InputNotStruct is a route input that is not a named struct.

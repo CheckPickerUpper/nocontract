@@ -35,9 +35,9 @@ export type AnswerNotWritten = { readonly "_tag": "AnswerNotWritten", readonly "
 
 export const AnswerNotWritten = Schema.Struct({ "_tag": Schema.Literal("AnswerNotWritten"), "answer": Schema.String, "code": Schema.Literal("NC-1002"), "reason": Schema.String }).annotate({ "identifier": "AnswerNotWritten" })
 
-export type Item = { readonly "quantity": number, readonly "sku": string }
+export type Item = { readonly "included": globalThis.ReadonlyArray<Item>, readonly "quantity": number, readonly "sku": string }
 
-export const Item = Schema.Struct({ "quantity": Schema.Int.check(Schema.isGreaterThanOrEqualTo(0).annotate({ "expected": "a value greater than or equal to 0" })).check(Schema.isLessThanOrEqualTo(255).annotate({ "expected": "a value less than or equal to 255" })), "sku": Schema.String }).annotate({ "identifier": "Item" })
+export const Item = Schema.Struct({ "included": Schema.Array(Schema.suspend((): Schema.Codec<Item, ItemEncoded> => Item)), "quantity": Schema.Int.check(Schema.isGreaterThanOrEqualTo(0).annotate({ "expected": "a value greater than or equal to 0" })).check(Schema.isLessThanOrEqualTo(255).annotate({ "expected": "a value less than or equal to 255" })), "sku": Schema.String }).annotate({ "identifier": "Item" })
 
 export type Order = { readonly "courier_notes": { readonly [key in "drone" | "post"]?: ({ readonly [x: string]: string })[string] }, readonly "deliver_between": globalThis.ReadonlyArray<typeof Date_timeCodec.Type>, readonly "gift_note": string | null, readonly "items": globalThis.ReadonlyArray<Item>, readonly "tips": { readonly [x: string]: number }, readonly "wrapped": boolean }
 
@@ -134,6 +134,8 @@ export const BalanceTopUp409 = TopUpRefused
 export type BalanceTopUp500 = AnswerNotWritten
 
 export const BalanceTopUp500 = AnswerNotWritten
+
+type ItemEncoded = { readonly "included": globalThis.ReadonlyArray<ItemEncoded>, readonly "quantity": number, readonly "sku": string }
 
 class BalanceGroup extends HttpApiGroup.make("balance")
   .add(HttpApiEndpoint.get("readBalance", "/shoppers/:shopper_id/balance", { params: BalanceReadBalancePathParams, query: BalanceReadBalanceQuery, success: BalanceReadBalance200, error: [BalanceReadBalance400.pipe(HttpApiSchema.status(400)), BalanceReadBalance401.pipe(HttpApiSchema.status(401)), BalanceReadBalance404.pipe(HttpApiSchema.status(404)), BalanceReadBalance500] })

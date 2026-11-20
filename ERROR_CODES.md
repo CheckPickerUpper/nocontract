@@ -207,11 +207,11 @@ Message: `The name {Name} is already taken by {First}.`
 
 ## NC-1019 RecursiveStruct
 
-RecursiveStruct is a named struct that holds itself.
+RecursiveStruct is a recursive wire type whose cycle contains no named record.
 
 Declared in `go/reading/refusals.go`.
 
-Message: `The struct {Struct} holds itself.`
+Message: `The recursive type {Struct} must pass through a named record.`
 
 | Field | Type |
 | --- | --- |

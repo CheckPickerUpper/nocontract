@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/CheckPickerUpper/nocontract/description"
+	"github.com/CheckPickerUpper/nocontract/gleam/compiler"
 	"github.com/CheckPickerUpper/nocontract/internal/native"
 	"github.com/CheckPickerUpper/outcome"
 )
@@ -20,6 +21,7 @@ type Project struct {
 	Package   string
 	Routes    []Route
 	Guards    []Guard
+	Records   map[compiler.Identity]Record
 }
 
 // GenerationRefused preserves every unresolved checked value encountered during generation.
@@ -52,7 +54,7 @@ func Generate(project Project) outcome.Result[[]native.File] {
 }
 
 func generateBridge(project Project, dependency string) outcome.Result[[]native.File] {
-	generated := generator{imports: map[string]string{}, decoders: map[string]string{}, encoders: map[string]string{}, outcomes: map[string]string{}, problems: map[string]error{}}
+	generated := generator{records: project.Records, imports: map[string]string{}, decoders: map[string]string{}, encoders: map[string]string{}, outcomes: map[string]string{}, problems: map[string]error{}}
 	operations, decoderArms, answerArms := []string{"UnknownOperation(name: String)"}, []string{}, []string{}
 	for i, route := range project.Routes {
 		operation := fmt.Sprintf("CallRoute%d", i)

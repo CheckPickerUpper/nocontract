@@ -462,7 +462,7 @@ func readPlacedFieldTagged(index projectIndex, loaded *packages.Package, field i
 			return mapped(readParameter(index, loaded, field.variable, name), func(read parameter) placedField { return queryRead{read: read} })
 		})
 	case bodyField:
-		return andThen(readValue(index, field.variable.Type(), field.variable.Type(), position, []typeKey{}), func(read valueRead) reading[placedField] {
+		return andThen(readValue(index, field.variable.Type(), field.variable.Type(), position, []openBodyType{}), func(read valueRead) reading[placedField] {
 			return mapped(writableBody(index, read.body, loaded.PkgPath, position), func(value serverplan.BodyValue) placedField {
 				return bodyFieldRead{schema: read.schema, value: value}
 			})
@@ -500,7 +500,7 @@ func readParameter(index projectIndex, loaded *packages.Package, field *types.Va
 		return unsupported
 	}
 	return andThen(writableType(index, types.Unalias(field.Type()), loaded.PkgPath, field.Pos()), func(goType types.Type) reading[parameter] {
-		return andThen(readSchema(index, field.Type(), field.Pos(), []typeKey{}), func(schema description.Schema) reading[parameter] {
+		return andThen(readSchema(index, field.Type(), field.Pos(), []openBodyType{}), func(schema description.Schema) reading[parameter] {
 			return mo.Fold(textKind(schema), func(kind serverplan.TextKind) reading[parameter] {
 				return readAs(parameter{
 					field:    description.Field{Name: name, Schema: schema},
