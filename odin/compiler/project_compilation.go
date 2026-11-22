@@ -357,7 +357,7 @@ func ReflectProcedures(context context.Context, directory, scratch string, packa
 		})
 		fmt.Fprintf(source, " append(&graph.roots, Root{package_name = %s, name = %s, type = remember_type(type_info_of(type_of(nc_package_%d.%s)), &known, &queue)})\n", strconv.Quote(declaration.Entity.Package), strconv.Quote(declaration.Entity.Name), index, declaration.Entity.Name)
 	}
-	source.WriteString(" for index := 0; index < len(queue); index += 1 { append(&graph.types, describe_type(queue[index], &known, &queue)) }\n output, failure := json.marshal(graph, {spec = .JSON, use_enum_names = true})\n switch cause in failure {\n case nil: fmt.println(string(output))\n case json.Marshal_Data_Error, io.Error: fmt.eprintln(cause); os.exit(1)\n }\n}\n")
+	source.WriteString(" for index := 0; index < len(queue); index += 1 { append(&graph.types, describe_type(queue[index], &known, &queue)) }\n output, failure := json.marshal(graph, {spec = .JSON, use_enum_names = true})\n switch cause in failure {\n case nil: fmt.println(string(output))\n case json.Marshal_Data_Error, io.Error, runtime.Allocator_Error: fmt.eprintln(cause); os.exit(1)\n }\n}\n")
 	path := filepath.Join(scratch, "reflection.odin")
 	return outcome.FoldOption(outcome.EmptyableToOption(os.WriteFile(path, []byte(source.String()), 0o644)), func(cause error) outcome.Result[Graph] {
 		return outcome.Err[Graph](SourceUnwritable{Path: path, Contents: []byte(source.String()), Cause: cause})

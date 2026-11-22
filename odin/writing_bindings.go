@@ -53,7 +53,7 @@ func generateBindings(request native.Request, graph compiler.Graph, routes []rou
 		})
 	}
 	writer.source.WriteString(description.GeneratedHeader + "\npackage nocontract_server\n\n")
-	writer.source.WriteString("import \"core:bufio\"\nimport \"core:encoding/json\"\nimport \"core:fmt\"\nimport \"core:io\"\nimport \"core:mem\"\nimport \"core:os\"\n")
+	writer.source.WriteString("import \"base:runtime\"\nimport \"core:bufio\"\nimport \"core:encoding/json\"\nimport \"core:fmt\"\nimport \"core:io\"\nimport \"core:mem\"\nimport \"core:os\"\n")
 	for index, directory := range writer.imports {
 		relative := outcome.Fold(outcome.TupleToResult(filepath.Rel(request.Server, directory)), func(path string) string { return path }, func(cause error) string {
 			writer.problems = append(writer.problems, compiler.ImportUnresolved{From: request.Server, Package: directory, Cause: cause})
@@ -78,7 +78,7 @@ func generateBindings(request native.Request, graph compiler.Graph, routes []rou
 		writer.routeDeclaration(position, route)
 		outcome.ForEachOption(route.guard, func(guard guardBinding) { writer.guardDeclaration(position, guard) })
 	}
-	writer.source.WriteString("\n@(private, require_results)\ndispatch :: proc(line: []u8) -> Reply {\n operation := struct #all_or_none { operation: string }{operation = \"\"}\n switch failure in json.unmarshal(line, &operation, spec = .JSON) {\n case nil:\n case json.Error, json.Unmarshal_Data_Error, json.Unsupported_Type_Error: return Wire_Refused{reason = fmt.tprintf(\"decoding operation: %v\", failure)}\n }\n switch operation.operation {\n")
+	writer.source.WriteString("\n@(private, require_results)\ndispatch :: proc(line: []u8) -> Reply {\n operation := struct #all_or_none { operation: string }{operation = \"\"}\n switch failure in json.unmarshal(line, &operation, spec = .JSON) {\n case nil:\n case json.Error, json.Unmarshal_Data_Error, json.Unsupported_Type_Error, json.Unknown_Field_Error: return Wire_Refused{reason = fmt.tprintf(\"decoding operation: %v\", failure)}\n }\n switch operation.operation {\n")
 	for position, route := range routes {
 		fmt.Fprintf(writer.source, " case %s: return call_route_%d(line)\n", strconv.Quote(description.OperationID(route.declaration.Entity.Package, route.endpoint)), position)
 		outcome.ForEachOption(route.guard, func(guard guardBinding) {
@@ -396,7 +396,7 @@ func (writer *bindingWriter) guardDeclaration(position int, guard guardBinding) 
 }
 
 func (writer *bindingWriter) decodeRequest(operation string) {
-	fmt.Fprintf(writer.source, " switch failure in json.unmarshal(line, &request, spec = .JSON) {\n case nil:\n case json.Error, json.Unmarshal_Data_Error, json.Unsupported_Type_Error: return Wire_Refused{reason = fmt.tprintf(\"decoding %%s: %%v\", %s, failure)}\n }\n", strconv.Quote(operation))
+	fmt.Fprintf(writer.source, " switch failure in json.unmarshal(line, &request, spec = .JSON) {\n case nil:\n case json.Error, json.Unmarshal_Data_Error, json.Unsupported_Type_Error, json.Unknown_Field_Error: return Wire_Refused{reason = fmt.tprintf(\"decoding %%s: %%v\", %s, failure)}\n }\n", strconv.Quote(operation))
 }
 
 func (writer *bindingWriter) unionBranches(checked compiler.Union, site string, emit func(int)) {

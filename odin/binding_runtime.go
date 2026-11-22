@@ -14,7 +14,7 @@ json_reply :: proc(value: $T, location := #caller_location) -> Reply {
 	switch cause in failure {
 	case nil:
 		return Encoded{line = string(encoded)}
-	case json.Marshal_Data_Error, io.Error:
+	case json.Marshal_Data_Error, io.Error, runtime.Allocator_Error:
 		return Wire_Refused{reason = fmt.tprintf("encoding %v at %v: %v", type_info_of(T), location, cause)}
 	}
 	unreachable()
