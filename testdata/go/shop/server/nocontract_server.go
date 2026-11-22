@@ -3,25 +3,25 @@
 package server
 
 import (
+	context "context"
 	balance "example.com/shop/balance"
 	orders "example.com/shop/orders"
 	shopperrefusal "example.com/shop/shopperauth/shopperrefusal"
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
+	outcome2 "github.com/CheckPickerUpper/outcome"
 	mo "github.com/samber/mo"
 	http "net/http"
-	slices "slices"
 )
 
 // API serves every route the project declares, and answers every other request with
 // RouteNotFound, MethodNotDeclared, or 204 and Allow to an OPTIONS request. Only New builds one.
 type API struct {
-	endpoints []nocontract.Endpoint
-	layers    []nocontract.Layer
+	binding nocontract.RouteBinding
 }
 
-// ServeHTTP answers one request through the layers.
-func (api API) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	nocontract.Respond(writer, request, api.endpoints, api.layers)
+// Listen starts the API's declared routes on the chosen TCP address.
+func Listen(serverContext context.Context, options nocontract.ListenOptions, api API) outcome2.Result[nocontract.ListeningServer] {
+	return nocontract.Listen(serverContext, options, api.binding)
 }
 
 // New is the API serving every route the project declares, each behind the guard it names, with
@@ -29,12 +29,12 @@ func (api API) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 // It takes the receiver of each method handler and each guard, by the package declaring the routes.
 func New(layers []nocontract.Layer, balanceLedger balance.Ledger, balanceShopper nocontract.Guard[shopperrefusal.Refusal]) mo.Result[API] {
 	return mo.Fold(balanceShopper.CheckRoute(nocontract.GuardedRoute{Method: "GET", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "balance"}}, Argument: "read-balance"}), func(checkReadBalance nocontract.RequestCheck[shopperrefusal.Refusal]) mo.Result[API] {
-		return mo.Ok(API{layers: slices.Clone(layers), endpoints: []nocontract.Endpoint{
+		return mo.Ok(API{binding: nocontract.BindRoutes([]nocontract.Endpoint{
 			{Method: "GET", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "balance"}}, Answer: func(request *http.Request) nocontract.Answer {
 				return nocontract.Decided(checkReadBalance(request), shopperrefusal.NocontractAnswerRefusal, func() nocontract.Answer { return balance.NocontractRouteReadBalance(balanceLedger, request) })
 			}},
 			{Method: "POST", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "top-ups"}}, Answer: func(request *http.Request) nocontract.Answer { return balance.NocontractRouteTopUp(request) }},
 			{Method: "POST", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "orders"}}, Answer: func(request *http.Request) nocontract.Answer { return orders.NocontractRoutePlace(request) }},
-		}})
+		}, layers)})
 	}, mo.Err[API])
 }

@@ -14,7 +14,7 @@ import (
 
 // Endpoint is one declared route as a generated server's table holds it: its method, which is
 // only compared with a request's, the segments of its path between slashes, and the answer it
-// gives a request. Only generated code builds one, and it serves nothing on its own.
+// gives a request. The generator builds the route table from checked declarations.
 type Endpoint struct {
 	Method string
 	Path   []PathSegment
@@ -216,8 +216,8 @@ func (optionsResponse) isResponse() {}
 // Respond answers one request to a generated server through its layers: the route its method and
 // path match; 204 with Allow to an OPTIONS request for a declared path; MethodNotDeclared to
 // another method on a declared path; RouteNotFound to a path no route declares; and RequestRefused
-// to a path holding a segment that is not valid escaping. Only the
-// generated API's ServeHTTP calls it.
+// to a path holding a segment that is not valid escaping. The runtime's private HTTP handler
+// calls it with the generated API's binding.
 func Respond(writer http.ResponseWriter, request *http.Request, endpoints []Endpoint, layers []Layer) {
 	matched := matchRequest(endpoints, request)
 	answer := sync.OnceValue(func() Answered { return answerMatched(matched, request) })

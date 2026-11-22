@@ -99,12 +99,14 @@ const (
 	ServerType = "API"
 	// ServerFunction builds the ServerType from what the routes are served with.
 	ServerFunction = "New"
+	// ServerListenFunction starts a generated API on the runtime's TCP listener.
+	ServerListenFunction = "Listen"
 )
 
 // ServerNames are the names the server file declares in its package, which the project's own
 // files there may not declare.
 func ServerNames() []string {
-	return []string{ServerType, ServerFunction}
+	return []string{ServerType, ServerFunction, ServerListenFunction}
 }
 
 // Plan is the generated code of every Go package that declares a route or a guard's refusal, and

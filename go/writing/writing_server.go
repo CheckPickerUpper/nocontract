@@ -15,10 +15,12 @@ import (
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 )
 
-// RenderServer is the formatted Go file of the server package: the API type, the only value that
-// serves the plan's routes, and New, the only function that builds one.
+// RenderServer is the formatted Go server package: API owns the checked route binding, New
+// builds it, and Listen starts it through the runtime's listener.
 func RenderServer(plan serverplan.Plan) outcome.Result[[]byte] {
 	names := serverImports(plan.Server.Home)
+	contextType := names.qualified(serverplan.GoName{Package: "context", Name: "Context"})
+	resultType := names.qualified(serverplan.GoName{Package: "github.com/CheckPickerUpper/outcome", Name: "Result"})
 	routed := routePackages(plan.Packages)
 	// Every package the file names takes its alias before any parameter takes a name.
 	for _, each := range routed {
@@ -39,15 +41,15 @@ func RenderServer(plan serverplan.Plan) outcome.Result[[]byte] {
 // %[1]s serves every route the project declares, and answers every other request with
 // RouteNotFound, MethodNotDeclared, or 204 and Allow to an OPTIONS request. Only %[2]s builds one.
 type %[1]s struct {
-	endpoints []%[3]s
-	layers    []%[4]s
+	binding %[3]s
 }
 
-// ServeHTTP answers one request through the layers.
-func (api %[1]s) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	%[5]s(writer, request, api.endpoints, api.layers)
+// %[4]s starts the API's declared routes on the chosen TCP address.
+func %[4]s(serverContext %[8]s, options %[5]s, api %[1]s) %[9]s[%[6]s] {
+	return %[7]s(serverContext, options, api.binding)
 }
-`, serverplan.ServerType, serverplan.ServerFunction, names.runtime("Endpoint"), names.runtime("Layer"), names.runtime("Respond"))
+`, serverplan.ServerType, serverplan.ServerFunction, names.runtime("RouteBinding"), serverplan.ServerListenFunction,
+		names.runtime("ListenOptions"), names.runtime("ListeningServer"), names.runtime("Listen"), contextType, resultType)
 	body.WriteString(newFunctionText(routed, parameters, names, locals))
 	file := description.GeneratedHeader + "\npackage " + plan.Server.Name + "\n\n" + names.declaration() + "\n" + body.String()
 	return outcome.TupleToResult(format.Source([]byte(file)))
@@ -72,7 +74,7 @@ func segmentsText(path description.RoutePath, names *imports) string {
 // serverImports names the packages the server file imports: the routes of a project package in the
 // server folder by their bare names, with no alias taking a name that package declares.
 func serverImports(home serverplan.ServerHome) *imports {
-	fixed := [][2]string{{"net/http", "http"}, {"slices", "slices"}, {"github.com/samber/mo", "mo"}, {serverplan.NoContractPath, serverplan.NoContractPackage}}
+	fixed := [][2]string{{"net/http", "http"}, {"github.com/samber/mo", "mo"}, {serverplan.NoContractPath, serverplan.NoContractPackage}}
 	switch beside := home.(type) {
 	case serverplan.ServerBesideProjectCode:
 		return newImports(beside.Path, fixed, beside.Declared)
@@ -209,7 +211,7 @@ func newFunctionText(routed []routedPackage, parameters map[packageNeed]serverPa
 			check.guard.name, names.runtime("GuardedRoute"), strconv.Quote(check.route.Method.Name()), segmentsText(check.route.Path, names),
 			strconv.Quote(check.argument), check.name, names.runtime("RequestCheck"), names.qualified(check.refusal), serverplan.ServerType)
 	}
-	fmt.Fprintf(text, "return mo.Ok(%s{layers: slices.Clone(layers), endpoints: []%s{\n%s\n}})\n", serverplan.ServerType, names.runtime("Endpoint"), strings.Join(endpoints, "\n"))
+	fmt.Fprintf(text, "return mo.Ok(%s{binding: %s([]%s{\n%s\n}, layers)})\n", serverplan.ServerType, names.runtime("BindRoutes"), names.runtime("Endpoint"), strings.Join(endpoints, "\n"))
 	text.WriteString(strings.Repeat(fmt.Sprintf("}, mo.Err[%s])\n", serverplan.ServerType), len(checks)))
 	text.WriteString("}\n")
 	return text.String()

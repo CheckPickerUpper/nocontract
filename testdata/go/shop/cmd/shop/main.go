@@ -2,12 +2,9 @@
 package main
 
 import (
-	"errors"
+	"context"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
-	"time"
 
 	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
@@ -20,28 +17,30 @@ import (
 )
 
 func main() {
+	serverContext := context.Background()
 	built := server.New([]nocontract.Layer{logRequest}, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: mo.None[int]()}, shopperauth.Check{})
-	os.Exit(mo.Fold(built, serve, func(cause error) int {
+	os.Exit(mo.Fold(built, func(api server.API) int { return serve(serverContext, api) }, func(cause error) int {
 		fmt.Fprintln(os.Stderr, cause)
 		return 1
 	}))
 }
 
 // serve serves the API until the server stops, and is the exit code the stop gives.
-func serve(api server.API) int {
-	listening := &http.Server{
-		Addr: os.Getenv("SHOP_ADDRESS"), Handler: api, DisableGeneralOptionsHandler: true, TLSConfig: nil,
-		ReadTimeout: 0, ReadHeaderTimeout: 10 * time.Second, WriteTimeout: 0, IdleTimeout: 0, MaxHeaderBytes: 0,
-		MaxHeaderValueCount: 0, TLSNextProto: nil, ConnState: nil, ErrorLog: nil, BaseContext: nil, ConnContext: nil,
-		HTTP2: nil, Protocols: nil, DisableClientPriority: false,
-	}
-	return outcome.Fold(outcome.TupleToResult(net.Listen("tcp", listening.Addr)), func(listener net.Listener) int {
-		return outcome.Fold(outcome.TupleToResult(fmt.Fprintln(os.Stdout, listener.Addr().String())), func(int) int {
-			// Serve closes the listener and always returns the error that stopped it.
-			fmt.Fprintln(os.Stderr, listening.Serve(listener))
-			return 1
+func serve(serverContext context.Context, api server.API) int {
+	return outcome.Fold(server.Listen(serverContext, nocontract.ListenOn(os.Getenv("SHOP_ADDRESS")), api), func(listening nocontract.ListeningServer) int {
+		defer func() {
+			outcome.Fold(listening.Stop(serverContext), func(nocontract.ServerStopped) struct{} { return struct{}{} }, func(cause error) struct{} {
+				fmt.Fprintln(os.Stderr, cause)
+				return struct{}{}
+			})
+		}()
+		return outcome.Fold(outcome.TupleToResult(fmt.Fprintln(os.Stdout, listening.Address())), func(int) int {
+			return outcome.Fold(listening.Wait(), func(nocontract.ServerStopped) int { return 0 }, func(cause error) int {
+				fmt.Fprintln(os.Stderr, cause)
+				return 1
+			})
 		}, func(cause error) int {
-			fmt.Fprintln(os.Stderr, errors.Join(cause, listener.Close()))
+			fmt.Fprintln(os.Stderr, cause)
 			return 1
 		})
 	}, func(cause error) int {

@@ -1,13 +1,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
@@ -18,23 +20,57 @@ import (
 	"example.com/shop/shopperauth/shopperrefusal"
 )
 
+func TestTheGeneratedServerStartsItsOwnListenerAndStopsIt(t *testing.T) {
+	listening := shopServer(t, []nocontract.Layer{})
+	want := received{status: http.StatusOK, allow: "", header: "", body: `{"_tag":"BalanceRead","balance":{"cents":"1250","currency":"CAD"},"overdraft":null,"changed":"2026-11-14T12:00:00Z","note":"first top-up"}`}
+	if answer := send(t, listening, http.MethodGet, "/shoppers/7/balance?currency=CAD", "shopper-7", ""); answer != want {
+		t.Fatalf("the generated listener answered %+v; want %+v", answer, want)
+	}
+	outcome.Fold(listening.Stop(t.Context()), func(nocontract.ServerStopped) struct{} { return struct{}{} }, func(cause error) struct{} {
+		t.Fatalf("stopping the generated server: %v", cause)
+		return struct{}{}
+	})
+	outcome.Fold(listening.Wait(), func(stopped nocontract.ServerStopped) struct{} {
+		if stopped.Address != listening.Address() {
+			t.Errorf("the listener on %s stopped as %+v", listening.Address(), stopped)
+		}
+		return struct{}{}
+	}, func(cause error) struct{} {
+		t.Fatalf("waiting for the generated server: %v", cause)
+		return struct{}{}
+	})
+}
+
 // shopServer serves the shop's generated API through layers, stopping the test when it cannot be
 // built.
-func shopServer(t *testing.T, layers []nocontract.Layer) *httptest.Server {
+func shopServer(t *testing.T, layers []nocontract.Layer) nocontract.ListeningServer {
 	t.Helper()
 	return ledgerServer(t, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: mo.None[int]()}, layers)
 }
 
 // ledgerServer serves the shop's generated API over ledger through layers, stopping the test when it
 // cannot be built.
-func ledgerServer(t *testing.T, ledger balance.Ledger, layers []nocontract.Layer) *httptest.Server {
+func ledgerServer(t *testing.T, ledger balance.Ledger, layers []nocontract.Layer) nocontract.ListeningServer {
 	t.Helper()
 	built := server.New(layers, ledger, shopperauth.Check{})
-	served := httptest.NewServer(mo.Fold(built, func(api server.API) server.API { return api }, func(cause error) server.API {
+	api := mo.Fold(built, func(api server.API) server.API { return api }, func(cause error) server.API {
 		t.Fatalf("building the shop's API: %v", cause)
 		return server.API{}
-	}))
-	t.Cleanup(served.Close)
+	})
+	served := outcome.Fold(server.Listen(t.Context(), nocontract.ListenOn("127.0.0.1:0"), api), func(listening nocontract.ListeningServer) nocontract.ListeningServer {
+		return listening
+	}, func(cause error) nocontract.ListeningServer {
+		t.Fatalf("starting the shop's listener: %v", cause)
+		return nocontract.ListeningServer{}
+	})
+	t.Cleanup(func() {
+		shutdownContext, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), time.Second)
+		defer cancel()
+		outcome.Fold(served.Stop(shutdownContext), func(nocontract.ServerStopped) struct{} { return struct{}{} }, func(cause error) struct{} {
+			t.Errorf("stopping the shop's listener: %v", cause)
+			return struct{}{}
+		})
+	})
 	return served
 }
 
@@ -48,7 +84,7 @@ type received struct {
 
 // send sends one request for shopper, an empty shopper meaning none, carrying body, and reads the
 // response.
-func send(t *testing.T, served *httptest.Server, method, path, shopper, body string) received {
+func send(t *testing.T, served nocontract.ListeningServer, method, path, shopper, body string) received {
 	t.Helper()
 	failed := func(doing string) func(error) received {
 		return func(cause error) received {
@@ -56,13 +92,19 @@ func send(t *testing.T, served *httptest.Server, method, path, shopper, body str
 			return received{status: 0, allow: "", header: "", body: ""}
 		}
 	}
-	built := mo.TupleToResult(http.NewRequestWithContext(t.Context(), method, served.URL+path, strings.NewReader(body)))
-	return mo.Fold(built, func(request *http.Request) received {
+	requestContext, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	built := outcome.TupleToResult(http.NewRequestWithContext(requestContext, method, "http://"+served.Address()+path, strings.NewReader(body)))
+	return outcome.Fold(built, func(request *http.Request) received {
 		request.Header.Set(shopperauth.ShopperHeader, shopper)
-		return mo.Fold(mo.TupleToResult(served.Client().Do(request)), func(response *http.Response) received {
-			return mo.Fold(mo.TupleToResult(io.ReadAll(response.Body)), func(body []byte) received {
-				answer := received{status: response.StatusCode, allow: response.Header.Get("Allow"), header: response.Header.Get("X-Request-Seen"), body: string(body)}
-				return mo.Fold(mo.EmptyableToOption(response.Body.Close()), failed("closing the answer to"), func(error) received { return answer })
+		return outcome.Fold(outcome.TupleToResult(http.DefaultClient.Do(request)), func(response *http.Response) received {
+			defer func() {
+				outcome.ForEachOption(outcome.EmptyableToOption(response.Body.Close()), func(cause error) {
+					t.Errorf("closing the answer to %s %s: %v", method, path, cause)
+				})
+			}()
+			return outcome.Fold(outcome.TupleToResult(io.ReadAll(response.Body)), func(body []byte) received {
+				return received{status: response.StatusCode, allow: response.Header.Get("Allow"), header: response.Header.Get("X-Request-Seen"), body: string(body)}
 			}, failed("reading the answer to"))
 		}, failed("sending"))
 	}, failed("building"))

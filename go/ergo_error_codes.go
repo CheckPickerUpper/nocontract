@@ -589,3 +589,96 @@ func (failure DecimalTextNotCanonical) Report(language messages.Language) ergo.R
 func (failure DecimalTextNotCanonical) Causes() []error {
 	return nil
 }
+
+func (ListenerNotOpened) ErrorCode() ergo.Code { return "NC-1140" }
+
+// ListenerNotOpenedArguments holds the arguments ListenerNotOpened's message names, in the order the message first names them.
+type ListenerNotOpenedArguments struct {
+	Address string `json:"Address"`
+}
+
+// ReportArguments marks ListenerNotOpenedArguments as the arguments of a report.
+func (ListenerNotOpenedArguments) ReportArguments() {}
+
+// Report is ListenerNotOpened's code, its message in language and the arguments the message names.
+func (failure ListenerNotOpened) Report(language messages.Language) ergo.Report {
+	arguments := ListenerNotOpenedArguments{Address: string(failure.Address)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The server could not listen on "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1140", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Address}}}), Arguments: arguments}
+}
+
+// Causes is every error ListenerNotOpened holds, then the causes of every failure it holds.
+func (failure ListenerNotOpened) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}
+
+func (ListenerNotServed) ErrorCode() ergo.Code { return "NC-1141" }
+
+// ListenerNotServedArguments holds the arguments ListenerNotServed's message names, in the order the message first names them.
+type ListenerNotServedArguments struct {
+	Address string `json:"Address"`
+}
+
+// ReportArguments marks ListenerNotServedArguments as the arguments of a report.
+func (ListenerNotServedArguments) ReportArguments() {}
+
+// Report is ListenerNotServed's code, its message in language and the arguments the message names.
+func (failure ListenerNotServed) Report(language messages.Language) ergo.Report {
+	arguments := ListenerNotServedArguments{Address: string(failure.Address)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The server on "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " could not keep serving requests."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1141", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Address}}}), Arguments: arguments}
+}
+
+// Causes is every error ListenerNotServed holds, then the causes of every failure it holds.
+func (failure ListenerNotServed) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}
+
+func (ListenerNotStopped) ErrorCode() ergo.Code { return "NC-1142" }
+
+// ListenerNotStoppedArguments holds the arguments ListenerNotStopped's message names, in the order the message first names them.
+type ListenerNotStoppedArguments struct {
+	Address string `json:"Address"`
+}
+
+// ReportArguments marks ListenerNotStoppedArguments as the arguments of a report.
+func (ListenerNotStoppedArguments) ReportArguments() {}
+
+// Report is ListenerNotStopped's code, its message in language and the arguments the message names.
+func (failure ListenerNotStopped) Report(language messages.Language) ergo.Report {
+	arguments := ListenerNotStoppedArguments{Address: string(failure.Address)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The server on "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " could not finish stopping."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1142", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Address}}}), Arguments: arguments}
+}
+
+// Causes is every error ListenerNotStopped holds, then the causes of every failure it holds.
+func (failure ListenerNotStopped) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}

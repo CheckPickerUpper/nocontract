@@ -230,26 +230,38 @@ document refers to the named schema again for each child.
 
 ## Serving
 
-The server package declares `API`, the only value that serves the routes, and `New`, the only
-function that builds one. `New` takes the layers, then one parameter for each handler's receiver
-type and each guard, by route package folder and then in the order the package's routes first
-need them, each named for its package and its type or guard. A route cannot be served without its
-guard or its receiver.
+The generated server package declares `API`, which owns the checked route binding, `New`, which
+builds it, and `Listen`, which starts its listener. `New` takes the layers, then one parameter
+for each handler's receiver type and each guard, by route package folder and then in the order
+the package's routes first need them, each named for its package and its type or guard. A route
+cannot be served without its guard or its receiver.
 
 ```go
 built := server.New([]nocontract.Layer{logRequest}, balance.Ledger{Store: store}, shopperauth.Check{})
 ```
 
-`New` answers the API, or why a guard could not check one of its routes. The API is an
-`http.Handler`:
+`New` answers the API, or why a guard could not check one of its routes. Start it with
+`server.Listen`, passing the application's context and an opaque `nocontract.ListenOptions`:
 
 ```go
-mo.Fold(built, func(api server.API) error {
-	return (&http.Server{Addr: ":8080", Handler: api, ReadHeaderTimeout: 10 * time.Second}).ListenAndServe()
-}, func(cause error) error { return cause })
+started := mo.Fold(built, func(api server.API) outcome.Result[nocontract.ListeningServer] {
+	return server.Listen(ctx, nocontract.ListenOn("127.0.0.1:8080"), api)
+}, outcome.Err[nocontract.ListeningServer])
+
+stopped := outcome.Fold(started, func(listening nocontract.ListeningServer) outcome.Result[nocontract.ServerStopped] {
+	fmt.Println(listening.Address())
+	return listening.Wait()
+}, outcome.Err[nocontract.ServerStopped])
 ```
 
-The API answers a request no declared route takes on its own:
+`Address()` reports the actual bound address. `ListenOn("127.0.0.1:0")` chooses an available
+port. `Wait()` waits for the serving task and returns its typed terminal result. From the
+application's shutdown path, call `Stop(shutdownContext)` on the same listener. It stops
+accepting requests, waits for active requests to finish within that context, and reports
+`ServerStopped` or the original shutdown failure. Concurrent `Wait` and `Stop` calls share the
+same listener lifetime.
+
+The generated listener supplies these responses when no declared route takes a request.
 
 - a path no route declares: 404 with `RouteNotFound` (`NC-1069`), naming the method and path;
 - an `OPTIONS` request to a declared path: 204 with `Allow` listing the path's declared methods;
@@ -258,23 +270,7 @@ The API answers a request no declared route takes on its own:
 
 A path segment written as text in one route is preferred over a `{name}` segment in another.
 
-The API is the only handler a project serves. `generate` and `check` refuse, in every file the
-project wrote, tests included, each with its file, line and code:
-
-- serving a value whose type is not the API with `http.ListenAndServe`, `ListenAndServeTLS`,
-  `Serve`, `ServeTLS`, or `httptest.NewServer`, `NewTLSServer` and `NewUnstartedServer`, or using
-  one of them without calling it;
-- an `http.Server` written without a `Handler` or with one that is not the API, and setting a
-  server's `Handler` to anything else;
-- making an `http.Server` at its zero value, which serves `http.DefaultServeMux`: a variable
-  declared with no value, `new(http.Server)`, a struct field or an array, slice, map or channel
-  element holding one by value, a type defined as one, a type argument, or a named result. Hold a
-  server by pointer;
-- making a handler of its own: `http.HandlerFunc`, a `ServeHTTP` method, or registering on a
-  `ServeMux` with `Handle` or `HandleFunc`.
-
-A handler wrapping the API, for logging, metrics or CORS, is refused with the rest. A
-[layer](#layers) runs that code around every request instead.
+A [layer](#layers) runs logging, metrics or CORS code around every request.
 
 ## Layers
 
