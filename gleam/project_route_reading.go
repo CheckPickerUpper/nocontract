@@ -1,4 +1,4 @@
-// Package gleam reads compiler-checked Gleam routes and generates their native bridge.
+// Package gleam reads compiler-checked Gleam routes and generates their BEAM HTTP server.
 package gleam
 
 import (
@@ -24,7 +24,7 @@ import (
 
 // Read resolves public signatures with Gleam, reads route metadata, and prepares typed bindings.
 func Read(context context.Context, request native.Request) outcome.Result[native.Project] {
-	return outcome.Fold(compiler.Read(context, request.Directory), func(project compiler.Package) outcome.Result[native.Project] {
+	return outcome.Fold(readSelectedProject(context, request), func(project compiler.Package) outcome.Result[native.Project] {
 		return outcome.Fold(selectedModules(request, project.Modules), func(selection []string) outcome.Result[native.Project] {
 			return outcome.Fold(directives.Read(request.Directory, project), func(metadata map[string]directives.Module) outcome.Result[native.Project] {
 				index := projectIndex{project: project, metadata: metadata, records: map[compiler.Identity]bindings.Record{}, outcomes: map[compiler.Identity]bindings.Outcome{}}
@@ -98,7 +98,7 @@ func selectedModules(request native.Request, modules map[string]compiler.Module)
 
 func (index projectIndex) projectBindings(request native.Request, routes []routeRead) native.Project {
 	groups := map[string]assembling.DeclaredGroup{}
-	guards, nativeRoutes, nativeGuards := []native.GuardedRoute{}, []bindings.Route{}, []bindings.Guard{}
+	nativeRoutes, nativeGuards := []bindings.Route{}, map[string]bindings.Guard{}
 	for _, route := range routes {
 		group := outcome.FoldOption(keyed.Entry(groups, route.native.Group), func(group assembling.DeclaredGroup) assembling.DeclaredGroup { return group }, func() assembling.DeclaredGroup {
 			return assembling.DeclaredGroup{Name: route.native.Group, Position: route.declared.Position, Endpoints: []assembling.DeclaredEndpoint{}}
@@ -107,8 +107,7 @@ func (index projectIndex) projectBindings(request native.Request, routes []route
 		groups[group.Name] = group
 		nativeRoutes = append(nativeRoutes, route.native)
 		outcome.ForEachOption(route.guard, func(guard guardRead) {
-			guards = append(guards, guard.route)
-			nativeGuards = append(nativeGuards, guard.native)
+			nativeGuards[description.OperationID(guard.route.Group, guard.route.Endpoint)] = guard.native
 		})
 	}
 	declaredGroups := []assembling.DeclaredGroup{}
@@ -130,9 +129,9 @@ func (index projectIndex) projectBindings(request native.Request, routes []route
 		structs = append(structs, assembling.DeclaredStruct{Struct: description.NamedStruct{Name: identity.Name, Fields: bindings.Fields(record.Fields)}, Position: index.position(identity, record.Constructor.Name)})
 	}
 	declared := assembling.Declared{API: request.API, Groups: declaredGroups, Members: members, Structs: structs}
-	return native.Project{Declared: declared, Guards: guards, Generate: func() outcome.Result[[]native.File] {
-		return bindings.Generate(bindings.Project{Directory: request.Directory, Server: request.Server, Package: index.project.Name, Routes: nativeRoutes, Guards: nativeGuards, Records: index.records})
-	}, Command: native.Command{Directory: request.Server, Executable: "gleam", Arguments: []string{"run", "--no-print-progress", "-m", "nocontract_bridge"}}}
+	return native.Project{Declared: declared, Generate: func(checked assembling.APIAssembled) outcome.Result[[]native.File] {
+		return bindings.Generate(bindings.Project{Directory: request.Directory, Server: request.Server, Routes: nativeRoutes, Guards: nativeGuards, Records: index.records}, checked)
+	}, Execution: native.GleamListener{Directory: request.Directory}}
 }
 
 func sortedIdentities[T any](values map[compiler.Identity]T) []compiler.Identity {

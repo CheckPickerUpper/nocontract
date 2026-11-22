@@ -1,4 +1,4 @@
-// Package bindings generates typed Gleam codecs and exhaustive native dispatch.
+// Package bindings generates the application's typed Gleam HTTP server.
 package bindings
 
 import (
@@ -283,8 +283,8 @@ type Route struct {
 
 // Guard calls one public native guard whose Option contains a checked refusal type.
 type Guard struct {
-	Module    string
-	Function  string
-	Operation string
-	Output    Outcome
+	Module   string
+	Function string
+	Scope    string
+	Output   Outcome
 }

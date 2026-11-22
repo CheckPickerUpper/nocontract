@@ -1,4 +1,4 @@
-// Package native connects compiler-checked Odin and Gleam handlers to NoContract's HTTP runtime.
+// Package native describes compiler-checked projects and their execution plans.
 package native
 
 import (
@@ -18,11 +18,31 @@ type Request struct {
 
 // Project is a compiler's declarations and the native bindings for serving them.
 type Project struct {
-	Declared assembling.Declared
-	Guards   []GuardedRoute
-	Generate func() outcome.Result[[]File]
-	Command  Command
+	Declared  assembling.Declared
+	Generate  func(assembling.APIAssembled) outcome.Result[[]File]
+	Execution Execution
 }
+
+// Execution is the compiler backend's serving plan.
+//
+//sumtype:decl
+type Execution interface{ isExecution() }
+
+// OdinDispatcher invokes typed Odin procedures through its generated stdin/stdout dispatcher.
+//
+//ergo:not-an-error
+type OdinDispatcher struct {
+	Command Command
+	Guards  []GuardedRoute
+}
+
+// GleamListener is started by the application's generated Wisp/Mist module on its BEAM.
+//
+//ergo:not-an-error
+type GleamListener struct{ Directory string }
+
+func (OdinDispatcher) isExecution() {}
+func (GleamListener) isExecution()  {}
 
 // GuardedRoute is the guard a route calls with Scope and the refusals it can return.
 type GuardedRoute struct {

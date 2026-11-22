@@ -42,7 +42,7 @@ func TestShopBackendsConformToTheSameHTTPContract(t *testing.T) {
 	for _, backend := range []shopBackend{
 		{language: "go", prepare: copyGoShop, open: openGoShop},
 		{language: "odin", prepare: copyShop, open: openNativeShop},
-		{language: "gleam", prepare: copyShop, open: openNativeShop},
+		{language: "gleam", prepare: copyGleamShop, open: openGleamShop},
 	} {
 		t.Run(backend.language, func(t *testing.T) {
 			fixture := readShopFixture(t, filepath.Join(checkout, "testdata", backend.language, "shop"))
@@ -123,6 +123,44 @@ func openNativeShop(t *testing.T, project string) shopServerAddress {
 		return shopServerAddress{url: served.URL, client: served.Client()}
 	}, func(cause error) shopServerAddress {
 		t.Fatalf("opening the shop from %s: %v", project, cause)
+		return shopServerAddress{url: "", client: http.DefaultClient}
+	})
+}
+
+func openGleamShop(t *testing.T, project string) shopServerAddress {
+	t.Helper()
+	lifetime, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), time.Minute)
+	t.Cleanup(cancel)
+	command := exec.CommandContext(lifetime, "gleam", "run", "--no-print-progress", "-m", "shop_server")
+	command.Dir = filepath.Dir(project)
+	command.WaitDelay = 2 * time.Second
+	diagnostics := &bytes.Buffer{}
+	command.Stderr = diagnostics
+	return outcome.Fold(outcome.TupleToResult(command.StdoutPipe()), func(stdout io.ReadCloser) shopServerAddress {
+		scratchproject.StopOn(t, "starting the Gleam shop", command.Start())
+		t.Cleanup(func() {
+			cancel()
+			outcome.ForEachOption(outcome.EmptyableToOption(command.Wait()), func(cause error) {
+				if _, exited := errors.AsType[*exec.ExitError](cause); !exited {
+					t.Errorf("stopping the Gleam shop: %v", cause)
+				}
+			})
+			if t.Failed() {
+				t.Logf("Gleam shop diagnostics:\n%s", diagnostics)
+			}
+		})
+		lines := bufio.NewScanner(stdout)
+		for lines.Scan() {
+			if address, listening := strings.CutPrefix(lines.Text(), "Listening on "); listening {
+				client := *http.DefaultClient
+				client.Timeout = 10 * time.Second
+				return shopServerAddress{url: address, client: &client}
+			}
+		}
+		t.Fatalf("Gleam shop did not start its listener from %s: %v", project, lines.Err())
+		return shopServerAddress{url: "", client: http.DefaultClient}
+	}, func(cause error) shopServerAddress {
+		t.Fatalf("opening Gleam shop stdout: %v", cause)
 		return shopServerAddress{url: "", client: http.DefaultClient}
 	})
 }

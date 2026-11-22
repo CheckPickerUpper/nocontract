@@ -242,6 +242,7 @@ func shopBodyRoutes() []shopBodyRoute {
 	wholeOrder := shopOrderBody(shopOrderParts{items: tea, between: december, wrapped: "true", courierNotes: porch})
 	orderCases := []shopBodyCase{
 		{name: "a whole typed nested order", body: wholeOrder, want: shopAnswer{status: 201, allow: "", body: placed}},
+		{name: "a small JSON integer accepts numeric minus zero", body: strings.Replace(wholeOrder, `"quantity":2`, `"quantity":-0`, 1), want: shopAnswer{status: 201, allow: "", body: strings.Replace(placed, `"quantity":2`, `"quantity":0`, 1)}},
 		{name: "an empty typed order", body: shopEmptyOrder, want: shopAnswer{status: 201, allow: "", body: `{"_tag":"OrderPlaced","order":` + shopEmptyOrder + `}`}},
 		{
 			name: "a nested quantity its byte cannot hold", body: shopOrderBody(shopOrderParts{items: `[{"sku":"tea","quantity":2,"included":[{"sku":"strainer","quantity":300,"included":[]}]}]`, between: december, wrapped: "true", courierNotes: porch}),

@@ -651,3 +651,61 @@ func (failure NativeBackendFailed) Causes() []error {
 	}
 	return causes
 }
+
+func (GleamApplicationOwnsListener) ErrorCode() ergo.Code { return "NC-1150" }
+
+// GleamApplicationOwnsListenerArguments holds the arguments GleamApplicationOwnsListener's message names, in the order the message first names them.
+type GleamApplicationOwnsListenerArguments struct {
+	Directory string `json:"Directory"`
+}
+
+// ReportArguments marks GleamApplicationOwnsListenerArguments as the arguments of a report.
+func (GleamApplicationOwnsListenerArguments) ReportArguments() {}
+
+// Report is GleamApplicationOwnsListener's code, its message in language and the arguments the message names.
+func (failure GleamApplicationOwnsListener) Report(language messages.Language) ergo.Report {
+	arguments := GleamApplicationOwnsListenerArguments{Directory: string(failure.Directory)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The Gleam application in "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " starts its own generated NoContract server."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1150", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Directory}}}), Arguments: arguments}
+}
+
+// Causes is every error GleamApplicationOwnsListener holds, then the causes of every failure it holds.
+func (failure GleamApplicationOwnsListener) Causes() []error {
+	return nil
+}
+
+func (NativeSourceFormattingFailed) ErrorCode() ergo.Code { return "NC-1151" }
+
+// NativeSourceFormattingFailedArguments holds the arguments NativeSourceFormattingFailed's message names, in the order the message first names them.
+type NativeSourceFormattingFailedArguments struct {
+	Path string `json:"Path"`
+}
+
+// ReportArguments marks NativeSourceFormattingFailedArguments as the arguments of a report.
+func (NativeSourceFormattingFailedArguments) ReportArguments() {}
+
+// Report is NativeSourceFormattingFailed's code, its message in language and the arguments the message names.
+func (failure NativeSourceFormattingFailed) Report(language messages.Language) ergo.Report {
+	arguments := NativeSourceFormattingFailedArguments{Path: string(failure.Path)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The generated source "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " could not be formatted."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1151", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Path}}}), Arguments: arguments}
+}
+
+// Causes is every error NativeSourceFormattingFailed holds, then the causes of every failure it holds.
+func (failure NativeSourceFormattingFailed) Causes() []error {
+	var causes []error
+	if cause := failure.Cause; cause != nil {
+		causes = append(causes, cause)
+	}
+	return causes
+}

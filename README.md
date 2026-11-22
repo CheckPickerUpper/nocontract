@@ -295,6 +295,34 @@ func logRequest(visit nocontract.Visit, next func() nocontract.Answered) nocontr
 }
 ```
 
+## Gleam server
+
+The Gleam application starts its generated Wisp/Mist server on its own BEAM. Declare
+`nocontract_runtime` as a Git dependency from this repository's `gleam/runtime` subdirectory,
+pinned to the NoContract revision used by the Go tool. The
+[Gleam shop manifest](testdata/gleam/shop/gleam.toml) lists the released Wisp, Mist and Gleam
+libraries the generated module imports.
+
+Set `language` to `gleam`, name the modules holding routes in `packages`, and set `server` to
+`src/nocontract`. `generate` writes the module `nocontract/server` there. It reads only the
+selected route modules and their source dependencies, so both `generate` and `check` work when
+an outcome change makes an older generated server stale.
+
+```gleam
+import gleam/erlang/process
+import nocontract/server
+
+pub fn main() {
+  let assert Ok(options) = server.options(address: "127.0.0.1", port: 8080)
+  let assert Ok(_) = server.start(options)
+  process.sleep_forever()
+}
+```
+
+`start` takes only the validated address and port options. The generated module owns routing,
+request decoding and JSON replies; it accepts no HTTP handler or response callback. A Go
+process does not serve a Gleam project's HTTP requests.
+
 ## Calling
 
 ```ts

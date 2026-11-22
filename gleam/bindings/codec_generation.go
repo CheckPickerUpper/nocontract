@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/gleam/compiler"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 	"github.com/CheckPickerUpper/outcome"
@@ -13,6 +14,7 @@ import (
 
 type generator struct {
 	records  map[compiler.Identity]Record
+	members  map[string]description.Member
 	imports  map[string]string
 	decoders map[string]string
 	encoders map[string]string
@@ -57,6 +59,12 @@ func nativeModuleAlias(name string, index int) string {
 		return "option"
 	case "gleam/list":
 		return "list"
+	case "gleam/result":
+		return "result"
+	case "gleam/int":
+		return "int"
+	case "nocontract_runtime/parameter_reading":
+		return "parameter"
 	}
 	return fmt.Sprintf("native_%d", index)
 }
@@ -228,7 +236,11 @@ func literalNames(literals []Literal) string {
 
 func (generated generator) encoder(value Value) string {
 	typeName := generated.typeName(generated.nativeType(value))
-	name := codecName("encode", typeName)
+	key := typeName
+	if whole, isWhole := value.(Whole); isWhole {
+		key += ":" + whole.Width.Least() + ":" + whole.Width.Most()
+	}
+	name := codecName("encode", key)
 	if _, exists := generated.encoders[name]; exists {
 		return name
 	}
@@ -243,7 +255,14 @@ func (generated generator) encodeBody(value Value) string {
 	case Text, Timestamp:
 		return "json.string(value)"
 	case Whole:
-		return "json.int(value)"
+		switch typed.Width.Wire().(type) {
+		case description.DecimalTextWire:
+			generated.module("gleam/int")
+			return "value |> int.to_string |> json.string"
+		case description.NumberWire:
+			return "json.int(value)"
+		case nil:
+		}
 	case Truth:
 		return "json.bool(value)"
 	case Number:
@@ -291,12 +310,28 @@ func (generated generator) keyEncoder(value Enumeration) string {
 	if _, exists := generated.encoders[name]; exists {
 		return name
 	}
-	arms := []string{}
+	arms := []constructorBranch{}
 	for _, literal := range value.Literals {
-		arms = append(arms, generated.module(value.Native.Identity.Module)+"."+literal.Constructor+" -> "+quoted(literal.Text))
+		arms = append(arms, constructorBranch{pattern: generated.module(value.Native.Identity.Module) + "." + literal.Constructor, expression: quoted(literal.Text)})
 	}
-	generated.encoders[name] = "fn " + name + "(value: " + typeName + ") -> String { case value {\n" + strings.Join(arms, "\n") + "\n} }\n"
+	generated.encoders[name] = "fn " + name + "(value: " + typeName + ") -> String {\n" + constructorExpression("value", arms) + "\n}\n"
 	return name
+}
+
+type constructorBranch struct {
+	pattern    string
+	expression string
+}
+
+func constructorExpression(value string, branches []constructorBranch) string {
+	if len(branches) == 1 {
+		return "let " + branches[0].pattern + " = " + value + "\n" + branches[0].expression
+	}
+	arms := []string{}
+	for _, branch := range branches {
+		arms = append(arms, branch.pattern+" -> "+branch.expression)
+	}
+	return "case " + value + " {\n" + strings.Join(arms, "\n") + "\n}"
 }
 
 func (generated generator) outcomeEncoder(value Outcome) string {
@@ -305,7 +340,7 @@ func (generated generator) outcomeEncoder(value Outcome) string {
 	if _, exists := generated.outcomes[name]; exists {
 		return name
 	}
-	arms := []string{}
+	arms := []constructorBranch{}
 	for _, answer := range value.Answers {
 		switch branch := answer.(type) {
 		case Direct:
@@ -316,14 +351,34 @@ func (generated generator) outcomeEncoder(value Outcome) string {
 				fields = append(fields, "#("+quoted(field.Name.Text())+", "+generated.encoder(field.Value)+"("+local+"))")
 			}
 			pattern := constructorCall(generated.module(value.Native.Identity.Module), branch.Constructor, locals)
-			arms = append(arms, pattern+" -> json.object([#(\"answered\", json.object([#(\"tag\", json.string("+quoted(branch.Constructor.Name)+")), #(\"fields\", json.object(["+strings.Join(fields, ", ")+"]))]))])")
+			member, exists := generated.members[branch.Constructor.Name]
+			if !exists {
+				generated.problems[branch.Constructor.Name] = AnswerUnresolved{Type: value.Native}
+				continue
+			}
+			status := 0
+			envelope := []string{"#(\"_tag\", json.string(" + quoted(member.Name) + "))"}
+			schemas := []string{"#(\"_tag\", wire.LiteralsSchema(values: [" + quoted(member.Name) + "]))"}
+			switch answer := member.Answer.(type) {
+			case description.Succeeds:
+				status = answer.Status.Code()
+			case description.Fails:
+				status = answer.Status.Code()
+				envelope = append(envelope, "#(\"code\", json.string("+quoted(answer.Code.String())+"))")
+				schemas = append(schemas, "#(\"code\", wire.LiteralsSchema(values: ["+quoted(answer.Code.String())+"]))")
+			case nil:
+			}
+			for _, field := range member.Fields {
+				schemas = append(schemas, "#("+quoted(field.Name.Text())+", "+generated.schema(field.Schema)+")")
+			}
+			arms = append(arms, constructorBranch{pattern: pattern, expression: fmt.Sprintf("write_answer(tag: %s, status: %d, fields: json.object([%s]), schema: wire.RecordSchema(fields: [%s]))", quoted(member.Name), status, strings.Join(append(envelope, fields...), ", "), strings.Join(schemas, ", "))})
 		case Forwarded:
 			pattern := constructorCall(generated.module(value.Native.Identity.Module), branch.Constructor, []string{"inner"})
-			arms = append(arms, pattern+" -> "+generated.outcomeEncoder(branch.Inner)+"(inner)")
+			arms = append(arms, constructorBranch{pattern: pattern, expression: generated.outcomeEncoder(branch.Inner) + "(inner)"})
 		case nil:
 			generated.problems["missing outcome"] = AnswerUnresolved{Type: value.Native}
 		}
 	}
-	generated.outcomes[name] = "fn " + name + "(value: " + typeName + ") -> json.Json { case value {\n" + strings.Join(arms, "\n") + "\n} }\n"
+	generated.outcomes[name] = "fn " + name + "(value: " + typeName + ") -> wisp.Response {\n" + constructorExpression("value", arms) + "\n}\n"
 	return name
 }

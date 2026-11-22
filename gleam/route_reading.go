@@ -107,6 +107,6 @@ func (index projectIndex) guardSignature(source sourceRoute, guard directives.Gu
 			}
 		}
 		group, endpoint := routeGroup(source.module), description.EndpointName(publicName(source.name))
-		return outcome.Ok(outcome.Some(guardRead{native: bindings.Guard{Module: guard.Module, Function: guard.Function, Operation: native.GuardOperationID(group, endpoint), Output: output}, route: native.GuardedRoute{Group: group, Endpoint: endpoint, Scope: guard.Scope, Refusals: output.Members()}}))
+		return outcome.Ok(outcome.Some(guardRead{native: bindings.Guard{Module: guard.Module, Function: guard.Function, Scope: guard.Scope, Output: output}, route: native.GuardedRoute{Group: group, Endpoint: endpoint, Scope: guard.Scope, Refusals: output.Members()}}))
 	}, outcome.Err[outcome.Option[guardRead]])
 }

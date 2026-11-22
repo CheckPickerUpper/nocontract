@@ -105,7 +105,7 @@ func (index *readIndex) project() outcome.Result[native.Project] {
 			declared := assembling.Declared{API: index.request.API, Groups: groups, Members: index.members, Structs: index.structs}
 			arguments := append([]string{"run", index.request.Server}, compiler.Flags([]string{"nocontract_server"})...)
 			arguments = append(arguments, "-out:"+filepath.Join(index.request.Directory, ".scratch", "nocontract-odin-server"))
-			return outcome.Ok(native.Project{Declared: declared, Guards: guarded, Command: native.Command{Directory: index.request.Directory, Executable: "odin", Arguments: arguments}, Generate: func() outcome.Result[[]native.File] {
+			return outcome.Ok(native.Project{Declared: declared, Execution: native.OdinDispatcher{Guards: guarded, Command: native.Command{Directory: index.request.Directory, Executable: "odin", Arguments: arguments}}, Generate: func(assembling.APIAssembled) outcome.Result[[]native.File] {
 				return generateBindings(index.request, index.graph, bindings)
 			}})
 		}, outcome.Err[native.Project])

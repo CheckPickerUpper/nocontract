@@ -3,5 +3,5 @@
   "packages": ["./..."],
   "api": "ShopApi",
   "openapi": { "file": "shop_api.openapi.json", "version": "1.0.0" },
-  "server": "server"
+  "server": "src/nocontract"
 }

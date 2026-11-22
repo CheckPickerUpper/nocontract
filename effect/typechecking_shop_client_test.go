@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -20,7 +21,14 @@ import (
 // An empty frontend can generate and check the same Gleam route Monzae serves.
 func TestGleamLivenessGeneratesAndChecksAClientInAnEmptyFrontend(t *testing.T) {
 	directory := t.TempDir()
-	scratchproject.WriteFile(t, directory, "gleam.toml", []byte("name = \"monzae_client\"\nversion = \"0.1.0\"\ntarget = \"erlang\"\n"))
+	checkout := scratchproject.PathOrStop(t, "locating NoContract", outcome.TupleToResult(filepath.Abs("..")))
+	manifestPath := filepath.Join(checkout, "testdata", "gleam", "shop", "gleam.toml")
+	manifest := scratchproject.BytesOrStop(t, "reading the native example manifest", outcome.TupleToResult(os.ReadFile(manifestPath)))
+	runtime := filepath.Join(checkout, "gleam", "runtime")
+	readWebProject(t, runtime)
+	manifest = bytes.ReplaceAll(manifest, []byte(`"../../../gleam/runtime"`), []byte(strconv.Quote(runtime)))
+	manifest = bytes.ReplaceAll(manifest, []byte(`"nocontract_shop"`), []byte(`"monzae_client"`))
+	scratchproject.WriteFile(t, directory, "gleam.toml", manifest)
 	scratchproject.WriteFile(t, directory, "src/monzae/health/read_liveness.gleam", []byte(`pub type LivenessRequest {
   LivenessRequest
 }
@@ -42,7 +50,7 @@ pub fn read_liveness(_request: LivenessRequest) -> LivenessOutcome {
   "api": "MonzaeApi",
   "openapi": {"file": "monzae_api.openapi.json", "version": "0.1.0"},
   "typescript": "client/monzae_api.generated.ts",
-  "server": "server"
+  "server": "src/nocontract"
 }`))
 	project := filepath.Join(directory, "nocontract.json")
 	generated := running.Run(running.Request{Arguments: []string{"generate", "-project", project}, Context: t.Context()})
@@ -60,8 +68,11 @@ func readWebProject(t *testing.T, web string) {
 	t.Helper()
 	walked := filepath.WalkDir(web, func(path string, entry fs.DirEntry, walkError error) error {
 		return outcome.FoldOption(outcome.EmptyableToOption(walkError), func(cause error) error { return cause }, func() error {
-			if entry.IsDir() && entry.Name() == "node_modules" {
-				return filepath.SkipDir
+			if entry.IsDir() {
+				switch entry.Name() {
+				case "node_modules", "build", ".scratch":
+					return filepath.SkipDir
+				}
 			}
 			if entry.IsDir() {
 				return nil

@@ -16,7 +16,7 @@ type sourceLocations struct {
 }
 
 // The compiler owns declaration attachment. These tokens locate its symbols in the source.
-var sourceTokens = regexp.MustCompile("(?s)//[^\\n]*|\"(?:\\\\.|[^\"\\\\])*\"|[_\\pL][_\\pL\\pN]*|[{}()=]")
+var sourceTokens = regexp.MustCompile("(?s)//[^\\n]*|\"(?:\\\\.|[^\"\\\\])*\"|[_\\pL][_\\pL\\pN]*|[{}()=/.]")
 
 func locateDeclarations(file, source string) sourceLocations {
 	locations := sourceLocations{file: file, functions: map[string]assembling.Position{}, constructors: map[string]assembling.Position{}}

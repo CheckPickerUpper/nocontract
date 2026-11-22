@@ -10,6 +10,7 @@ import (
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/gleam"
+	"github.com/CheckPickerUpper/nocontract/gleam/bindings"
 	"github.com/CheckPickerUpper/nocontract/gleam/directives"
 	"github.com/CheckPickerUpper/nocontract/internal/native"
 	"github.com/CheckPickerUpper/outcome"
@@ -83,6 +84,35 @@ func TestCompilerAttachmentAndUnrepresentableShapesAreRefused(t *testing.T) {
 			}, func(cause error) struct{} { test.check(t, cause); return struct{}{} })
 		})
 	}
+}
+
+func TestGeneratedServerFolderMustNameAGleamModule(t *testing.T) {
+	directory := createCompilerProject(t, "pub type Input { Input }\npub type Answer {\n/// ergleam:not-an-error\n/// nocontract:status 200\nLive\n}\n/// nocontract:route GET /live\npub fn read(_input: Input) -> Answer { Live }\n")
+	apiName, named := description.ParseAPIName("ExampleApi").(description.APINameRead)
+	if !named {
+		t.Fatal("ExampleApi did not parse")
+	}
+	request := native.Request{Directory: directory, Packages: []string{"reader_proof"}, API: assembling.NamedAPI{Name: apiName.Name, Position: assembling.Position{File: filepath.Join(directory, "gleam.toml"), Line: 1, Column: 1}}, Server: filepath.Join(directory, "src", "My-Server")}
+	outcome.Fold(gleam.Read(t.Context(), request), func(project native.Project) struct{} {
+		switch checked := assembling.Assemble(project.Declared).(type) {
+		case assembling.APIAssembled:
+			outcome.Fold(project.Generate(checked), func(files []native.File) struct{} {
+				t.Fatalf("invalid module folder produced %d generated files", len(files))
+				return struct{}{}
+			}, func(cause error) struct{} {
+				refused, exact := errors.AsType[bindings.ServerModuleNameRefused](cause)
+				if !exact || refused.Source != filepath.Join(directory, "src") || refused.Server != request.Server || refused.Relative != "My-Server" || refused.Component != "My-Server" || refused.Index != 0 {
+					t.Fatalf("refusal = %+v; want the configured folder and invalid module component", cause)
+				}
+				return struct{}{}
+			})
+		case assembling.APIRefused:
+			t.Fatalf("valid route was refused: %+v", checked)
+		case nil:
+			t.Fatal("assembly returned no outcome")
+		}
+		return struct{}{}
+	}, func(cause error) struct{} { t.Fatal(cause); return struct{}{} })
 }
 
 func createCompilerProject(t *testing.T, source string) string {

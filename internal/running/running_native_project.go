@@ -33,10 +33,9 @@ func (NativeBackendFailed) ExitCode() int { return 2 }
 func (failed NativeBackendFailed) Lines() []string { return described(failed) }
 
 type compiledNative struct {
-	checked assembling.APIAssembled
-	command native.Command
-	guards  []native.GuardedRoute
-	files   []generatedFile
+	checked   assembling.APIAssembled
+	execution native.Execution
+	files     []generatedFile
 }
 
 func generatedNative(context context.Context, project projectfile.Project, finish finisher) Outcome {
@@ -56,9 +55,9 @@ func compileNative[R any](context context.Context, project projectfile.Project, 
 	return outcome.Fold(readNative(context, project.Backend(), request), func(back native.Project) R {
 		switch assembled := assembling.Assemble(back.Declared).(type) {
 		case assembling.APIAssembled:
-			return outcome.Fold(back.Generate(), func(nativeFiles []native.File) R {
-				return outcome.Fold(renderNativeFiles(project.File(), nativeFiles), func(artifacts []generatedFile) R {
-					return built(compiledNative{checked: assembled, command: back.Command, guards: back.Guards, files: artifacts})
+			return outcome.Fold(back.Generate(assembled), func(nativeFiles []native.File) R {
+				return outcome.Fold(renderNativeFiles(context, project.File(), nativeFiles), func(artifacts []generatedFile) R {
+					return built(compiledNative{checked: assembled, execution: back.Execution, files: artifacts})
 				}, fail)
 			}, fail)
 		case assembling.APIRefused:
@@ -69,7 +68,7 @@ func compileNative[R any](context context.Context, project projectfile.Project, 
 	}, fail)
 }
 
-func renderNativeFiles(project string, artifacts []native.File) outcome.Result[[]generatedFile] {
+func renderNativeFiles(context context.Context, project string, artifacts []native.File) outcome.Result[[]generatedFile] {
 	files := make([]generatedFile, 0, len(artifacts))
 	for _, artifact := range artifacts {
 		firstBytes, _, _ := bytes.Cut(artifact.Contents, []byte("\n"))
@@ -77,7 +76,7 @@ func renderNativeFiles(project string, artifacts []native.File) outcome.Result[[
 		if strings.TrimLeft(first, "/#% ") != description.GeneratedNotice {
 			return outcome.Err[[]generatedFile](nativeSourceHeaderMissing{Path: artifact.Path, FirstLine: first})
 		}
-		files = append(files, generatedFile{path: filepath.Clean(artifact.Path), content: outcome.Some(renderedOutput(artifact.Contents)), owner: headedOutput{header: first + "\n", source: "generated source"}})
+		files = append(files, generatedFile{path: filepath.Clean(artifact.Path), content: outcome.Some(nativeSourceOutput(context, artifact)), owner: headedOutput{header: first + "\n", source: "generated source"}})
 	}
 	return plannedGeneratedFiles(project, files, nil)
 }

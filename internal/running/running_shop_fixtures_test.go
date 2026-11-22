@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/CheckPickerUpper/outcome"
@@ -37,7 +39,7 @@ func readShopFixture(t *testing.T, directory string) shopFixture {
 				return nil
 			}
 			switch filepath.Ext(path) {
-			case ".go", ".odin", ".gleam", ".toml", ".mod", ".sum":
+			case ".go", ".odin", ".gleam", ".erl", ".toml", ".mod", ".sum":
 			case ".json":
 				if entry.Name() != "nocontract.json" {
 					return nil
@@ -78,4 +80,17 @@ func copyShop(t *testing.T, fixture shopFixture) string {
 		scratchproject.WriteFile(t, directory, file.path, file.content)
 	}
 	return filepath.Join(directory, "nocontract.json")
+}
+
+func copyGleamShop(t *testing.T, fixture shopFixture) string {
+	t.Helper()
+	project := copyShop(t, fixture)
+	directory := filepath.Dir(project)
+	runtimeDirectory := filepath.Clean(filepath.Join(fixture.directory, "..", "..", "..", "gleam", "runtime"))
+	runtime := readShopFixture(t, runtimeDirectory).directory
+	for _, name := range []string{"gleam.toml", "manifest.toml"} {
+		manifest := strings.ReplaceAll(heldOrStop(t, filepath.Join(directory, name)), `"../../../gleam/runtime"`, strconv.Quote(runtime))
+		scratchproject.WriteFile(t, directory, name, []byte(manifest))
+	}
+	return project
 }

@@ -1,0 +1,89 @@
+package bindings
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/CheckPickerUpper/nocontract/description"
+)
+
+func sharedResponses() string {
+	written := ""
+	for _, failure := range description.SharedFailures() {
+		arguments, fields := []string{}, []string{"#(\"_tag\", json.string(" + quoted(failure.Name) + "))", "#(\"code\", json.string(" + quoted(failure.Code.String()) + "))"}
+		for _, field := range failure.Fields {
+			name := field.Name.Text()
+			typeName, encoder := sharedField(field.Schema, name)
+			arguments = append(arguments, name+" "+name+": "+typeName)
+			fields = append(fields, "#("+quoted(name)+", "+encoder+")")
+		}
+		written += fmt.Sprintf("fn shared_%s(%s) -> wisp.Response { json.object([%s]) |> json.to_string |> wisp.json_response(%d) }\n", snakeName(failure.Name), strings.Join(arguments, ", "), strings.Join(fields, ", "), failure.Status.Code())
+	}
+	return written + responseFunctions
+}
+
+func sharedField(schema description.Schema, name string) (string, string) {
+	switch schema.(type) {
+	case description.Text, description.Literals:
+		return "String", "json.string(" + name + ")"
+	case description.List:
+		return "List(String)", "json.array(" + name + ", of: json.string)"
+	case description.Integer, description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
+	}
+	return "", ""
+}
+
+func snakeName(name string) string {
+	words := []rune{}
+	for index, letter := range name {
+		if index > 0 && letter >= 'A' && letter <= 'Z' {
+			words = append(words, '_')
+		}
+		words = append(words, letter)
+	}
+	return strings.ToLower(string(words))
+}
+
+const responseFunctions = `
+fn refuse_method(method method: http.Method, allowed allowed: List(String)) -> wisp.Response {
+  case method {
+    http.Options -> 204 |> wisp.response |> response.set_header("allow", string.join(allowed, ", "))
+    http.Get | http.Head | http.Post | http.Put | http.Patch | http.Delete | http.Connect | http.Trace | http.Other(_) -> {
+      let refusal = shared_method_not_declared(method: http.method_to_string(method), allowed:)
+      response.set_header(refusal, "allow", string.join(allowed, ", "))
+    }
+  }
+}
+
+fn request_refused(refusal: request_input.RequestRefusal) -> wisp.Response {
+  let #(part, name, reason) = request_input.describe(refusal)
+  shared_request_refused(part:, name:, reason:)
+}
+
+fn write_answer(tag tag: String, status status: Int, fields fields: json.Json, schema schema: wire.Schema) -> wisp.Response {
+  case fields |> json.to_string |> wire.read_body(schema, record_schemas()) {
+    Ok(prepared) -> prepared |> wire.encode_value |> json.to_string |> wisp.json_response(status)
+    Error(cause) -> {
+      let #(_, reason) = wire.describe(cause)
+      shared_answer_not_written(answer: tag, reason:)
+    }
+  }
+}
+`
+
+const queryFunction = `
+fn query_text(request: wisp.Request) -> String {
+  case request.query { option.Some(text) -> text option.None -> "" }
+}
+`
+
+func queryTextFunction(api description.API) string {
+	for _, group := range api.Groups {
+		for _, route := range group.Endpoints {
+			if len(route.Query) > 0 {
+				return queryFunction
+			}
+		}
+	}
+	return ""
+}

@@ -1578,3 +1578,145 @@ Message: `Failure {Member} uses {Code}, which already identifies {First} declare
 | `Member` | `string` |
 | `First` | `string` |
 | `FirstDeclared` | `string` |
+
+## NC-1143 ServerFolderOutsideSource
+
+ServerFolderOutsideSource is an output that cannot be imported as an application module.
+
+Declared in `gleam/bindings/server_generation.go`.
+
+Message: `The Gleam output folder {Server} is outside {Source}.`
+
+| Field | Type |
+| --- | --- |
+| `Source` | `string` |
+| `Server` | `string` |
+| `Relative` | `string` |
+
+## NC-1144 ServerFolderRefused
+
+ServerFolderRefused identifies an output folder outside the application's source modules.
+
+Declared in `gleam/bindings/server_generation.go`.
+
+Message: `The Gleam output folder {Server} could not be resolved relative to {Source}.`
+
+| Field | Type |
+| --- | --- |
+| `Source` | `string` |
+| `Server` | `string` |
+| `Cause` | `error` |
+
+## NC-1145 CompilerMetadataMalformed
+
+CompilerMetadataMalformed is a manifest or lockfile the TOML parser could not read.
+
+Declared in `gleam/compiler_dependencies.go`.
+
+Message: `The Gleam compiler metadata {Path} is malformed.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Content` | `[]byte` |
+| `Cause` | `error` |
+
+## NC-1146 CompilerMetadataUnreadable
+
+CompilerMetadataUnreadable is a manifest or lockfile the operating system could not read.
+
+Declared in `gleam/compiler_dependencies.go`.
+
+Message: `The Gleam compiler metadata {Path} could not be read.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Cause` | `error` |
+
+## NC-1147 CompilerViewCleanupFailed
+
+CompilerViewCleanupFailed is a compiler view that could not be removed after its read.
+
+Declared in `gleam/compiler_source_view.go`.
+
+Message: `The Gleam compiler view {Path} could not be removed.`
+
+| Field | Type |
+| --- | --- |
+| `Directory` | `string` |
+| `Path` | `string` |
+| `Cause` | `error` |
+
+## NC-1148 CompilerSourceLinkFailed
+
+CompilerSourceLinkFailed is a source or build link the compiler view could not create.
+
+Declared in `gleam/compiler_source_view.go`.
+
+Message: `The Gleam compiler link {Link} to {Source} could not be created.`
+
+| Field | Type |
+| --- | --- |
+| `Source` | `string` |
+| `Link` | `string` |
+| `Cause` | `error` |
+
+## NC-1149 CompilerCacheLinkRefused
+
+CompilerCacheLinkRefused is a compiler source cache link pointing at another source.
+
+Declared in `gleam/compiler_dependencies.go`.
+
+Message: `The Gleam compiler cache {Link} points at {Existing} instead of {Source}.`
+
+| Field | Type |
+| --- | --- |
+| `Source` | `string` |
+| `Link` | `string` |
+| `Existing` | `string` |
+
+## NC-1150 GleamApplicationOwnsListener
+
+GleamApplicationOwnsListener is a Go serving command directed at a BEAM application.
+
+Declared in `internal/running/running_native_server.go`.
+
+Message: `The Gleam application in {Directory} starts its own generated NoContract server.`
+
+| Field | Type |
+| --- | --- |
+| `Directory` | `string` |
+
+## NC-1151 NativeSourceFormattingFailed
+
+NativeSourceFormattingFailed is generated source the language formatter could not read.
+
+Declared in `internal/running/running_native_source_formatting.go`.
+
+Message: `The generated source {Path} could not be formatted.`
+
+| Field | Type |
+| --- | --- |
+| `Path` | `string` |
+| `Source` | `[]byte` |
+| `Arguments` | `[]string` |
+| `Diagnostics` | `string` |
+| `Duration` | `time.Duration` |
+| `Cause` | `error` |
+
+## NC-1152 ServerModuleNameRefused
+
+ServerModuleNameRefused identifies a directory Gleam cannot import as a module.
+
+Declared in `gleam/bindings/server_generation.go`.
+
+Message: `The Gleam output folder {Server} has invalid module component {Component}.`
+
+| Field | Type |
+| --- | --- |
+| `Source` | `string` |
+| `Server` | `string` |
+| `Relative` | `string` |
+| `Component` | `string` |
+| `Index` | `int` |

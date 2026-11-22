@@ -43,9 +43,16 @@ func OpenNativeServer(context context.Context, projectFile string, layers []noco
 				if checked.ExitCode() != 0 {
 					return refused(checked)
 				}
-				return outcome.Fold(native.Start(context, built.command), func(dispatcher native.Dispatcher) outcome.Result[NativeServer] {
-					return outcome.Ok(NativeServer{Handler: native.Handler(built.checked, built.guards, dispatcher, layers), Close: dispatcher.Close})
-				}, outcome.Err[NativeServer])
+				switch plan := built.execution.(type) {
+				case native.OdinDispatcher:
+					return outcome.Fold(native.Start(context, plan.Command), func(dispatcher native.Dispatcher) outcome.Result[NativeServer] {
+						return outcome.Ok(NativeServer{Handler: native.Handler(built.checked, plan.Guards, dispatcher, layers), Close: dispatcher.Close})
+					}, outcome.Err[NativeServer])
+				case native.GleamListener:
+					return outcome.Err[NativeServer](GleamApplicationOwnsListener{Directory: plan.Directory})
+				case nil:
+				}
+				return outcome.Err[NativeServer](nativeContractMissing{Directory: project.Directory()})
 			}, refused)
 		}, func(cause error) outcome.Result[NativeServer] {
 			return refused(ProjectUnreadable{Path: path, Cause: cause})
@@ -53,6 +60,16 @@ func OpenNativeServer(context context.Context, projectFile string, layers []noco
 			return refused(ProjectFileRefused{Path: path, Refusals: refusals})
 		})
 	}, outcome.Err[NativeServer])
+}
+
+// GleamApplicationOwnsListener is a Go serving command directed at a BEAM application.
+//
+//ergo:code NC-1150
+//ergo:message The Gleam application in {Directory} starts its own generated NoContract server.
+type GleamApplicationOwnsListener struct{ Directory string }
+
+func (refused GleamApplicationOwnsListener) Error() string {
+	return fmt.Sprintf("Gleam starts its generated NoContract server in the application at %s; call the generated server.start function", refused.Directory)
 }
 
 //ergo:not-an-error
