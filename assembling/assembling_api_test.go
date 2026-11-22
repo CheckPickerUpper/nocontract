@@ -178,11 +178,13 @@ func TestARouteIsDescribedWithItsBoundPathAndTheMembersItAnswersWith(t *testing.
 		return description.FailureStatus{}
 	})
 	missing := description.Member{Name: "Missing", Answer: description.Fails{Status: notFound, Code: "IT-1001"}, Fields: []description.Field{item}}
+	related := description.Member{Name: "Related", Answer: found().Answer, Fields: []description.Field{item}}
 	reads := route(t, "read", "/items/{item_id}", 2)
 	reads.Params = []description.Field{item}
+	reads.Successes = description.Successes{First: related, Rest: []description.Member{found()}}
 	reads.Failures = []description.Member{missing}
 	declared := api(t, reads, route(t, "list", "/items", 3))
-	declared.Members = append(declared.Members, assembling.DeclaredMember{Member: missing, Position: at(101)})
+	declared.Members = append(declared.Members, assembling.DeclaredMember{Member: missing, Position: at(101)}, assembling.DeclaredMember{Member: related, Position: at(102)})
 	shared := map[string]description.Member{}
 	for _, failure := range description.SharedFailures() {
 		shared[failure.Name] = failure.Member()
@@ -200,12 +202,18 @@ func TestARouteIsDescribedWithItsBoundPathAndTheMembersItAnswersWith(t *testing.
 		if !slices.EqualFunc(endpoints[1].Path, wantPath, func(left, right description.PathSegment) bool { return left == right }) {
 			t.Errorf("read's path is %v; want %v", endpoints[1].Path, wantPath)
 		}
-		for _, endpoint := range endpoints {
-			if got, want := memberAnswers(endpoint.Successes.Members()), memberAnswers([]description.Member{found()}); !slices.Equal(got, want) {
-				t.Errorf("%s succeeds with %v; want %v", endpoint.Name, got, want)
+		for _, expected := range []struct {
+			endpoint  description.Endpoint
+			successes []description.Member
+		}{
+			{endpoint: endpoints[0], successes: []description.Member{found()}},
+			{endpoint: endpoints[1], successes: []description.Member{found(), related}},
+		} {
+			if got, want := memberAnswers(expected.endpoint.Successes.Members()), memberAnswers(expected.successes); !slices.Equal(got, want) {
+				t.Errorf("%s succeeds with %v; want %v", expected.endpoint.Name, got, want)
 			}
 		}
-		readFailures := []description.Member{missing, shared["RequestRefused"], shared["AnswerNotWritten"]}
+		readFailures := []description.Member{shared["AnswerNotWritten"], missing, shared["RequestRefused"]}
 		if got, want := memberAnswers(endpoints[1].Failures), memberAnswers(readFailures); !slices.Equal(got, want) {
 			t.Errorf("read, which reads its path, fails with %v; want %v", got, want)
 		}

@@ -1,26 +1,51 @@
-import { Effect } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+import { strict as assert } from "node:assert"
+import { Config, DateTime, Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
-import { ShopApi } from "./shop_api.generated.js"
+import { MethodNotDeclared, NotSignedIn, ShopApi, ShopperNotFound } from "./shop_api.generated.js"
 
-const baseUrl = process.env["SHOP_URL"] ?? ""
-
-// A client sending as shopper 7, and one sending as no shopper.
-const asShopper = HttpApiClient.make(ShopApi, {
-  baseUrl,
-  transformClient: HttpClient.mapRequest(HttpClientRequest.setHeader("X-Shopper", "7"))
-})
-const anonymous = HttpApiClient.make(ShopApi, { baseUrl })
-
-// Calls the running Go shop through the generated API and prints what each call decoded to.
 const program = Effect.gen(function*() {
-  const shopper = yield* asShopper
+  const baseUrl = yield* Config.NonEmptyString("SHOP_URL")
+  const shopper = yield* HttpApiClient.make(ShopApi, {
+    baseUrl,
+    transformClient: HttpClient.mapRequest(HttpClientRequest.setHeader("X-Shopper", "7"))
+  })
   const read = yield* shopper.balance.readBalance({ params: { shopper_id: 7n }, query: { currency: "CAD" } })
-  const missing = yield* Effect.flip(shopper.balance.readBalance({ params: { shopper_id: 8n }, query: { currency: "CAD" } }))
+  const changed: DateTime.Utc = read.changed
+  assert.equal(read.balance.cents, 1250n)
+  assert.equal(read.balance.currency, "CAD")
+  assert.equal(DateTime.formatIso(changed), "2026-11-14T12:00:00.000Z")
+
+  const missing: ShopperNotFound = yield* shopper.balance.readBalance({ params: { shopper_id: 9007199254740993n }, query: { currency: "CAD" } }).pipe(
+    Effect.map((answer) => assert.fail(`The missing shopper answered ${answer._tag}`)),
+    Effect.catchTag("ShopperNotFound", Effect.succeed)
+  )
+  assert.equal(missing._tag, "ShopperNotFound")
+  assert.equal(missing.code, "SH-1001")
+  assert.equal(missing.shopper_id, 9007199254740993n)
+
   const queued = yield* shopper.balance.topUp({ params: { shopper_id: 7n }, payload: { amount: { cents: 500n, currency: "USD" } } })
-  const stranger = yield* anonymous
-  const refused = yield* Effect.flip(stranger.balance.readBalance({ params: { shopper_id: 7n }, query: { currency: "CAD" } }))
-  return { read, missing, queued, refused }
+  assert.equal(queued.reference, "USD")
+
+  const stranger = yield* HttpApiClient.make(ShopApi, { baseUrl })
+  const refused: NotSignedIn = yield* stranger.balance.readBalance({ params: { shopper_id: 7n }, query: { currency: "CAD" } }).pipe(
+    Effect.map((answer) => assert.fail(`The unsigned request answered ${answer._tag}`)),
+    Effect.catchTag("NotSignedIn", Effect.succeed)
+  )
+  assert.equal(refused._tag, "NotSignedIn")
+  assert.equal(refused.code, "SH-1101")
+  assert.equal(refused.scope, "read-balance")
+
+  const response = yield* HttpClient.del(`${baseUrl}/shoppers/7/balance`)
+  assert.equal(response.status, 405)
+  assert.equal(response.headers["allow"], "GET")
+  const method: MethodNotDeclared = yield* HttpClientResponse.schemaBodyJson(MethodNotDeclared)(response)
+  assert.equal(method._tag, "MethodNotDeclared")
+  assert.equal(method.code, "NC-1070")
+  assert.equal(method.method, "DELETE")
+  assert.deepEqual(method.allowed, ["GET"])
+
+  return { read, missing, queued, refused, method }
 }).pipe(Effect.provide(FetchHttpClient.layer))
 
 // JSON.stringify refuses a bigint, so each one is printed as its decimal text followed by n.

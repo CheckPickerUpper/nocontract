@@ -5,53 +5,23 @@ import (
 	"encoding/json"
 	"encoding/json/jsontext"
 	"fmt"
-	"math/big"
 	"net/url"
-	"os"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/CheckPickerUpper/outcome"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	"github.com/CheckPickerUpper/nocontract/assembling"
-	"github.com/CheckPickerUpper/nocontract/internal/projectfile"
-	"github.com/CheckPickerUpper/nocontract/internal/running"
 	"github.com/CheckPickerUpper/nocontract/internal/scratchproject"
 )
 
 type shopDocument struct {
-	OpenAPI string `json:"openapi"`
-	Info    struct {
-		Title   string `json:"title"`
-		Version string `json:"version"`
-	} `json:"info"`
 	Paths map[string]map[string]shopDocumentOperation `json:"paths"`
 }
 
 type shopDocumentOperation struct {
-	OperationID string                          `json:"operationId"`
-	Tags        []string                        `json:"tags"`
-	Parameters  []shopDocumentParameter         `json:"parameters"`
-	RequestBody *shopDocumentRequestBody        `json:"requestBody"`
-	Responses   map[string]shopDocumentResponse `json:"responses"`
-}
-
-type shopDocumentParameter struct {
-	Name     string `json:"name"`
-	In       string `json:"in"`
-	Required bool   `json:"required"`
-}
-
-type shopDocumentRequestBody struct {
-	Required bool `json:"required"`
-}
-
-type shopDocumentResponse struct {
-	Description string `json:"description"`
+	OperationID string              `json:"operationId"`
+	Responses   map[string]struct{} `json:"responses"`
 }
 
 type shopContract struct {
@@ -67,39 +37,21 @@ func canonicalShopJSON(t *testing.T, content string) string {
 	return string(value)
 }
 
-func readShopContract(t *testing.T, path string) shopContract {
+func readShopContract(t *testing.T, file shopSourceFile) shopContract {
 	t.Helper()
-	content := scratchproject.BytesOrStop(t, "reading the shop contract "+path, outcome.TupleToResult(os.ReadFile(path)))
-	document := shopDocument{OpenAPI: "", Info: struct {
-		Title   string `json:"title"`
-		Version string `json:"version"`
-	}{Title: "", Version: ""}, Paths: map[string]map[string]shopDocumentOperation{}}
-	scratchproject.StopOn(t, "parsing the shop contract "+path, json.Unmarshal(content, &document))
+	document := shopDocument{Paths: map[string]map[string]shopDocumentOperation{}}
+	scratchproject.StopOn(t, "parsing the shop contract "+file.path, json.Unmarshal(file.content, &document))
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
 	compiler.AssertFormat()
-	outcome.Fold(outcome.TupleToResult(jsonschema.UnmarshalJSON(bytes.NewReader(content))), func(parsed any) struct{} {
-		scratchproject.StopOn(t, "adding the shop contract "+path, compiler.AddResource(path, parsed))
+	outcome.Fold(outcome.TupleToResult(jsonschema.UnmarshalJSON(bytes.NewReader(file.content))), func(parsed any) struct{} {
+		scratchproject.StopOn(t, "adding the shop contract "+file.path, compiler.AddResource(file.path, parsed))
 		return struct{}{}
 	}, func(cause error) struct{} {
-		t.Fatalf("parsing the shop contract %s for validation: %v", path, cause)
+		t.Fatalf("parsing the shop contract %s for validation: %v", file.path, cause)
 		return struct{}{}
 	})
-	return shopContract{path: path, document: document, compiler: compiler}
-}
-
-func readShopProjectContract(t *testing.T, projectPath string, read func(shopContract)) {
-	t.Helper()
-	projectfile.Read(projectPath, func(project projectfile.Project) struct{} {
-		read(readShopContract(t, project.OpenAPI().File()))
-		return struct{}{}
-	}, func(cause error) struct{} {
-		t.Fatal(strings.Join((running.ProjectUnreadable{Path: projectPath, Cause: cause}).Lines(), "\n"))
-		return struct{}{}
-	}, func(refusals []assembling.Refusal) struct{} {
-		t.Fatal(strings.Join((running.ProjectFileRefused{Path: projectPath, Refusals: refusals}).Lines(), "\n"))
-		return struct{}{}
-	})
+	return shopContract{path: file.path, document: document, compiler: compiler}
 }
 
 func compileShopSchema(t *testing.T, contract shopContract, compiled func(*jsonschema.Schema), pointer ...string) {
@@ -118,11 +70,8 @@ func compileShopSchema(t *testing.T, contract shopContract, compiled func(*jsons
 	})
 }
 
-func assertShopContract(t *testing.T, expected, actual shopContract) {
+func assertShopOperationIDs(t *testing.T, contract shopContract) {
 	t.Helper()
-	if difference := cmp.Diff(expected.document, actual.document); difference != "" {
-		t.Errorf("the shop's operations differ (-go +backend):\n%s", difference)
-	}
 	for _, operation := range []struct {
 		path   string
 		method string
@@ -132,7 +81,7 @@ func assertShopContract(t *testing.T, expected, actual shopContract) {
 		{path: "/shoppers/{shopper_id}/top-ups", method: "post", name: "balance.topUp"},
 		{path: "/shoppers/{shopper_id}/orders", method: "post", name: "orders.place"},
 	} {
-		methods, foundPath := actual.document.Paths[operation.path]
+		methods, foundPath := contract.document.Paths[operation.path]
 		if !foundPath {
 			t.Fatalf("the contract has no %s", operation.path)
 		}
@@ -143,67 +92,6 @@ func assertShopContract(t *testing.T, expected, actual shopContract) {
 		if published.OperationID != operation.name {
 			t.Errorf("%s %s operationId %q; want %q", operation.method, operation.path, published.OperationID, operation.name)
 		}
-		for index := range published.Parameters {
-			assertShopSchemaEqual(t, expected, actual, "paths", operation.path, operation.method, "parameters", fmt.Sprint(index), "schema")
-		}
-		outcome.ForEachOption(outcome.PointerToOption(published.RequestBody), func(shopDocumentRequestBody) {
-			assertShopSchemaEqual(t, expected, actual, "paths", operation.path, operation.method, "requestBody", "content", "application/json", "schema")
-		})
-		for status := range published.Responses {
-			assertShopSchemaEqual(t, expected, actual, "paths", operation.path, operation.method, "responses", status, "content", "application/json", "schema")
-		}
-	}
-}
-
-func assertShopSchemaEqual(t *testing.T, expected, actual shopContract, pointer ...string) {
-	t.Helper()
-	compileShopSchema(t, expected, func(left *jsonschema.Schema) {
-		compileShopSchema(t, actual, func(right *jsonschema.Schema) {
-			if difference := cmp.Diff(left, right, shopSchemaComparisons(*left, nil)...); difference != "" {
-				t.Errorf("schema %s differs (-go +backend):\n%s", strings.Join(pointer, "/"), difference)
-			}
-		}, pointer...)
-	}, pointer...)
-}
-
-func dereferenceShopSchema(schema *jsonschema.Schema) *jsonschema.Schema {
-	return outcome.FoldOption(outcome.EmptyableToOption(schema), func(found *jsonschema.Schema) *jsonschema.Schema {
-		return outcome.FoldOption(outcome.EmptyableToOption(found.Ref), dereferenceShopSchema, func() *jsonschema.Schema { return found })
-	}, func() *jsonschema.Schema { return schema })
-}
-
-type comparedShopSchemas struct{ first, second *jsonschema.Schema }
-
-func shopSchemaComparisons(schema jsonschema.Schema, open []comparedShopSchemas) []cmp.Option {
-	return []cmp.Option{
-		cmpopts.IgnoreUnexported(schema),
-		cmpopts.IgnoreFields(schema, "Location", "ID"),
-		cmp.Comparer(func(left, right jsonschema.Enum) bool { return cmp.Equal(left.Values, right.Values) }),
-		cmp.Comparer(func(left, right jsonschema.Format) bool { return left.Name == right.Name }),
-		cmpopts.SortSlices(func(left, right string) bool { return left < right }),
-		cmp.Comparer(func(left, right jsonschema.Regexp) bool {
-			return outcome.EqualOption(outcome.FoldOption(outcome.EmptyableToOption(left), func(pattern jsonschema.Regexp) outcome.Option[string] {
-				return outcome.Some(pattern.String())
-			}, outcome.None[string]), outcome.FoldOption(outcome.EmptyableToOption(right), func(pattern jsonschema.Regexp) outcome.Option[string] {
-				return outcome.Some(pattern.String())
-			}, outcome.None[string]))
-		}),
-		cmp.Comparer(func(left, right *big.Rat) bool {
-			return outcome.EqualOption(outcome.FoldOption(outcome.EmptyableToOption(left), func(number *big.Rat) outcome.Option[string] {
-				return outcome.Some(number.String())
-			}, outcome.None[string]), outcome.FoldOption(outcome.EmptyableToOption(right), func(number *big.Rat) outcome.Option[string] {
-				return outcome.Some(number.String())
-			}, outcome.None[string]))
-		}),
-		cmp.FilterValues(func(left, right *jsonschema.Schema) bool {
-			return dereferenceShopSchema(left) != left || dereferenceShopSchema(right) != right
-		}, cmp.Comparer(func(left, right *jsonschema.Schema) bool {
-			pair := comparedShopSchemas{first: dereferenceShopSchema(left), second: dereferenceShopSchema(right)}
-			if slices.Contains(open, pair) {
-				return true
-			}
-			return cmp.Equal(pair.first, pair.second, shopSchemaComparisons(schema, append(slices.Clone(open), pair))...)
-		})),
 	}
 }
 

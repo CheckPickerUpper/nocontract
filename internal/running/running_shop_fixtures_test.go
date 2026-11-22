@@ -1,7 +1,6 @@
 package running_test
 
 import (
-	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -32,16 +31,20 @@ func readShopFixture(t *testing.T, directory string) shopFixture {
 	walked := filepath.WalkDir(directory, func(path string, entry fs.DirEntry, readError error) error {
 		return outcome.FoldOption(outcome.EmptyableToOption(readError), func(cause error) error { return cause }, func() error {
 			if entry.IsDir() {
-				switch entry.Name() {
-				case ".scratch", "build", "web", "node_modules":
-					return filepath.SkipDir
+				if path != directory {
+					switch entry.Name() {
+					case ".scratch", "build", "web", "node_modules":
+						return filepath.SkipDir
+					}
 				}
 				return nil
 			}
 			switch filepath.Ext(path) {
-			case ".go", ".odin", ".gleam", ".erl", ".toml", ".mod", ".sum":
+			case ".go", ".odin", ".gleam", ".erl", ".toml", ".mod", ".sum", ".ts", ".lock":
 			case ".json":
-				if entry.Name() != "nocontract.json" {
+				switch entry.Name() {
+				case "nocontract.json", "package.json", "tsconfig.json":
+				default:
 					return nil
 				}
 			default:
@@ -64,22 +67,21 @@ func copyGoShop(t *testing.T, fixture shopFixture) string {
 	checkout := filepath.Clean(filepath.Join(fixture.directory, "..", "..", ".."))
 	module := heldOrStop(t, filepath.Join(directory, "go.mod"))
 	scratchproject.WriteFile(t, directory, "go.mod", scratchproject.BytesOrStop(t, "pointing the shop at NoContract", scratchproject.LocalModule([]byte(module), checkout)))
-
-	projectFields := map[string]json.RawMessage{}
-	scratchproject.StopOn(t, "reading the Go shop test project", json.Unmarshal([]byte(heldOrStop(t, project)), &projectFields))
-	delete(projectFields, "typescript")
-	config := scratchproject.BytesOrStop(t, "encoding the Go shop test project", outcome.TupleToResult(json.Marshal(projectFields)))
-	scratchproject.WriteFile(t, directory, filepath.Base(project), config)
 	return project
 }
 
 func copyShop(t *testing.T, fixture shopFixture) string {
 	t.Helper()
 	directory := t.TempDir()
+	copyShopSources(t, fixture, directory)
+	return filepath.Join(directory, "nocontract.json")
+}
+
+func copyShopSources(t *testing.T, fixture shopFixture, directory string) {
+	t.Helper()
 	for _, file := range fixture.files {
 		scratchproject.WriteFile(t, directory, file.path, file.content)
 	}
-	return filepath.Join(directory, "nocontract.json")
 }
 
 func copyGleamShop(t *testing.T, fixture shopFixture) string {

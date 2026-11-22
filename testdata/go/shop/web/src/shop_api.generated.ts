@@ -3,19 +3,19 @@
 import { Schema as $Schema } from "effect"
 import { HttpApi as $HttpApi, HttpApiEndpoint as $HttpApiEndpoint, HttpApiGroup as $HttpApiGroup, HttpApiSchema as $HttpApiSchema } from "effect/http-api"
 
-export type Money = { readonly "cents": bigint; readonly "currency": "CAD" | "USD" }
-type $Encoded_Money = { readonly "cents": string; readonly "currency": "CAD" | "USD" }
-export const Money: $Schema.Codec<Money, $Encoded_Money> = $Schema.Struct({
-  ["cents"]: $Schema.String.check($Schema.isPattern(/^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|-(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-8]))$/)).pipe($Schema.decodeTo($Schema.BigIntFromString.check($Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })))),
-  ["currency"]: $Schema.Literals(["CAD", "USD"]),
-})
-
 export type Item = { readonly "sku": string; readonly "quantity": number; readonly "included": readonly (Item)[] }
 type $Encoded_Item = { readonly "sku": string; readonly "quantity": number; readonly "included": readonly ($Encoded_Item)[] }
 export const Item: $Schema.Codec<Item, $Encoded_Item> = $Schema.Struct({
   ["sku"]: $Schema.String,
   ["quantity"]: $Schema.Int.check($Schema.isBetween({ minimum: 0, maximum: 255 })),
   ["included"]: $Schema.Array($Schema.suspend(() => Item)),
+})
+
+export type Money = { readonly "cents": bigint; readonly "currency": "CAD" | "USD" }
+type $Encoded_Money = { readonly "cents": string; readonly "currency": "CAD" | "USD" }
+export const Money: $Schema.Codec<Money, $Encoded_Money> = $Schema.Struct({
+  ["cents"]: $Schema.String.check($Schema.isPattern(/^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|-(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-8]))$/)).pipe($Schema.decodeTo($Schema.BigIntFromString.check($Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })))),
+  ["currency"]: $Schema.Literals(["CAD", "USD"]),
 })
 
 export type Order = { readonly "items": readonly (Item)[]; readonly "gift_note": (string) | null; readonly "deliver_between": readonly (typeof $Schema.DateTimeUtcFromString.Type)[]; readonly "wrapped": boolean; readonly "tips": { readonly [key: string]: number }; readonly "courier_notes": { readonly [key in "drone" | "post"]?: string } }
@@ -29,12 +29,11 @@ export const Order: $Schema.Codec<Order, $Encoded_Order> = $Schema.Struct({
   ["courier_notes"]: $Schema.Record($Schema.Literals(["drone", "post"]), $Schema.optionalKey($Schema.String)),
 })
 
-export class RequestRefused extends $Schema.TaggedError<RequestRefused>()("RequestRefused", {
-  ["code"]: $Schema.Literals(["NC-1001"]),
-  ["part"]: $Schema.Literals(["path", "query", "body"]),
-  ["name"]: $Schema.String,
-  ["reason"]: $Schema.String,
-}, { httpApiStatus: 400 }) {}
+export type TopUpBody = { readonly "amount": Money }
+type $Encoded_TopUpBody = { readonly "amount": $Encoded_Money }
+export const TopUpBody: $Schema.Codec<TopUpBody, $Encoded_TopUpBody> = $Schema.Struct({
+  ["amount"]: $Schema.suspend(() => Money),
+})
 
 export class AnswerNotWritten extends $Schema.TaggedError<AnswerNotWritten>()("AnswerNotWritten", {
   ["code"]: $Schema.Literals(["NC-1002"]),
@@ -42,11 +41,18 @@ export class AnswerNotWritten extends $Schema.TaggedError<AnswerNotWritten>()("A
   ["reason"]: $Schema.String,
 }, { httpApiStatus: 500 }) {}
 
-export class RouteNotFound extends $Schema.TaggedError<RouteNotFound>()("RouteNotFound", {
-  ["code"]: $Schema.Literals(["NC-1069"]),
-  ["method"]: $Schema.String,
-  ["path"]: $Schema.String,
+export class BalanceNotOpened extends $Schema.TaggedError<BalanceNotOpened>()("BalanceNotOpened", {
+  ["code"]: $Schema.Literals(["SH-1003"]),
+  ["currency"]: $Schema.Literals(["CAD", "USD"]),
 }, { httpApiStatus: 404 }) {}
+
+export const BalanceRead = $Schema.TaggedStruct("BalanceRead", {
+  ["balance"]: $Schema.suspend(() => Money),
+  ["overdraft"]: $Schema.NullOr($Schema.suspend(() => Money)),
+  ["changed"]: $Schema.DateTimeUtcFromString,
+  ["note"]: $Schema.NullOr($Schema.String),
+}).pipe($HttpApiSchema.status(200))
+export type BalanceRead = typeof BalanceRead.Type
 
 export class MethodNotDeclared extends $Schema.TaggedError<MethodNotDeclared>()("MethodNotDeclared", {
   ["code"]: $Schema.Literals(["NC-1070"]),
@@ -59,22 +65,27 @@ export class NotSignedIn extends $Schema.TaggedError<NotSignedIn>()("NotSignedIn
   ["scope"]: $Schema.String,
 }, { httpApiStatus: 401 }) {}
 
-export const BalanceRead = $Schema.TaggedStruct("BalanceRead", {
-  ["balance"]: $Schema.suspend(() => Money),
-  ["overdraft"]: $Schema.NullOr($Schema.suspend(() => Money)),
-  ["changed"]: $Schema.DateTimeUtcFromString,
-  ["note"]: $Schema.NullOr($Schema.String),
-}).pipe($HttpApiSchema.status(200))
-export type BalanceRead = typeof BalanceRead.Type
+export const OrderPlaced = $Schema.TaggedStruct("OrderPlaced", {
+  ["order"]: $Schema.suspend(() => Order),
+}).pipe($HttpApiSchema.status(201))
+export type OrderPlaced = typeof OrderPlaced.Type
+
+export class RequestRefused extends $Schema.TaggedError<RequestRefused>()("RequestRefused", {
+  ["code"]: $Schema.Literals(["NC-1001"]),
+  ["part"]: $Schema.Literals(["path", "query", "body"]),
+  ["name"]: $Schema.String,
+  ["reason"]: $Schema.String,
+}, { httpApiStatus: 400 }) {}
+
+export class RouteNotFound extends $Schema.TaggedError<RouteNotFound>()("RouteNotFound", {
+  ["code"]: $Schema.Literals(["NC-1069"]),
+  ["method"]: $Schema.String,
+  ["path"]: $Schema.String,
+}, { httpApiStatus: 404 }) {}
 
 export class ShopperNotFound extends $Schema.TaggedError<ShopperNotFound>()("ShopperNotFound", {
   ["code"]: $Schema.Literals(["SH-1001"]),
   ["shopper_id"]: $Schema.String.check($Schema.isPattern(/^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|-(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-8]))$/)).pipe($Schema.decodeTo($Schema.BigIntFromString.check($Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })))),
-}, { httpApiStatus: 404 }) {}
-
-export class BalanceNotOpened extends $Schema.TaggedError<BalanceNotOpened>()("BalanceNotOpened", {
-  ["code"]: $Schema.Literals(["SH-1003"]),
-  ["currency"]: $Schema.Literals(["CAD", "USD"]),
 }, { httpApiStatus: 404 }) {}
 
 export const TopUpQueued = $Schema.TaggedStruct("TopUpQueued", {
@@ -87,11 +98,6 @@ export class TopUpRefused extends $Schema.TaggedError<TopUpRefused>()("TopUpRefu
   ["reasons"]: $Schema.Array($Schema.String),
 }, { httpApiStatus: 409 }) {}
 
-export const OrderPlaced = $Schema.TaggedStruct("OrderPlaced", {
-  ["order"]: $Schema.suspend(() => Order),
-}).pipe($HttpApiSchema.status(201))
-export type OrderPlaced = typeof OrderPlaced.Type
-
 const $Group0 = $HttpApiGroup.make("balance").add(
   $HttpApiEndpoint.get("readBalance", "/shoppers/:shopper_id/balance", {
     params: {
@@ -101,17 +107,15 @@ const $Group0 = $HttpApiGroup.make("balance").add(
       ["currency"]: $Schema.Literals(["CAD", "USD"]),
     },
     success: [BalanceRead],
-    error: [ShopperNotFound, BalanceNotOpened, NotSignedIn, RequestRefused, AnswerNotWritten],
+    error: [AnswerNotWritten, BalanceNotOpened, NotSignedIn, RequestRefused, ShopperNotFound],
   }),
   $HttpApiEndpoint.post("topUp", "/shoppers/:shopper_id/top-ups", {
     params: {
       ["shopper_id"]: $Schema.String.check($Schema.isPattern(/^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|-(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-8]))$/)).pipe($Schema.decodeTo($Schema.BigIntFromString.check($Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })))),
     },
-    payload: $Schema.Struct({
-      ["amount"]: $Schema.suspend(() => Money),
-    }),
+    payload: $Schema.suspend(() => TopUpBody),
     success: [TopUpQueued],
-    error: [ShopperNotFound, TopUpRefused, RequestRefused, AnswerNotWritten],
+    error: [AnswerNotWritten, RequestRefused, ShopperNotFound, TopUpRefused],
   })
 )
 
@@ -125,7 +129,7 @@ const $Group1 = $HttpApiGroup.make("orders").add(
     },
     payload: $Schema.suspend(() => Order),
     success: [OrderPlaced],
-    error: [RequestRefused, AnswerNotWritten],
+    error: [AnswerNotWritten, RequestRefused],
   })
 )
 

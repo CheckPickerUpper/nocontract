@@ -82,10 +82,10 @@
                 "schema": {
                   "oneOf": [
                     {
-                      "$ref": "#/components/schemas/ShopperNotFound"
+                      "$ref": "#/components/schemas/BalanceNotOpened"
                     },
                     {
-                      "$ref": "#/components/schemas/BalanceNotOpened"
+                      "$ref": "#/components/schemas/ShopperNotFound"
                     }
                   ],
                   "discriminator": {
@@ -207,16 +207,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "amount": {
-                    "$ref": "#/components/schemas/Money"
-                  }
-                },
-                "required": [
-                  "amount"
-                ],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/TopUpBody"
               }
             }
           }
@@ -663,6 +654,18 @@
           "_tag",
           "code",
           "shopper_id"
+        ],
+        "additionalProperties": false
+      },
+      "TopUpBody": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "amount"
         ],
         "additionalProperties": false
       },

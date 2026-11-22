@@ -82,10 +82,10 @@
                 "schema": {
                   "oneOf": [
                     {
-                      "$ref": "#/components/schemas/ShopperNotFound"
+                      "$ref": "#/components/schemas/BalanceNotOpened"
                     },
                     {
-                      "$ref": "#/components/schemas/BalanceNotOpened"
+                      "$ref": "#/components/schemas/ShopperNotFound"
                     }
                   ],
                   "discriminator": {

@@ -132,8 +132,7 @@ func checkedAPI(declared Declared) apiCheck {
 	return apiCheck{groups: groups, shared: shared, refusals: refusals}
 }
 
-// described is the API's description: nocontract's own failures first, then every member and
-// named struct as declared, and its groups.
+// described is the API's description, with members and named structs ordered by public name.
 func described(declared Declared, groups []description.Group, shared []description.SharedFailure) description.API {
 	members := []description.Member{}
 	for _, failure := range shared {
@@ -146,7 +145,13 @@ func described(declared Declared, groups []description.Group, shared []descripti
 	for _, named := range declared.Structs {
 		structs = append(structs, named.Struct)
 	}
+	slices.SortStableFunc(structs, func(left, right description.NamedStruct) int { return cmp.Compare(left.Name, right.Name) })
+	sortMembersByName(members)
 	return description.API{Name: declared.API.Name, Groups: groups, Members: members, Structs: structs}
+}
+
+func sortMembersByName(members []description.Member) {
+	slices.SortStableFunc(members, func(left, right description.Member) int { return cmp.Compare(left.Name, right.Name) })
 }
 
 // endpointCheck is one route checked on its own: described, or every reason it cannot be.
@@ -186,9 +191,14 @@ func checkedEndpoint(declared DeclaredEndpoint, shared []description.SharedFailu
 		if len(refusals) > 0 {
 			return endpointRefused{refusals: refusals}
 		}
+		successes := declared.Successes.Members()
+		failures := slices.Concat(declared.Failures, sharedFailureMembers(declared, shared))
+		sortMembersByName(successes)
+		sortMembersByName(failures)
 		return endpointChecked{endpoint: description.Endpoint{
 			Name: declared.Name, Method: declared.Method, Path: path.segments, Query: query, Body: declared.Body,
-			Successes: declared.Successes, Failures: slices.Concat(declared.Failures, sharedFailureMembers(declared, shared)),
+			Successes: description.Successes{First: successes[0], Rest: successes[1:]},
+			Failures:  failures,
 		}}
 	case pathRefused:
 		return endpointRefused{refusals: append(refusals, path.refusals...)}

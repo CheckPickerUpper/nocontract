@@ -152,7 +152,7 @@ type Endpoint struct {
 	Failures  []Member
 }
 
-// Successes is every member a route succeeds with, in declaration order: First, then Rest. A route
+// Successes is every member a route succeeds with: First, then Rest. A route
 // succeeds with at least one.
 type Successes struct {
 	First Member

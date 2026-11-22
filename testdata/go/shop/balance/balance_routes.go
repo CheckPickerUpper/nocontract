@@ -97,12 +97,15 @@ func (ledger Ledger) ReadBalance(_ context.Context, input ReadInput) ReadOutcome
 	}
 }
 
+// TopUpBody carries the amount to add to a shopper's balance.
+type TopUpBody struct {
+	Amount Money `json:"amount"`
+}
+
 // TopUpInput names the shopper and carries the amount to add.
 type TopUpInput struct {
 	ShopperID int `path:"shopper_id"`
-	Body      struct {
-		Amount Money `json:"amount"`
-	}
+	Body      TopUpBody
 }
 
 // TopUpOutcome is what asking for a top-up ended as.

@@ -33,38 +33,58 @@ type shopBackend struct {
 	open     func(*testing.T, string) shopServerAddress
 }
 
+type shopProject struct {
+	backend shopBackend
+	path    string
+}
+
 // Every backend serves the same routes, exact decimal values and body shapes, and publishes the
 // same operations and schemas. Builds happen once per backend; every request uses a real listener.
 func TestShopBackendsConformToTheSameHTTPContract(t *testing.T) {
 	checkout := scratchproject.PathOrStop(t, "locating the checkout", outcome.TupleToResult(filepath.Abs(filepath.Join("..", ".."))))
-	expected := readShopContract(t, filepath.Join(checkout, "testdata", "go", "shop", "shop_api.openapi.json"))
+	expectedFiles := readShopGeneratedFiles(t, filepath.Join(checkout, "testdata", "go", "shop", "nocontract.json"))
 	requests := shopRequests()
+	projects := []shopProject{}
 	for _, backend := range []shopBackend{
 		{language: "go", prepare: copyGoShop, open: openGoShop},
 		{language: "odin", prepare: copyShop, open: openNativeShop},
 		{language: "gleam", prepare: copyGleamShop, open: openGleamShop},
 	} {
-		t.Run(backend.language, func(t *testing.T) {
-			fixture := readShopFixture(t, filepath.Join(checkout, "testdata", backend.language, "shop"))
-			project := backend.prepare(t, fixture)
+		fixture := readShopFixture(t, filepath.Join(checkout, "testdata", backend.language, "shop"))
+		project := backend.prepare(t, fixture)
+		projects = append(projects, shopProject{backend: backend, path: project})
+		t.Run("generated/"+backend.language, func(t *testing.T) {
 			for _, command := range []string{"generate", "check"} {
 				result := running.Run(running.Request{Arguments: []string{command, "-project", project}, Context: t.Context()})
 				if result.ExitCode() != 0 {
 					t.Fatalf("%s %s exited %d:\n%s", command, project, result.ExitCode(), strings.Join(result.Lines(), "\n"))
 				}
 			}
-			readShopProjectContract(t, project, func(contract shopContract) {
-				assertShopContract(t, expected, contract)
-				served := backend.open(t, project)
-				for _, request := range requests {
-					t.Run(request.name, func(t *testing.T) {
-						answer := sendShopRequest(t, served, request)
-						assertShopAnswer(t, request, answer)
-						assertShopBodySchema(t, contract, request)
-						assertShopResponseSchema(t, contract, request, answer)
-					})
-				}
-			})
+			generated := readShopGeneratedFiles(t, project)
+			assertShopGeneratedFile(t, shopFileComparison{artifact: "TypeScript", expected: expectedFiles.client, actual: generated.client})
+			assertShopGeneratedFile(t, shopFileComparison{artifact: "OpenAPI", expected: expectedFiles.document, actual: generated.document})
+		})
+	}
+	if t.Failed() {
+		return
+	}
+	contract := readShopContract(t, expectedFiles.document)
+	assertShopOperationIDs(t, contract)
+	for _, request := range requests {
+		assertShopBodySchema(t, contract, request)
+	}
+	client := prepareShopClient(t, checkout, expectedFiles.client)
+	for _, project := range projects {
+		t.Run(project.backend.language, func(t *testing.T) {
+			served := project.backend.open(t, project.path)
+			for _, request := range requests {
+				t.Run(request.name, func(t *testing.T) {
+					answer := sendShopRequest(t, served, request)
+					assertShopAnswer(t, request, answer)
+					assertShopResponseSchema(t, contract, request, answer)
+				})
+			}
+			assertShopClientAnswers(t, client, served)
 		})
 	}
 }

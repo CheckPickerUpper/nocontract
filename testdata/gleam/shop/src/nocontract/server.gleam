@@ -207,12 +207,6 @@ fn query_text(request: wisp.Request) -> String {
 fn record_schemas() -> dict.Dict(String, wire.Schema) {
   dict.from_list([
     #(
-      "TopUpBody",
-      wire.RecordSchema(fields: [
-        #("amount", wire.ReferenceSchema(name: "Money")),
-      ]),
-    ),
-    #(
       "Item",
       wire.RecordSchema(fields: [
         #("sku", wire.TextSchema),
@@ -221,6 +215,20 @@ fn record_schemas() -> dict.Dict(String, wire.Schema) {
           wire.IntegerSchema(least: 0, most: 255, encoding: wire.JsonNumber),
         ),
         #("included", wire.ListSchema(item: wire.ReferenceSchema(name: "Item"))),
+      ]),
+    ),
+    #(
+      "Money",
+      wire.RecordSchema(fields: [
+        #(
+          "cents",
+          wire.IntegerSchema(
+            least: -9_223_372_036_854_775_808,
+            most: 9_223_372_036_854_775_807,
+            encoding: wire.DecimalString,
+          ),
+        ),
+        #("currency", wire.LiteralsSchema(values: ["CAD", "USD"])),
       ]),
     ),
     #(
@@ -247,17 +255,9 @@ fn record_schemas() -> dict.Dict(String, wire.Schema) {
       ]),
     ),
     #(
-      "Money",
+      "TopUpBody",
       wire.RecordSchema(fields: [
-        #(
-          "cents",
-          wire.IntegerSchema(
-            least: -9_223_372_036_854_775_808,
-            most: 9_223_372_036_854_775_807,
-            encoding: wire.DecimalString,
-          ),
-        ),
-        #("currency", wire.LiteralsSchema(values: ["CAD", "USD"])),
+        #("amount", wire.ReferenceSchema(name: "Money")),
       ]),
     ),
   ])
