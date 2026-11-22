@@ -184,8 +184,8 @@ Every route behind a guard lists the guard's refusals among its failures in the 
 
 A `nocontract.json` names the backend language, the packages holding routes, the API name, the
 OpenAPI output and version, and the server output folder. Paths are relative to
-`nocontract.json`. Include `typescript` to generate an Effect client for the same OpenAPI
-document. The API name must be a TypeScript identifier. Configuration errors name their
+`nocontract.json`. Include `typescript` to generate an Effect client from the same route
+description as the OpenAPI document. The API name must be a TypeScript identifier. Configuration errors name their
 line and column.
 
 ```json
@@ -210,10 +210,10 @@ It also writes `nocontract_files_test.go` into the first package that declares a
 guard's refusal, in folder order, so `go test ./...` fails while any generated file differs from
 what `generate` writes, listing each one. `check` runs the same comparison on its own.
 
-With `typescript` set, both commands use Bun to run the installed `@effect/openapi-generator`
-from the frontend. Use the Effect and generator pins in the [shop's package manifest](testdata/go/shop/web/package.json)
-and its [pnpm overrides](testdata/go/shop/web/pnpm-workspace.yaml). Run `pnpm install` in the
-frontend before generation. A project that publishes only OpenAPI can omit `typescript`.
+With `typescript` set, NoContract writes the client directly from the route description.
+The frontend needs only the released `effect` package to use it; generation does not read
+frontend dependencies. The [shop's package manifest](testdata/go/shop/web/package.json) and
+Bun lockfile show a complete frontend. A project that publishes only OpenAPI can omit `typescript`.
 
 Source outputs carry a generated header. OpenAPI documents carry an ownership marker in
 `info`. Generation refuses files without the appropriate marker. To regenerate an older,

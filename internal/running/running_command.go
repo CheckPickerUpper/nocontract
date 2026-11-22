@@ -415,7 +415,7 @@ func generatedGo(ctx context.Context, project projectfile.Project, finish finish
 			case reading.RoutesRead:
 				switch assembled := assembling.Assemble(routes.Declared).(type) {
 				case assembling.APIAssembled:
-					return outcome.Fold(renderedFiles(ctx, assembled.API, routes.Plan, project, existing), func(files []generatedFile) Outcome {
+					return outcome.Fold(renderedFiles(assembled.API, routes.Plan, project, existing), func(files []generatedFile) Outcome {
 						return onDisk(files, func(held []fileOnDisk) Outcome { return judgedServing(ctx, project, held, finish) })
 					}, func(cause error) Outcome { return FileNotWritten{Path: directory, Cause: cause} })
 				case assembling.APIRefused:
@@ -441,9 +441,9 @@ type loadedProject struct {
 // renderedFiles is the TypeScript file, the OpenAPI file, each package's Go file, the server file,
 // the test of them all, and every Go file NoContract wrote, at the paths existing names, that this
 // run no longer writes, which must go.
-func renderedFiles(ctx context.Context, api description.API, plan serverplan.Plan, project projectfile.Project, existing []string) outcome.Result[[]generatedFile] {
+func renderedFiles(api description.API, plan serverplan.Plan, project projectfile.Project, existing []string) outcome.Result[[]generatedFile] {
 	return outcome.Fold(servedFiles(plan, project.File()), func(served []generatedFile) outcome.Result[[]generatedFile] {
-		return outcome.Fold(renderedClientAndOpenAPI(ctx, api, project), func(publicFiles []generatedFile) outcome.Result[[]generatedFile] {
+		return outcome.Fold(renderedClientAndOpenAPI(api, project), func(publicFiles []generatedFile) outcome.Result[[]generatedFile] {
 			return plannedGeneratedFiles(project.File(), slices.Concat(publicFiles, served), existing)
 		}, outcome.Err[[]generatedFile])
 	}, outcome.Err[[]generatedFile])

@@ -42,7 +42,7 @@ type compiledNative struct {
 func generatedNative(context context.Context, project projectfile.Project, finish finisher) Outcome {
 	return compileNative(context, project, func(built compiledNative) Outcome {
 		failed := func(cause error) Outcome { return FileNotWritten{Path: project.File(), Cause: cause} }
-		return outcome.Fold(renderedClientAndOpenAPI(context, built.checked.API, project), func(public []generatedFile) Outcome {
+		return outcome.Fold(renderedClientAndOpenAPI(built.checked.API, project), func(public []generatedFile) Outcome {
 			return outcome.Fold(plannedGeneratedFiles(project.File(), slices.Concat(public, built.files), nil), func(files []generatedFile) Outcome {
 				return onDisk(files, finish)
 			}, failed)

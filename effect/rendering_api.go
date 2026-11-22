@@ -1,106 +1,135 @@
-// Package effect generates a TypeScript HttpApi client from a NoContract OpenAPI document.
+// Package effect writes a backend's route description as an Effect HttpApi client.
 package effect
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/CheckPickerUpper/nocontract/description"
-	"github.com/CheckPickerUpper/nocontract/internal/keyed"
-	"github.com/CheckPickerUpper/outcome"
 )
 
-// Client identifies the frontend and carries the exact OpenAPI bytes NoContract publishes.
-type Client struct {
-	Output  string
-	Name    description.APIName
-	OpenAPI []byte
-}
-
-// Render runs the frontend's installed Effect generator on the OpenAPI document.
-func Render(ctx context.Context, client Client) outcome.Result[[]byte] {
-	return outcome.Fold(installedGenerator(filepath.Dir(client.Output)), func(program string) outcome.Result[[]byte] {
-		return outcome.Fold(outcome.TupleToResult(os.CreateTemp("", "nocontract-*.openapi.json")), func(spec *os.File) outcome.Result[[]byte] {
-			path := spec.Name()
-			defer func() { _ = os.Remove(path) }()
-			_, writeError := spec.Write(client.OpenAPI)
-			prepared := outcome.TupleToResult(path, errors.Join(writeError, spec.Close()))
-			return outcome.Fold(prepared, func(path string) outcome.Result[[]byte] {
-				return generate(ctx, program, path, client.Name)
-			}, outcome.Err[[]byte])
-		}, outcome.Err[[]byte])
-	}, outcome.Err[[]byte])
-}
-
-const generatorManifest = "node_modules/@effect/openapi-generator/package.json"
-
-type packageManifest struct {
-	Bin map[string]string `json:"bin"`
-}
-
-type generatorBinOutsidePackage struct{ Manifest, Bin string }
-
-func (failure generatorBinOutsidePackage) Error() string {
-	return fmt.Sprintf("openapigen entry point %q in %s is outside its package", failure.Bin, failure.Manifest)
-}
-
-type generatorBinMissing struct{ Manifest string }
-
-func (failure generatorBinMissing) Error() string {
-	return fmt.Sprintf("%s does not declare the openapigen executable", failure.Manifest)
-}
-
-type generatorOutputEmpty struct{ Program, API, Stderr string }
-
-func (failure generatorOutputEmpty) Error() string {
-	return fmt.Sprintf("%s emitted no client for %s: %s", failure.Program, failure.API, failure.Stderr)
-}
-
-func installedGenerator(directory string) outcome.Result[string] {
-	path := filepath.Join(directory, filepath.FromSlash(generatorManifest))
-	return outcome.Fold(outcome.TupleToResult(os.ReadFile(path)), func(content []byte) outcome.Result[string] {
-		manifest := packageManifest{Bin: map[string]string{}}
-		return outcome.Fold(outcome.TupleToResult(&manifest, json.Unmarshal(content, &manifest)), func(decoded *packageManifest) outcome.Result[string] {
-			return outcome.FoldOption(keyed.Entry(decoded.Bin, "openapigen"), func(bin string) outcome.Result[string] {
-				if filepath.IsLocal(bin) {
-					return outcome.Ok(filepath.Join(filepath.Dir(path), bin))
-				}
-				return outcome.Err[string](generatorBinOutsidePackage{Manifest: path, Bin: bin})
-			}, func() outcome.Result[string] {
-				return outcome.Err[string](generatorBinMissing{Manifest: path})
-			})
-		}, func(cause error) outcome.Result[string] {
-			return outcome.Err[string](fmt.Errorf("reading %s: %w", path, cause))
-		})
-	}, func(cause error) outcome.Result[string] {
-		parent := filepath.Dir(directory)
-		if errors.Is(cause, fs.ErrNotExist) && parent != directory {
-			return outcome.Fold(installedGenerator(parent), outcome.Ok[string], func(cause error) outcome.Result[string] {
-				return outcome.Err[string](fmt.Errorf("also searched %s: %w", path, cause))
-			})
+// Render writes the schemas, typed failures and group-local endpoints of api.
+func Render(api description.API) []byte {
+	prefix := privatePrefix(api)
+	file := &strings.Builder{}
+	file.WriteString(description.GeneratedHeader)
+	fmt.Fprintf(file, "\nimport { Schema as %sSchema } from \"effect\"\n", prefix)
+	fmt.Fprintf(file, "import { HttpApi as %[1]sHttpApi, HttpApiEndpoint as %[1]sHttpApiEndpoint, HttpApiGroup as %[1]sHttpApiGroup, HttpApiSchema as %[1]sHttpApiSchema } from \"effect/http-api\"\n", prefix)
+	for _, named := range api.Structs {
+		file.WriteString(namedStructText(named, prefix))
+	}
+	for _, member := range api.Members {
+		file.WriteString(memberText(member, prefix))
+	}
+	groups := []string{}
+	for i, group := range api.Groups {
+		name := fmt.Sprintf("%sGroup%d", prefix, i)
+		groups = append(groups, name)
+		fmt.Fprintf(file, "\nconst %s = %sHttpApiGroup.make(%s)", name, prefix, quoted(group.Name))
+		endpoints := []string{}
+		for _, endpoint := range group.Endpoints {
+			endpoints = append(endpoints, endpointText(endpoint, prefix))
 		}
-		return outcome.Err[string](fmt.Errorf("locating the frontend's installed @effect/openapi-generator at %s: %w", path, cause))
-	})
+		if len(endpoints) > 0 {
+			fmt.Fprintf(file, ".add(\n%s\n)", strings.Join(endpoints, ",\n"))
+		}
+		file.WriteString("\n")
+	}
+	fmt.Fprintf(file, "\nexport class %s extends %sHttpApi.make(%s)", api.Name.Text(), prefix, quoted(api.Name.Text()))
+	if len(groups) > 0 {
+		fmt.Fprintf(file, ".add(%s)", strings.Join(groups, ", "))
+	}
+	file.WriteString(" {}\n")
+	return []byte(file.String())
 }
 
-func generate(ctx context.Context, program, spec string, name description.APIName) outcome.Result[[]byte] {
-	command := exec.CommandContext(ctx, "bun", program, "--format", "httpapi", "--string-formats", "decoded", "--spec", spec, "--name", name.Text())
-	stderr := &bytes.Buffer{}
-	command.Stderr = stderr
-	return outcome.Fold(outcome.TupleToResult(command.Output()), func(client []byte) outcome.Result[[]byte] {
-		if len(bytes.TrimSpace(client)) == 0 {
-			return outcome.Err[[]byte](generatorOutputEmpty{Program: program, API: name.Text(), Stderr: strings.TrimSpace(stderr.String())})
+// privatePrefix keeps imports and generated bindings outside the public declarations' names.
+func privatePrefix(api description.API) string {
+	names := []string{api.Name.Text()}
+	for _, member := range api.Members {
+		names = append(names, member.Name)
+	}
+	for _, named := range api.Structs {
+		names = append(names, named.Name)
+	}
+	prefix := "$"
+	for _, name := range names {
+		for strings.HasPrefix(name, prefix) {
+			prefix += "$"
 		}
-		return outcome.Ok(append([]byte(description.GeneratedHeader+"\n"), client...))
-	}, func(cause error) outcome.Result[[]byte] {
-		return outcome.Err[[]byte](fmt.Errorf("%s: %w\n%s", strings.Join(command.Args, " "), cause, strings.TrimSpace(stderr.String())))
-	})
+	}
+	return prefix
 }
+
+func memberText(member description.Member, prefix string) string {
+	switch answer := member.Answer.(type) {
+	case description.Succeeds:
+		fields := schemaFields(member.Fields, prefix, "")
+		codec := fmt.Sprintf("%sSchema.TaggedStruct(%s, %s)", prefix, quoted(member.Name), fields.codec)
+		return fmt.Sprintf("\nexport const %s = %s.pipe(%sHttpApiSchema.status(%d))\nexport type %s = typeof %s.Type\n", member.Name, codec, prefix, answer.Status.Code(), member.Name, member.Name)
+	case description.Fails:
+		fields := append([]description.Field{{Name: description.CodeField(), Schema: description.Literals{Values: []string{answer.Code.String()}}}}, member.Fields...)
+		return fmt.Sprintf("\nexport class %s extends %sSchema.TaggedError<%s>()(%s, %s, { httpApiStatus: %d }) {}\n", member.Name, prefix, member.Name, quoted(member.Name), schemaFields(fields, prefix, "").codec, answer.Status.Code())
+	case nil:
+	}
+	return ""
+}
+
+type renderedPath struct {
+	path   string
+	params []description.Parameter
+}
+
+func renderPath(segments []description.PathSegment) renderedPath {
+	parts, params := []string{}, []description.Parameter{}
+	for _, segment := range segments {
+		switch part := segment.(type) {
+		case description.PathText:
+			parts = append(parts, part.Text)
+		case description.PathParameter:
+			parts = append(parts, ":"+part.Field.Name.Text())
+			params = append(params, part.Field)
+		case nil:
+		}
+	}
+	return renderedPath{path: "/" + strings.Join(parts, "/"), params: params}
+}
+
+func endpointText(endpoint description.Endpoint, prefix string) string {
+	path := renderPath(endpoint.Path)
+	options := []string{}
+	if len(path.params) > 0 {
+		options = append(options, "params: "+parameterFields(path.params, prefix))
+	}
+	if len(endpoint.Query) > 0 {
+		options = append(options, "query: "+parameterFields(endpoint.Query, prefix))
+	}
+	switch body := endpoint.Body.(type) {
+	case description.JSONBody:
+		// A schema keeps the body JSON; a field list would select form encoding.
+		options = append(options, "payload: "+renderSchema(body.Schema, prefix, "    ").codec)
+	case description.NoBody, nil:
+	}
+	options = append(options, "success: ["+strings.Join(memberNames(endpoint.Successes.Members()), ", ")+"]", "error: ["+strings.Join(memberNames(endpoint.Failures), ", ")+"]")
+	return fmt.Sprintf("  %sHttpApiEndpoint.%s(%s, %s, {\n    %s,\n  })", prefix, strings.ToLower(endpoint.Method.Name()), quoted(endpoint.Name), quoted(path.path), strings.Join(options, ",\n    "))
+}
+
+func parameterFields(parameters []description.Parameter, prefix string) string {
+	fields := []description.Field{}
+	for _, parameter := range parameters {
+		fields = append(fields, description.Field{Name: parameter.Name, Schema: parameter.Schema})
+	}
+	return schemaFields(fields, prefix, "    ").codec
+}
+
+func memberNames(members []description.Member) []string {
+	names := []string{}
+	for _, member := range members {
+		names = append(names, member.Name)
+	}
+	return names
+}
+
+// quoted uses the standard JavaScript string escaper for text from backend declarations.
+func quoted(text string) string { return "\"" + template.JSEscapeString(text) + "\"" }

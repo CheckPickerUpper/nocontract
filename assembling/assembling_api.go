@@ -291,9 +291,9 @@ type nameClaim struct {
 	position Position
 }
 
-// repeatedNames prevents two schemas from claiming the same OpenAPI component.
+// repeatedNames prevents the API and its schemas from claiming the same public name.
 func repeatedNames(declared Declared, shared []description.SharedFailure) []Refusal {
-	claims := []nameClaim{}
+	claims := []nameClaim{{name: declared.API.Name.Text(), takenBy: "the API's name", position: declared.API.Position}}
 	for _, failure := range shared {
 		claims = append(claims, nameClaim{name: failure.Name, takenBy: "one of nocontract's own failures", position: declared.API.Position})
 	}

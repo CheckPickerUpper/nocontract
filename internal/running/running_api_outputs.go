@@ -1,8 +1,6 @@
 package running
 
 import (
-	"context"
-
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/effect"
 	"github.com/CheckPickerUpper/nocontract/internal/projectfile"
@@ -16,16 +14,15 @@ func renderedOutput(content []byte) renderOutput {
 	return func() outcome.Result[[]byte] { return outcome.Ok(content) }
 }
 
-func renderedClientAndOpenAPI(ctx context.Context, api description.API, project projectfile.Project) outcome.Result[[]generatedFile] {
+func renderedClientAndOpenAPI(api description.API, project projectfile.Project) outcome.Result[[]generatedFile] {
 	return outcome.Fold(openapi.Render(api, project.OpenAPI().Version()), func(document []byte) outcome.Result[[]generatedFile] {
 		files := []generatedFile{
 			{path: project.OpenAPI().File(), content: outcome.Some(renderedOutput(document)), owner: openAPIOutput{}},
 		}
 		outcome.ForEachOption(project.TypeScriptFile(), func(path string) {
-			client := effect.Client{Output: path, Name: api.Name, OpenAPI: document}
 			files = append(files, generatedFile{
 				path: path, owner: headedOutput{header: description.GeneratedHeader, source: "typescript"},
-				content: outcome.Some(renderOutput(func() outcome.Result[[]byte] { return effect.Render(ctx, client) })),
+				content: outcome.Some(renderedOutput(effect.Render(api))),
 			})
 		})
 		return outcome.Ok(files)
