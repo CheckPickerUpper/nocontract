@@ -3,6 +3,7 @@ package running_test
 import (
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -24,7 +25,7 @@ type shopFixture struct {
 }
 
 // Source reads expose the compilers' fixture inputs to Go's test cache. Native copies contain
-// authored sources and manifests; compiler output and generated contracts stay in test scratch.
+// authored sources and manifests, and generated contracts stay in test scratch.
 func readShopFixture(t *testing.T, directory string) shopFixture {
 	t.Helper()
 	files := []shopSourceFile{}
@@ -86,13 +87,29 @@ func copyShopSources(t *testing.T, fixture shopFixture, directory string) {
 
 func copyGleamShop(t *testing.T, fixture shopFixture) string {
 	t.Helper()
+	// Gleam checks its path dependency fingerprint separately from the locked versions
+	// and global tarballs. Reuse its prepared metadata so a new test directory keeps
+	// the existing resolution.
+	dependencies := exec.CommandContext(t.Context(), "gleam", "deps", "download")
+	dependencies.Dir = fixture.directory
+	if output, cause := dependencies.CombinedOutput(); cause != nil {
+		t.Fatalf("preparing the Gleam dependencies in %s: %v\n%s", fixture.directory, cause, output)
+	}
+
 	project := copyShop(t, fixture)
 	directory := filepath.Dir(project)
 	runtimeDirectory := filepath.Clean(filepath.Join(fixture.directory, "..", "..", "..", "gleam", "runtime"))
 	runtime := readShopFixture(t, runtimeDirectory).directory
 	for _, name := range []string{"gleam.toml", "manifest.toml"} {
-		manifest := strings.ReplaceAll(heldOrStop(t, filepath.Join(directory, name)), `"../../../gleam/runtime"`, strconv.Quote(runtime))
+		manifest := strings.ReplaceAll(heldOrStop(t, filepath.Join(fixture.directory, name)), `"../../../gleam/runtime"`, strconv.Quote(runtime))
 		scratchproject.WriteFile(t, directory, name, []byte(manifest))
 	}
+	fingerprint := filepath.Join("build", "packages", "nocontract_runtime.config_fingerprint")
+	cachedFingerprint := filepath.Join(fixture.directory, fingerprint)
+	info, cause := os.Stat(cachedFingerprint)
+	scratchproject.StopOn(t, "reading the Gleam dependency fingerprint's modification time", cause)
+	scratchproject.WriteFile(t, directory, fingerprint, []byte(heldOrStop(t, cachedFingerprint)))
+	scratchproject.StopOn(t, "preserving the Gleam dependency fingerprint's modification time",
+		os.Chtimes(filepath.Join(directory, fingerprint), info.ModTime(), info.ModTime()))
 	return project
 }
