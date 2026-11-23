@@ -1,5 +1,6 @@
 import gleam/erlang/process
 import nocontract/server
+import nocontract_runtime/server_options
 import shop_observation
 import wisp
 
@@ -8,11 +9,12 @@ pub fn main() -> Nil {
   wisp.configure_logger()
   let assert Ok(options) = server.options(address: "127.0.0.1", port: 0)
   let options =
-    server.with_layers(options, [
+    server_options.with_layers(options:, layers: [
       shop_observation.layer("outer"),
       shop_observation.layer("inner"),
     ])
-  let assert Ok(options) = server.with_request_deadline(options, 50)
+  let assert Ok(options) =
+    server_options.with_request_deadline(options:, milliseconds: 50)
   let assert Ok(_) = server.start(options)
   process.sleep_forever()
 }

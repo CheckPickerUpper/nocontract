@@ -157,7 +157,7 @@ func generateServer(project Project, api description.API, failures []description
 		}
 		return outcome.Err[[]native.File](GenerationRefused{Problems: problems})
 	}
-	imports := []string{"import gleam/dict", "import gleam/http", "import gleam/http/response", "import gleam/json", "import gleam/otp/actor", "import gleam/otp/static_supervisor", "import gleam/string", "import mist", "import nocontract_runtime/bind_address", "import nocontract_runtime/request_deadline", "import nocontract_runtime/request_layers", "import nocontract_runtime/request_logging", "import nocontract_runtime/request_reading as request_input", "import nocontract_runtime/target_matching as target", "import nocontract_runtime/value_reading as wire", "import wisp", "import wisp/wisp_mist"}
+	imports := []string{"import gleam/dict", "import gleam/http", "import gleam/http/response", "import gleam/json", "import gleam/otp/actor", "import gleam/otp/static_supervisor", "import gleam/string", "import mist", "import nocontract_runtime/bind_address", "import nocontract_runtime/request_deadline", "import nocontract_runtime/request_layers", "import nocontract_runtime/request_logging", "import nocontract_runtime/request_reading as request_input", "import nocontract_runtime/server_options", "import nocontract_runtime/target_matching as target", "import nocontract_runtime/value_reading as wire", "import wisp", "import wisp/wisp_mist"}
 	if len(generated.decoders) > 0 {
 		imports = append(imports, "import gleam/dynamic/decode")
 	}
@@ -223,53 +223,22 @@ fn answer_route(route route: String, deadline deadline: option.Option(request_de
 `
 
 const serverStart = `
-/// A listening address and port, accepted only by options.
-pub opaque type StartOptions { StartOptions(address: bind_address.BindAddress, port: Int, layers: List(request_layers.Layer), deadline: option.Option(request_deadline.RequestDeadline)) }
-
-/// Why an address or port cannot start a listener.
-pub type OptionsRefusal {
-  EmptyAddress(address: String)
-  AddressRefused(cause: bind_address.AddressRefusal)
-  PortOutside(port: Int, least: Int, most: Int)
-}
-
 /// Checks the listener's address and port. Port zero asks the kernel to assign one.
-pub fn options(address address: String, port port: Int) -> Result(StartOptions, OptionsRefusal) {
-  case address, port {
-    "", _ -> Error(EmptyAddress(address:))
-    _, port if port < 0 || port > 65_535 -> Error(PortOutside(port:, least: 0, most: 65_535))
-    _, _ -> {
-      case bind_address.parse(address) {
-        Ok(address) -> Ok(StartOptions(address:, port:, layers: [], deadline: option.None))
-        Error(cause) -> Error(AddressRefused(cause:))
-      }
-    }
-  }
-}
-
-/// Selects ordered request and answer observers without exposing the HTTP response.
-pub fn with_layers(options: StartOptions, layers: List(request_layers.Layer)) -> StartOptions {
-  StartOptions(..options, layers:)
-}
-
-/// Chooses a positive, bounded request deadline in whole milliseconds.
-pub fn with_request_deadline(options: StartOptions, milliseconds: Int) -> Result(StartOptions, request_deadline.DeadlineRefusal) {
-  case request_deadline.parse_deadline(milliseconds) {
-    Ok(deadline) -> Ok(StartOptions(..options, deadline: option.Some(deadline)))
-    Error(cause) -> Error(cause)
-  }
+pub fn options(address address: String, port port: Int) -> Result(server_options.StartOptions, server_options.OptionsRefusal) {
+  server_options.parse(address:, port:)
 }
 
 /// A listener that Mist could not start, with its attempted options and OTP error.
-pub type StartRefusal { ListenerNotStarted(options: StartOptions, cause: actor.StartError) }
+pub type StartRefusal { ListenerNotStarted(options: server_options.StartOptions, cause: actor.StartError) }
 
 /// Starts only the declared routes inside the application's BEAM.
-pub fn start(options: StartOptions) -> Result(actor.Started(static_supervisor.Supervisor), StartRefusal) {
-  case handle_request(_, options.layers, options.deadline)
+pub fn start(options: server_options.StartOptions) -> Result(actor.Started(static_supervisor.Supervisor), StartRefusal) {
+  let configuration = server_options.read_configuration(options)
+  case handle_request(_, configuration.layers, configuration.deadline)
     |> wisp_mist.handler(wisp.random_string(64))
     |> mist.new
-    |> mist.bind(bind_address.to_string(options.address))
-    |> mist.port(options.port)
+    |> mist.bind(bind_address.to_string(configuration.address))
+    |> mist.port(configuration.port)
     |> mist.start {
     Ok(started) -> Ok(started)
     Error(cause) -> Error(ListenerNotStarted(options:, cause:))
