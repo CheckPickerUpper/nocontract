@@ -1,10 +1,8 @@
 package requestlog
 
 import "core:encoding/json"
-import "core:io"
 import "core:log"
 import "core:time"
-import "base:runtime"
 
 // Request_Log records a finalized answer. Route is the declared path template, or the
 // actual path when unmatched. Duration is elapsed time measured by the server's monotonic clock.
@@ -53,11 +51,9 @@ log_request :: proc(entry: Request_Log) -> Request_Log_Emission {
 	}
 	encoded, cause := json.marshal(message)
 	defer delete(encoded)
-	switch _ in cause {
-	case nil:
-		log.info(string(encoded))
-	case json.Marshal_Data_Error, io.Error, runtime.Allocator_Error:
+	if cause != nil {
 		return Request_Log_Not_Encoded{request = entry, cause = cause}
 	}
+	log.info(string(encoded))
 	return Request_Logged{}
 }

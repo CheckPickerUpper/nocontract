@@ -2,7 +2,6 @@ package nocontract
 
 import "base:runtime"
 import "core:encoding/json"
-import "core:io"
 import "core:strings"
 
 import http "../dependencies/odin-http"
@@ -13,33 +12,11 @@ Encoded_JSON :: struct #all_or_none {
 	bytes: []u8,
 }
 
-// JSON_Data_Cause is the codec's refusal of a value it cannot represent in JSON.
-JSON_Data_Cause :: struct #all_or_none {
-	cause: json.Marshal_Data_Error,
-}
-
-// JSON_IO_Cause is an output failure reported by the codec.
-JSON_IO_Cause :: struct #all_or_none {
-	cause: io.Error,
-}
-
-// JSON_Allocation_Cause is an allocation failure reported by the codec.
-JSON_Allocation_Cause :: struct #all_or_none {
-	cause: runtime.Allocator_Error,
-}
-
-// JSON_Encode_Cause preserves the kind and original value of a JSON codec failure.
-JSON_Encode_Cause :: union #no_nil {
-	JSON_Data_Cause,
-	JSON_IO_Cause,
-	JSON_Allocation_Cause,
-}
-
 // JSON_Encode_Failure is the codec operation's partial output, source and original error.
 JSON_Encode_Failure :: struct #all_or_none {
 	partial:     []u8,
 	location:    runtime.Source_Code_Location,
-	cause:       JSON_Encode_Cause,
+	cause:       json.Marshal_Error,
 }
 
 // JSON_Not_Encoded preserves the exact typed value and the failed codec operation.
@@ -88,17 +65,10 @@ Value_Preparation :: union($T: typeid) #no_nil {
 @(require_results)
 encode_json :: proc(value: $T, location := #caller_location) -> JSON_Encoding(T) {
 	bytes, failure := json.marshal(value, {spec = .JSON})
-	switch cause in failure {
-	case nil:
-		return Encoded_JSON{bytes = bytes}
-	case json.Marshal_Data_Error:
-		return JSON_Not_Encoded(T){value = value, failure = JSON_Encode_Failure{partial = bytes, location = location, cause = JSON_Data_Cause{cause = cause}}}
-	case io.Error:
-		return JSON_Not_Encoded(T){value = value, failure = JSON_Encode_Failure{partial = bytes, location = location, cause = JSON_IO_Cause{cause = cause}}}
-	case runtime.Allocator_Error:
-		return JSON_Not_Encoded(T){value = value, failure = JSON_Encode_Failure{partial = bytes, location = location, cause = JSON_Allocation_Cause{cause = cause}}}
+	if failure != nil {
+		return JSON_Not_Encoded(T){value = value, failure = JSON_Encode_Failure{partial = bytes, location = location, cause = failure}}
 	}
-	unreachable()
+	return Encoded_JSON{bytes = bytes}
 }
 
 // JSON_Answer is a generated answer's checked status and JSON.

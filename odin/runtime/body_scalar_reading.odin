@@ -68,15 +68,10 @@ start_body :: proc(text: string) -> Body_Start {
 	case .Invalid, .Null, .False, .True, .Infinity, .NaN, .Ident, .Integer, .Float, .String,
 		.Colon, .Comma, .Open_Brace, .Close_Brace, .Open_Bracket, .Close_Bracket:
 	}
-	switch cause := parser.curr_token_err; cause {
-	case .None:
-		return Body_Started{parser = parser}
-	case .EOF, .Illegal_Character, .Invalid_Number, .String_Not_Terminated, .Invalid_String, .Invalid_Rune,
-		.Unexpected_Token, .Expected_String_For_Object_Key, .Duplicate_Object_Key, .Expected_Colon_After_Key,
-		.Invalid_Allocator, .Out_Of_Memory, .Max_Depth_Exceeded:
+	if cause := parser.curr_token_err; cause != .None {
 		return malformed_body(&parser, "body", cause)
 	}
-	unreachable()
+	return Body_Started{parser = parser}
 }
 
 // finish_body refuses a second JSON value after the generated reader consumed the first.
@@ -101,15 +96,10 @@ malformed_body :: proc(parser: ^json.Parser, path: string, cause: json.Error) ->
 @(require_results)
 consume_body_token :: proc(parser: ^json.Parser, path: string) -> Reading(json.Token) {
 	previous, failure := json.advance_token(parser)
-	switch failure {
-	case .None, .EOF:
-		return Read_Value(json.Token){value = previous}
-	case .Illegal_Character, .Invalid_Number, .String_Not_Terminated, .Invalid_String, .Invalid_Rune,
-		.Unexpected_Token, .Expected_String_For_Object_Key, .Duplicate_Object_Key, .Expected_Colon_After_Key,
-		.Invalid_Allocator, .Out_Of_Memory, .Max_Depth_Exceeded:
+	if failure != .None && failure != .EOF {
 		return malformed_body(parser, path, failure)
 	}
-	unreachable()
+	return Read_Value(json.Token){value = previous}
 }
 
 // expect_body_token reads one known token kind without reparsing the body.
@@ -132,14 +122,10 @@ read_body_text_as :: proc(parser: ^json.Parser, path: string, wanted: Body_Expec
 	switch token in expect_body_token(parser, path, .String, wanted) {
 	case Read_Value(json.Token):
 		text, failure := json.unquote_string(token.value, .JSON, context.temp_allocator)
-		switch failure {
-		case .None:
-			return Read_Value(string){value = text}
-		case .EOF, .Illegal_Character, .Invalid_Number, .String_Not_Terminated, .Invalid_String, .Invalid_Rune,
-			.Unexpected_Token, .Expected_String_For_Object_Key, .Duplicate_Object_Key, .Expected_Colon_After_Key,
-			.Invalid_Allocator, .Out_Of_Memory, .Max_Depth_Exceeded:
+		if failure != .None {
 			return malformed_body(parser, path, failure)
 		}
+		return Read_Value(string){value = text}
 	case Request_Refusal:
 		return token
 	}
@@ -227,11 +213,7 @@ read_body_integer_text :: proc(parser: ^json.Parser, path: string, encoding: Int
 @(require_results)
 canonical_decimal :: proc(text: string) -> Decimal_Reading {
 	parser := json.make_parser(text, .JSON, parse_integers = true, allocator = context.temp_allocator)
-	switch parser.curr_token_err {
-	case .None:
-	case .EOF, .Illegal_Character, .Invalid_Number, .String_Not_Terminated, .Invalid_String, .Invalid_Rune,
-		.Unexpected_Token, .Expected_String_For_Object_Key, .Duplicate_Object_Key, .Expected_Colon_After_Key,
-		.Invalid_Allocator, .Out_Of_Memory, .Max_Depth_Exceeded:
+	if parser.curr_token_err != .None {
 		return Decimal_Parse_Refusal{parser = parser}
 	}
 	switch parser.curr_token.kind {

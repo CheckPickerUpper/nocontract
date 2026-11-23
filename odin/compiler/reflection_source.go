@@ -5,7 +5,6 @@ const reflectionSource = `package nocontract_probe
 import "base:runtime"
 import "core:encoding/json"
 import "core:fmt"
-import "core:io"
 import "core:os"
 
 Probe_Kind :: enum { Named, Integer, Float, String, Boolean, Struct, Union, Enum, Array, List, Dynamic, Map, Procedure, Unsupported }
