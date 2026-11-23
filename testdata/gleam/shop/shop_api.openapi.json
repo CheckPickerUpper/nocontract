@@ -70,7 +70,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotSignedIn"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/NotSignedIn"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ShopperCredentialRejected"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "_tag",
+                    "mapping": {
+                      "NotSignedIn": "#/components/schemas/NotSignedIn",
+                      "ShopperCredentialRejected": "#/components/schemas/ShopperCredentialRejected"
+                    }
+                  }
                 }
               }
             }
@@ -626,6 +640,32 @@
           "code",
           "method",
           "path"
+        ],
+        "additionalProperties": false
+      },
+      "ShopperCredentialRejected": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ShopperCredentialRejected"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "SH-1102"
+            ]
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "scope"
         ],
         "additionalProperties": false
       },

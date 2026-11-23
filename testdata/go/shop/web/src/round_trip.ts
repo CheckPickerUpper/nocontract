@@ -2,13 +2,13 @@ import { strict as assert } from "node:assert"
 import { Config, DateTime, Effect } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
-import { MethodNotDeclared, NotSignedIn, ShopApi, ShopperNotFound } from "./shop_api.generated.js"
+import { MethodNotDeclared, NotSignedIn, ShopApi, ShopperCredentialRejected, ShopperNotFound } from "./shop_api.generated.js"
 
 const program = Effect.gen(function*() {
   const baseUrl = yield* Config.NonEmptyString("SHOP_URL")
   const shopper = yield* HttpApiClient.make(ShopApi, {
     baseUrl,
-    transformClient: HttpClient.mapRequest(HttpClientRequest.setHeader("X-Shopper", "7"))
+    transformClient: HttpClient.mapRequest(HttpClientRequest.setHeader("X-Shopper", "shopper-7"))
   })
   const read = yield* shopper.balance.readBalance({ params: { shopper_id: 7n }, query: { currency: "CAD" } })
   const changed: DateTime.Utc = read.changed
@@ -36,6 +36,18 @@ const program = Effect.gen(function*() {
   assert.equal(refused.code, "SH-1101")
   assert.equal(refused.scope, "read-balance")
 
+  const unverified = yield* HttpApiClient.make(ShopApi, {
+    baseUrl,
+    transformClient: HttpClient.mapRequest(HttpClientRequest.setHeader("X-Shopper", "shopper-8"))
+  })
+  const rejected: ShopperCredentialRejected = yield* unverified.balance.readBalance({ params: { shopper_id: 7n }, query: { currency: "CAD" } }).pipe(
+    Effect.map((answer) => assert.fail(`The unverified shopper answered ${answer._tag}`)),
+    Effect.catchTag("ShopperCredentialRejected", Effect.succeed)
+  )
+  assert.equal(rejected._tag, "ShopperCredentialRejected")
+  assert.equal(rejected.code, "SH-1102")
+  assert.equal(rejected.scope, "read-balance")
+
   const response = yield* HttpClient.del(`${baseUrl}/shoppers/7/balance`)
   assert.equal(response.status, 405)
   assert.equal(response.headers["allow"], "GET")
@@ -45,7 +57,7 @@ const program = Effect.gen(function*() {
   assert.equal(method.method, "DELETE")
   assert.deepEqual(method.allowed, ["GET"])
 
-  return { read, missing, queued, refused, method }
+  return { read, missing, queued, refused, rejected, method }
 }).pipe(Effect.provide(FetchHttpClient.layer))
 
 // JSON.stringify refuses a bigint, so each one is printed as its decimal text followed by n.

@@ -86,8 +86,15 @@ func copyShop(t *testing.T, fixture shopFixture) string {
 
 func copyShopSources(t *testing.T, fixture shopFixture, directory string) {
 	t.Helper()
+	const relativeCollection = `"nocontract": "../../.."`
 	for _, file := range fixture.files {
-		scratchproject.WriteFile(t, directory, file.path, file.content)
+		content := file.content
+		if file.path == "nocontract.json" && bytes.Contains(content, []byte(relativeCollection)) {
+			collection := filepath.Clean(filepath.Join(fixture.directory, "..", "..", ".."))
+			readShopFixture(t, filepath.Join(collection, "odin", "runtime"))
+			content = bytes.ReplaceAll(content, []byte(relativeCollection), []byte(`"nocontract": `+strconv.Quote(collection)))
+		}
+		scratchproject.WriteFile(t, directory, file.path, content)
 	}
 }
 

@@ -83,6 +83,11 @@ export class RouteNotFound extends $Schema.TaggedError<RouteNotFound>()("RouteNo
   ["path"]: $Schema.String,
 }, { httpApiStatus: 404 }) {}
 
+export class ShopperCredentialRejected extends $Schema.TaggedError<ShopperCredentialRejected>()("ShopperCredentialRejected", {
+  ["code"]: $Schema.Literals(["SH-1102"]),
+  ["scope"]: $Schema.String,
+}, { httpApiStatus: 401 }) {}
+
 export class ShopperNotFound extends $Schema.TaggedError<ShopperNotFound>()("ShopperNotFound", {
   ["code"]: $Schema.Literals(["SH-1001"]),
   ["shopper_id"]: $Schema.String.check($Schema.isPattern(/^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|-(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-8]))$/)).pipe($Schema.decodeTo($Schema.BigIntFromString.check($Schema.isBetweenBigInt({ minimum: -9223372036854775808n, maximum: 9223372036854775807n })))),
@@ -107,7 +112,7 @@ const $Group0 = $HttpApiGroup.make("balance").add(
       ["currency"]: $Schema.Literals(["CAD", "USD"]),
     },
     success: [BalanceRead],
-    error: [AnswerNotWritten, BalanceNotOpened, NotSignedIn, RequestRefused, ShopperNotFound],
+    error: [AnswerNotWritten, BalanceNotOpened, NotSignedIn, RequestRefused, ShopperCredentialRejected, ShopperNotFound],
   }),
   $HttpApiEndpoint.post("topUp", "/shoppers/:shopper_id/top-ups", {
     params: {

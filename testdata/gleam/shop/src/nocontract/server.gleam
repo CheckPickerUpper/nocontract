@@ -858,20 +858,38 @@ fn answer_c1e771b9bea48a3c(value: native_11.TopUpOutcome) -> Answer {
 }
 
 fn answer_c7953ea1770cddb2(value: native_8.Refusal) -> Answer {
-  let native_8.NotSignedIn(scope: field_0) = value
-  write_answer(
-    tag: "NotSignedIn",
-    status: 401,
-    code: option.Some("SH-1101"),
-    fields: json.object([
-      #("_tag", json.string("NotSignedIn")),
-      #("code", json.string("SH-1101")),
-      #("scope", encode_b2ef230e7f4f315a(field_0)),
-    ]),
-    schema: wire.RecordSchema(fields: [
-      #("_tag", wire.LiteralsSchema(values: ["NotSignedIn"])),
-      #("code", wire.LiteralsSchema(values: ["SH-1101"])),
-      #("scope", wire.TextSchema),
-    ]),
-  )
+  case value {
+    native_8.NotSignedIn(scope: field_0) ->
+      write_answer(
+        tag: "NotSignedIn",
+        status: 401,
+        code: option.Some("SH-1101"),
+        fields: json.object([
+          #("_tag", json.string("NotSignedIn")),
+          #("code", json.string("SH-1101")),
+          #("scope", encode_b2ef230e7f4f315a(field_0)),
+        ]),
+        schema: wire.RecordSchema(fields: [
+          #("_tag", wire.LiteralsSchema(values: ["NotSignedIn"])),
+          #("code", wire.LiteralsSchema(values: ["SH-1101"])),
+          #("scope", wire.TextSchema),
+        ]),
+      )
+    native_8.ShopperCredentialRejected(scope: field_0) ->
+      write_answer(
+        tag: "ShopperCredentialRejected",
+        status: 401,
+        code: option.Some("SH-1102"),
+        fields: json.object([
+          #("_tag", json.string("ShopperCredentialRejected")),
+          #("code", json.string("SH-1102")),
+          #("scope", encode_b2ef230e7f4f315a(field_0)),
+        ]),
+        schema: wire.RecordSchema(fields: [
+          #("_tag", wire.LiteralsSchema(values: ["ShopperCredentialRejected"])),
+          #("code", wire.LiteralsSchema(values: ["SH-1102"])),
+          #("scope", wire.TextSchema),
+        ]),
+      )
+  }
 }

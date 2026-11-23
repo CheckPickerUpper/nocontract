@@ -110,7 +110,11 @@ func shopRequests() []shopRequestCase {
 			want: shopAnswer{status: 401, allow: "", body: `{"_tag":"NotSignedIn","code":"SH-1101","scope":"read-balance"}`}, bodySchema: outcome.None[shopBodySchema](),
 		},
 		{
-			name: "an admitted shopper has no ledger", method: http.MethodGet, path: "/shoppers/8/balance?currency=CAD", shopper: "shopper-8", body: "",
+			name: "the guard refuses an unverified shopper before reading the balance", method: http.MethodGet, path: "/shoppers/7/balance?currency=CAD", shopper: "shopper-8", body: "",
+			want: shopAnswer{status: 401, allow: "", body: `{"_tag":"ShopperCredentialRejected","code":"SH-1102","scope":"read-balance"}`}, bodySchema: outcome.None[shopBodySchema](),
+		},
+		{
+			name: "an admitted shopper has no ledger", method: http.MethodGet, path: "/shoppers/8/balance?currency=CAD", shopper: "shopper-7", body: "",
 			want: shopAnswer{status: 404, allow: "", body: `{"_tag":"ShopperNotFound","code":"SH-1001","shopper_id":"8"}`}, bodySchema: outcome.None[shopBodySchema](),
 		},
 		{

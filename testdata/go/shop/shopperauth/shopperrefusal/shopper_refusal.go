@@ -17,4 +17,13 @@ type NotSignedIn struct {
 	Scope string `json:"scope"`
 }
 
-func (NotSignedIn) isRefusal() {}
+// ShopperCredentialRejected is a request with an unrecognized shopper credential.
+//
+//ergo:code SH-1102
+//nocontract:status 401
+type ShopperCredentialRejected struct {
+	Scope string `json:"scope"`
+}
+
+func (NotSignedIn) isRefusal()               {}
+func (ShopperCredentialRejected) isRefusal() {}

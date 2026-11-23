@@ -12,6 +12,8 @@ func NocontractAnswerRefusal(outcome Refusal) nocontract.Answer {
 	switch member := outcome.(type) {
 	case NotSignedIn:
 		return nocontract.Failed(nocontract.Failure{Status: 401, Tag: "NotSignedIn", Code: "SH-1101"}, member, nocontract.AnswerMarshalers{})
+	case ShopperCredentialRejected:
+		return nocontract.Failed(nocontract.Failure{Status: 401, Tag: "ShopperCredentialRejected", Code: "SH-1102"}, member, nocontract.AnswerMarshalers{})
 	case nil:
 	}
 	return nocontract.NoOutcome()
