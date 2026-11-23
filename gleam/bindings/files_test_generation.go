@@ -13,7 +13,15 @@ import (
 func GenerateFilesTest(request native.Request) outcome.Result[native.File] {
 	return outcome.Fold(outcome.TupleToResult(filepath.Rel(request.Directory, request.API.Position.File)), func(relative string) outcome.Result[native.File] {
 		source := description.GeneratedHeader + "import nocontract_runtime/generated_files\n\n" +
-			fmt.Sprintf("pub fn generated_files_are_current_test() {\n  case generated_files.check(%s) {\n    Ok(_) -> Nil\n    Error(refusal) -> panic as generated_files.describe(refusal)\n  }\n}\n", quoted(filepath.ToSlash(relative)))
+			fmt.Sprintf(`pub fn generated_files_are_current_test() -> Nil {
+  let checked = generated_files.check(%s)
+  let assert Ok(_) = checked as case checked {
+    Ok(_) -> ""
+    Error(refusal) -> generated_files.describe(refusal)
+  }
+  Nil
+}
+`, quoted(filepath.ToSlash(relative)))
 		return outcome.Ok(native.File{Path: filepath.Join(request.Directory, "test", "nocontract_files_test.gleam"), Contents: []byte(source)})
 	}, outcome.Err[native.File])
 }
