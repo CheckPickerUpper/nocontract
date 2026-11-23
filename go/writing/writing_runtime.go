@@ -170,14 +170,12 @@ func messageText(parts []description.MessagePart) string {
 	return text.String()
 }
 
-// goFieldName is the exported Go name of a JSON name: each word between underscores begun with a
-// capital.
+// goFieldName is the exported Go name of a JSON name: each word between underscores or hyphens
+// begun with a capital.
 func goFieldName(jsonName string) string {
 	words := []string{}
-	for word := range strings.SplitSeq(jsonName, "_") {
-		if word != "" {
-			words = append(words, exported(word))
-		}
+	for word := range strings.FieldsFuncSeq(jsonName, func(character rune) bool { return character == '_' || character == '-' }) {
+		words = append(words, exported(word))
 	}
 	return strings.Join(words, "")
 }
