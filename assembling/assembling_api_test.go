@@ -213,11 +213,11 @@ func TestARouteIsDescribedWithItsBoundPathAndTheMembersItAnswersWith(t *testing.
 				t.Errorf("%s succeeds with %v; want %v", expected.endpoint.Name, got, want)
 			}
 		}
-		readFailures := []description.Member{shared["AnswerNotWritten"], missing, shared["RequestRefused"]}
+		readFailures := []description.Member{shared["AnswerNotWritten"], missing, shared["RequestCompletionUnavailable"], shared["RequestDeadlineExceeded"], shared["RequestRefused"]}
 		if got, want := memberAnswers(endpoints[1].Failures), memberAnswers(readFailures); !slices.Equal(got, want) {
 			t.Errorf("read, which reads its path, fails with %v; want %v", got, want)
 		}
-		if got, want := memberAnswers(endpoints[0].Failures), memberAnswers([]description.Member{shared["AnswerNotWritten"]}); !slices.Equal(got, want) {
+		if got, want := memberAnswers(endpoints[0].Failures), memberAnswers([]description.Member{shared["AnswerNotWritten"], shared["RequestCompletionUnavailable"], shared["RequestDeadlineExceeded"]}); !slices.Equal(got, want) {
 			t.Errorf("list, which reads nothing, fails with %v; want %v", got, want)
 		}
 	case assembling.APIRefused:

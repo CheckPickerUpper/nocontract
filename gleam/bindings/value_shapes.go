@@ -279,7 +279,26 @@ type Route struct {
 	Endpoint string
 	Input    Record
 	Output   Outcome
+	Lifetime RequestLifetimeInput
 }
+
+// RequestLifetimeInput is whether a checked route function accepts the server's request lifetime.
+//
+//sumtype:decl
+type RequestLifetimeInput interface{ isRequestLifetimeInput() }
+
+// WithoutRequestLifetime is a route whose only parameter is its request input.
+//
+//ergo:not-an-error
+type WithoutRequestLifetime struct{}
+
+// WithRequestLifetime is a route whose second parameter is the runtime's opaque request lifetime.
+//
+//ergo:not-an-error
+type WithRequestLifetime struct{}
+
+func (WithoutRequestLifetime) isRequestLifetimeInput() {}
+func (WithRequestLifetime) isRequestLifetimeInput()    {}
 
 // Guard calls one public native guard whose Option contains a checked refusal type.
 type Guard struct {

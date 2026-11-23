@@ -12,6 +12,7 @@ pub fn main() -> Nil {
       shop_observation.layer("outer"),
       shop_observation.layer("inner"),
     ])
+  let assert Ok(options) = server.with_request_deadline(options, 50)
   let assert Ok(_) = server.start(options)
   process.sleep_forever()
 }

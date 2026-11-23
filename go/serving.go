@@ -13,6 +13,7 @@ import (
 
 	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
+	"golang.org/x/sync/errgroup"
 )
 
 // Endpoint is one declared route as a generated server's table holds it: its method, which is
@@ -221,17 +222,37 @@ func (optionsResponse) isResponse() {}
 // another method on a declared path; RouteNotFound to a path no route declares; and RequestRefused
 // to a path holding a segment that is not valid escaping. The runtime's private HTTP handler
 // calls it with the generated API's binding and request logger.
-func respond(writer http.ResponseWriter, request *http.Request, endpoints []Endpoint, layers []Layer, logger outcome.Option[*slog.Logger], clock func() time.Time) {
+func respond(writer http.ResponseWriter, request *http.Request, endpoints []Endpoint, layers []Layer, logger outcome.Option[*slog.Logger], clock func() time.Time, deadline outcome.Option[uint32], workers *errgroup.Group) {
 	started := clock()
 	matched := matchRequest(endpoints, request)
-	answer := sync.OnceValue(func() Answered { return answerMatched(matched, request) })
-	visit := Visit{request: request, route: visitedRoute(matched), header: writer.Header()}
-	throughLayers(layers, visit, answer)
-	answered := answer()
-	outcome.ForEachOption(logger, func(logger *slog.Logger) {
-		logRequest(logger, visit, answered, clock().Sub(started))
+	// Worker headers are values, separate from the listener's live response header.
+	headers := http.Header{}
+	visit := Visit{request: request, route: visitedRoute(matched), header: headers}
+	completion := completeRequest(matched, request.Context(), deadline, workers, func(requestContext context.Context) Answered {
+		workerRequest := request.WithContext(requestContext)
+		workerVisit := Visit{request: workerRequest, route: visit.route, header: headers}
+		answer := sync.OnceValue(func() Answered { return answerMatched(matched, workerRequest) })
+		throughLayers(layers, workerVisit, answer)
+		return answer()
 	})
-	answered.write(writer)
+	publish := func(answered Answered) {
+		outcome.ForEachOption(logger, func(logger *slog.Logger) {
+			logRequest(logger, visit, answered, clock().Sub(started))
+		})
+		answered.write(writer)
+	}
+	switch completed := completion.(type) {
+	case requestCompleted:
+		for name, values := range headers {
+			writer.Header()[name] = slices.Clone(values)
+		}
+		publish(completed.answer)
+	case *requestExpired:
+		publish(Answered{response: answerResponse{answer: sent(NocontractAnswerSharedFailure(RequestDeadlineExceeded{Route: completed.route, TimeoutMilliseconds: completed.milliseconds}))}})
+	case requestCancelled, nil:
+		// net/http requires its abort signal to close without synthesizing an empty 200.
+		panic(http.ErrAbortHandler)
+	}
 }
 
 // throughLayers runs each layer around the next, the first outermost, each next running what is

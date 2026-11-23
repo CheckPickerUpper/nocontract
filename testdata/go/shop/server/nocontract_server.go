@@ -33,6 +33,9 @@ func New(layers []nocontract.Layer, balanceLedger balance.Ledger, balanceShopper
 			{Method: "GET", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "balance"}}, Answer: func(request *http.Request) nocontract.Answer {
 				return nocontract.Decided(checkReadBalance(request), shopperrefusal.NocontractAnswerRefusal, func() nocontract.Answer { return balance.NocontractRouteReadBalance(balanceLedger, request) })
 			}},
+			{Method: "GET", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "delayed-balance"}}, Answer: func(request *http.Request) nocontract.Answer {
+				return balance.NocontractRouteReadDelayedBalance(balanceLedger, request)
+			}},
 			{Method: "POST", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "top-ups"}}, Answer: func(request *http.Request) nocontract.Answer { return balance.NocontractRouteTopUp(request) }},
 			{Method: "POST", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "orders"}}, Answer: func(request *http.Request) nocontract.Answer { return orders.NocontractRoutePlace(request) }},
 			{Method: "GET", Path: []nocontract.PathSegment{nocontract.PathText{Text: "headers"}, nocontract.PathText{Text: "order-count"}}, Answer: func(request *http.Request) nocontract.Answer { return orders.NocontractRouteReadOrderCount(request) }},

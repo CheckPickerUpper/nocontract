@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/CheckPickerUpper/outcome"
@@ -19,12 +20,13 @@ import (
 type ListenOptions struct {
 	address       string
 	requestLogger outcome.Option[*slog.Logger]
+	deadline      outcome.Option[uint32]
 }
 
 // ListenOn chooses a TCP address, such as "127.0.0.1:8080". Port zero asks the operating system
 // for a free port; ListeningServer.Address reports the address it assigned.
 func ListenOn(address string) ListenOptions {
-	return ListenOptions{address: address, requestLogger: outcome.None[*slog.Logger]()}
+	return ListenOptions{address: address, requestLogger: outcome.None[*slog.Logger](), deadline: outcome.None[uint32]()}
 }
 
 // RouteBinding is the declared endpoints and layers a generated API owns. It accepts typed
@@ -43,8 +45,10 @@ func BindRoutes(endpoints []Endpoint, layers []Layer) RouteBinding {
 // ListeningServer owns one generated API's TCP listener and the task serving it. Only Listen
 // builds one; applications can read its bound address, wait for it, and stop it.
 type ListeningServer struct {
-	server *http.Server
-	tasks  *errgroup.Group
+	server      *http.Server
+	tasks       *errgroup.Group
+	workers     *errgroup.Group
+	joinWorkers func() <-chan struct{}
 }
 
 // ServerStopped is a listener that has stopped accepting requests at Address.
@@ -114,18 +118,32 @@ func Listen(serverContext context.Context, options ListenOptions, binding RouteB
 		KeepAliveConfig: net.KeepAliveConfig{Enable: false, Idle: 0, Interval: 0, Count: 0},
 	}
 	return outcome.Fold(outcome.TupleToResult(configuration.Listen(serverContext, "tcp", options.address)), func(listener net.Listener) outcome.Result[ListeningServer] {
-		server := newHTTPServer(serverContext, options, binding, listener.Addr().String())
+		workers := &errgroup.Group{}
+		server := newHTTPServer(serverContext, options, binding, listener.Addr().String(), workers)
 		tasks := &errgroup.Group{}
 		tasks.Go(func() error { return serveListener(server, listener) })
-		return outcome.Ok(ListeningServer{server: server, tasks: tasks})
+		return outcome.Ok(newListeningServer(server, tasks, workers))
 	}, func(cause error) outcome.Result[ListeningServer] {
 		return outcome.Err[ListeningServer](ListenerNotOpened{Address: options.address, Cause: cause})
 	})
 }
 
-func newHTTPServer(serverContext context.Context, options ListenOptions, binding RouteBinding, address string) *http.Server {
+func newListeningServer(server *http.Server, tasks *errgroup.Group, workers *errgroup.Group) ListeningServer {
+	joinWorkers := sync.OnceValue(func() <-chan struct{} {
+		joined := make(chan struct{})
+		collection := &errgroup.Group{}
+		collection.Go(func() error {
+			defer close(joined)
+			return workers.Wait()
+		})
+		return joined
+	})
+	return ListeningServer{server: server, tasks: tasks, workers: workers, joinWorkers: joinWorkers}
+}
+
+func newHTTPServer(serverContext context.Context, options ListenOptions, binding RouteBinding, address string, workers *errgroup.Group) *http.Server {
 	return &http.Server{
-		Addr: address, Handler: boundRoutes{binding: binding, requestLogger: options.requestLogger, clock: time.Now}, DisableGeneralOptionsHandler: true,
+		Addr: address, Handler: boundRoutes{binding: binding, requestLogger: options.requestLogger, clock: time.Now, deadline: options.deadline, workers: workers}, DisableGeneralOptionsHandler: true,
 		TLSConfig: nil, ReadTimeout: 0, ReadHeaderTimeout: 10 * time.Second, WriteTimeout: 0, IdleTimeout: 0,
 		MaxHeaderBytes: 0, MaxHeaderValueCount: 0, TLSNextProto: nil, ConnState: nil, ErrorLog: nil,
 		BaseContext: func(net.Listener) context.Context { return serverContext }, ConnContext: nil,
@@ -157,7 +175,12 @@ func (listening ListeningServer) Stop(context context.Context) outcome.Result[Se
 	return outcome.FoldOption(outcome.EmptyableToOption(listening.server.Shutdown(context)), func(cause error) outcome.Result[ServerStopped] {
 		return outcome.Err[ServerStopped](ListenerNotStopped{Address: listening.server.Addr, Cause: cause})
 	}, func() outcome.Result[ServerStopped] {
-		return listening.Wait()
+		select {
+		case <-listening.joinWorkers():
+			return outcome.FoldOption(outcome.EmptyableToOption(listening.workers.Wait()), outcome.Err[ServerStopped], listening.Wait)
+		case <-context.Done():
+			return outcome.Err[ServerStopped](ListenerNotStopped{Address: listening.server.Addr, Cause: context.Err()})
+		}
 	})
 }
 
@@ -165,8 +188,10 @@ type boundRoutes struct {
 	binding       RouteBinding
 	requestLogger outcome.Option[*slog.Logger]
 	clock         func() time.Time
+	deadline      outcome.Option[uint32]
+	workers       *errgroup.Group
 }
 
 func (bound boundRoutes) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	respond(writer, request, bound.binding.endpoints, bound.binding.layers, bound.requestLogger, bound.clock)
+	respond(writer, request, bound.binding.endpoints, bound.binding.layers, bound.requestLogger, bound.clock, bound.deadline, bound.workers)
 }

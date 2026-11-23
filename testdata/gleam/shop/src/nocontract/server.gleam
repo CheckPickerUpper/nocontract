@@ -15,6 +15,7 @@ import gleam/string
 import mist
 import nocontract_runtime/bind_address
 import nocontract_runtime/parameter_reading as parameter
+import nocontract_runtime/request_deadline
 import nocontract_runtime/request_layers
 import nocontract_runtime/request_logging
 import nocontract_runtime/request_reading as request_input
@@ -35,34 +36,44 @@ type Operation {
   Route1
   Route2
   Route3
+  Route4
 }
 
 type Answer {
   Answer(response: wisp.Response, code: option.Option(String))
 }
 
+type RequestSelection {
+  SelectedRoute(run: fn(request_deadline.RequestLifetime) -> Answer)
+  ImmediateAnswer(run: fn() -> Answer)
+}
+
 fn handle_request(
   request: wisp.Request,
   layers: List(request_layers.Layer),
+  deadline: option.Option(request_deadline.RequestDeadline),
 ) -> wisp.Response {
   let #(duration_us, #(route, answer)) =
     request_logging.measure_request(fn() {
-      let #(route, selected_answer) = select_request(request)
-      let finish =
-        request_layers.enter(
-          layers,
-          request_layers.Visit(
-            method: http.method_to_string(request.method),
-            path: request.path,
-            route:,
-          ),
+      let #(route, selected) = select_request(request)
+      let visit =
+        request_layers.Visit(
+          method: http.method_to_string(request.method),
+          path: request.path,
+          route:,
         )
-      let answer = selected_answer()
-      finish(request_layers.Answered(
-        status: answer.response.status,
-        code: answer.code,
-      ))
-      #(route, answer)
+      case selected {
+        SelectedRoute(run:) -> #(
+          route,
+          answer_route(route:, deadline:, run: fn(lifetime) {
+            answer_through_layers(layers, visit, fn() { run(lifetime) })
+          }),
+        )
+        ImmediateAnswer(run:) -> #(
+          route,
+          answer_through_layers(layers, visit, run),
+        )
+      }
     })
   request_logging.log_request(request_logging.RequestLog(
     route:,
@@ -74,7 +85,40 @@ fn handle_request(
   answer.response
 }
 
-fn select_request(request: wisp.Request) -> #(String, fn() -> Answer) {
+fn answer_through_layers(
+  layers: List(request_layers.Layer),
+  visit: request_layers.Visit,
+  run: fn() -> Answer,
+) -> Answer {
+  let finish = request_layers.enter(layers, visit)
+  let answer = run()
+  finish(request_layers.Answered(
+    status: answer.response.status,
+    code: answer.code,
+  ))
+  answer
+}
+
+fn answer_route(
+  route route: String,
+  deadline deadline: option.Option(request_deadline.RequestDeadline),
+  run run: fn(request_deadline.RequestLifetime) -> Answer,
+) -> Answer {
+  case deadline {
+    option.None -> request_deadline.without_deadline(run:)
+    option.Some(within) -> {
+      case request_deadline.answer_before_deadline(within:, run:) {
+        request_deadline.RequestCompleted(answer:) -> answer
+        request_deadline.RequestExpired(timeout_milliseconds:, ..) ->
+          shared_request_deadline_exceeded(route:, timeout_milliseconds:)
+        request_deadline.RequestWorkerExited(stopped:) ->
+          request_deadline.worker_exited(stopped)
+      }
+    }
+  }
+}
+
+fn select_request(request: wisp.Request) -> #(String, RequestSelection) {
   case
     target.match_target(
       [
@@ -83,17 +127,22 @@ fn select_request(request: wisp.Request) -> #(String, fn() -> Answer) {
           target.PathParameter(name: "shopper_id"),
           target.PathText(text: "balance"),
         ]),
-        target.Route(operation: Route1, method: "POST", path: [
+        target.Route(operation: Route1, method: "GET", path: [
           target.PathText(text: "shoppers"),
           target.PathParameter(name: "shopper_id"),
-          target.PathText(text: "top-ups"),
+          target.PathText(text: "delayed-balance"),
         ]),
         target.Route(operation: Route2, method: "POST", path: [
           target.PathText(text: "shoppers"),
           target.PathParameter(name: "shopper_id"),
+          target.PathText(text: "top-ups"),
+        ]),
+        target.Route(operation: Route3, method: "POST", path: [
+          target.PathText(text: "shoppers"),
+          target.PathParameter(name: "shopper_id"),
           target.PathText(text: "orders"),
         ]),
-        target.Route(operation: Route3, method: "GET", path: [
+        target.Route(operation: Route4, method: "GET", path: [
           target.PathText(text: "headers"),
           target.PathText(text: "order-count"),
         ]),
@@ -104,37 +153,52 @@ fn select_request(request: wisp.Request) -> #(String, fn() -> Answer) {
   {
     target.Selected(operation: Route0, parameters:) -> #(
       "/shoppers/{shopper_id}/balance",
-      fn() { serve_route_0(request, parameters) },
+      SelectedRoute(run: fn(_lifetime) { serve_route_0(request, parameters) }),
     )
     target.Selected(operation: Route1, parameters:) -> #(
-      "/shoppers/{shopper_id}/top-ups",
-      fn() { serve_route_1(request, parameters) },
+      "/shoppers/{shopper_id}/delayed-balance",
+      SelectedRoute(run: fn(lifetime) {
+        serve_route_1(request, parameters, lifetime)
+      }),
     )
     target.Selected(operation: Route2, parameters:) -> #(
-      "/shoppers/{shopper_id}/orders",
-      fn() { serve_route_2(request, parameters) },
+      "/shoppers/{shopper_id}/top-ups",
+      SelectedRoute(run: fn(_lifetime) { serve_route_2(request, parameters) }),
     )
     target.Selected(operation: Route3, parameters:) -> #(
-      "/headers/order-count",
-      fn() { serve_route_3(request, parameters) },
+      "/shoppers/{shopper_id}/orders",
+      SelectedRoute(run: fn(_lifetime) { serve_route_3(request, parameters) }),
     )
-    target.UnknownPath(path:) -> #(request.path, fn() {
-      shared_route_not_found(
-        method: http.method_to_string(request.method),
-        path:,
-      )
-    })
-    target.UndeclaredMethod(allowed:) -> #(request.path, fn() {
-      refuse_method(method: request.method, allowed:)
-    })
-    target.UnreadablePath(segment:) -> #(request.path, fn() {
-      let written = segment |> json.string |> json.to_string
-      shared_request_refused(
-        part: "path",
-        name: segment,
-        reason: "invalid URL escape " <> written,
-      )
-    })
+    target.Selected(operation: Route4, parameters:) -> #(
+      "/headers/order-count",
+      SelectedRoute(run: fn(_lifetime) { serve_route_4(request, parameters) }),
+    )
+    target.UnknownPath(path:) -> #(
+      request.path,
+      ImmediateAnswer(run: fn() {
+        shared_route_not_found(
+          method: http.method_to_string(request.method),
+          path:,
+        )
+      }),
+    )
+    target.UndeclaredMethod(allowed:) -> #(
+      request.path,
+      ImmediateAnswer(run: fn() {
+        refuse_method(method: request.method, allowed:)
+      }),
+    )
+    target.UnreadablePath(segment:) -> #(
+      request.path,
+      ImmediateAnswer(run: fn() {
+        let written = segment |> json.string |> json.to_string
+        shared_request_refused(
+          part: "path",
+          name: segment,
+          reason: "invalid URL escape " <> written,
+        )
+      }),
+    )
   }
 }
 
@@ -184,6 +248,51 @@ fn serve_route_0(
 fn read_route_1(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
+) -> Result(native_0.DelayedReadInput, request_input.RequestRefusal) {
+  use field_0 <- result.try(request_input.read_path(
+    parameters,
+    "shopper_id",
+    parameter.IntegerParameter(
+      least: -9_223_372_036_854_775_808,
+      most: 9_223_372_036_854_775_807,
+      parser: "ParseInt",
+    ),
+    decode_0b5f608070c6ce3b(),
+  ))
+  use field_1 <- result.try(request_input.read_query(
+    target.read_query(query_text(request)),
+    "currency",
+    parameter.LiteralParameter(values: ["CAD", "USD"]),
+    decode_456bb921f4cdcd2d(),
+  ))
+  use field_2 <- result.try(request_input.read_query(
+    target.read_query(query_text(request)),
+    "delay_milliseconds",
+    parameter.IntegerParameter(least: 0, most: 65_535, parser: "ParseUint"),
+    decode_6ad8a712a1644da1(),
+  ))
+  Ok(native_0.DelayedReadInput(
+    shopper_id: field_0,
+    currency: field_1,
+    delay_milliseconds: field_2,
+  ))
+}
+
+fn serve_route_1(
+  request: wisp.Request,
+  parameters: dict.Dict(String, String),
+  lifetime: request_deadline.RequestLifetime,
+) -> Answer {
+  case read_route_1(request, parameters) {
+    Ok(input) ->
+      native_0.read_delayed_balance(input, lifetime) |> answer_65944b918453d5ca
+    Error(cause) -> request_refused(cause)
+  }
+}
+
+fn read_route_2(
+  request: wisp.Request,
+  parameters: dict.Dict(String, String),
 ) -> Result(native_0.TopUpInput, request_input.RequestRefusal) {
   use field_0 <- result.try(request_input.read_path(
     parameters,
@@ -204,17 +313,17 @@ fn read_route_1(
   Ok(native_0.TopUpInput(shopper_id: field_0, body: field_1))
 }
 
-fn serve_route_1(
+fn serve_route_2(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
 ) -> Answer {
-  case read_route_1(request, parameters) {
+  case read_route_2(request, parameters) {
     Ok(input) -> input |> native_0.top_up |> answer_c1e771b9bea48a3c
     Error(cause) -> request_refused(cause)
   }
 }
 
-fn read_route_2(
+fn read_route_3(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
 ) -> Result(native_12.PlaceInput, request_input.RequestRefusal) {
@@ -243,17 +352,17 @@ fn read_route_2(
   Ok(native_12.PlaceInput(shopper_id: field_0, store: field_1, body: field_2))
 }
 
-fn serve_route_2(
+fn serve_route_3(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
 ) -> Answer {
-  case read_route_2(request, parameters) {
+  case read_route_3(request, parameters) {
     Ok(input) -> input |> native_12.place |> answer_6fb7787a3145644b
     Error(cause) -> request_refused(cause)
   }
 }
 
-fn read_route_3(
+fn read_route_4(
   request: wisp.Request,
   _parameters: dict.Dict(String, String),
 ) -> Result(native_12.OrderCountInput, request_input.RequestRefusal) {
@@ -270,11 +379,11 @@ fn read_route_3(
   Ok(native_12.OrderCountInput(order_count: field_0))
 }
 
-fn serve_route_3(
+fn serve_route_4(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
 ) -> Answer {
-  case read_route_3(request, parameters) {
+  case read_route_4(request, parameters) {
     Ok(input) -> input |> native_12.read_order_count |> answer_dd8bf8c137db7b72
     Error(cause) -> request_refused(cause)
   }
@@ -344,6 +453,22 @@ fn record_schemas() -> dict.Dict(String, wire.Schema) {
       ]),
     ),
   ])
+}
+
+fn shared_request_deadline_exceeded(
+  route route: String,
+  timeout_milliseconds timeout_milliseconds: Int,
+) -> Answer {
+  let response =
+    json.object([
+      #("_tag", json.string("RequestDeadlineExceeded")),
+      #("code", json.string("NC-1170")),
+      #("route", json.string(route)),
+      #("timeout_milliseconds", encode_3c71fbee793e533c(timeout_milliseconds)),
+    ])
+    |> json.to_string
+    |> wisp.json_response(503)
+  Answer(response:, code: option.Some("NC-1170"))
 }
 
 fn shared_request_refused(
@@ -481,6 +606,7 @@ pub opaque type StartOptions {
     address: bind_address.BindAddress,
     port: Int,
     layers: List(request_layers.Layer),
+    deadline: option.Option(request_deadline.RequestDeadline),
   )
 }
 
@@ -502,7 +628,8 @@ pub fn options(
       Error(PortOutside(port:, least: 0, most: 65_535))
     _, _ -> {
       case bind_address.parse(address) {
-        Ok(address) -> Ok(StartOptions(address:, port:, layers: []))
+        Ok(address) ->
+          Ok(StartOptions(address:, port:, layers: [], deadline: option.None))
         Error(cause) -> Error(AddressRefused(cause:))
       }
     }
@@ -517,6 +644,17 @@ pub fn with_layers(
   StartOptions(..options, layers:)
 }
 
+/// Chooses a positive, bounded request deadline in whole milliseconds.
+pub fn with_request_deadline(
+  options: StartOptions,
+  milliseconds: Int,
+) -> Result(StartOptions, request_deadline.DeadlineRefusal) {
+  case request_deadline.parse_deadline(milliseconds) {
+    Ok(deadline) -> Ok(StartOptions(..options, deadline: option.Some(deadline)))
+    Error(cause) -> Error(cause)
+  }
+}
+
 /// A listener that Mist could not start, with its attempted options and OTP error.
 pub type StartRefusal {
   ListenerNotStarted(options: StartOptions, cause: actor.StartError)
@@ -527,7 +665,7 @@ pub fn start(
   options: StartOptions,
 ) -> Result(actor.Started(static_supervisor.Supervisor), StartRefusal) {
   case
-    handle_request(_, options.layers)
+    handle_request(_, options.layers, options.deadline)
     |> wisp_mist.handler(wisp.random_string(64))
     |> mist.new
     |> mist.bind(bind_address.to_string(options.address))
@@ -697,6 +835,10 @@ fn encode_319bc3687b2495e7(value: native_5.Instant) -> json.Json {
 fn encode_366e9179845bede5(value: native_5.UInt8) -> json.Json {
   let native_5.UInt8(value: inner) = value
   encode_42b62d074bc7b45c(inner)
+}
+
+fn encode_3c71fbee793e533c(value: Int) -> json.Json {
+  json.int(value)
 }
 
 fn encode_42b62d074bc7b45c(value: Int) -> json.Json {

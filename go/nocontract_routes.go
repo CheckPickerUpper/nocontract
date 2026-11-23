@@ -20,6 +20,29 @@ type taggedFailure[M any] struct {
 //sumtype:decl
 type SharedFailure interface{ isSharedFailure() }
 
+// RequestCompletionUnavailable is a request whose native completion resource could not be used, with its route, operation and original operating system error number.
+//
+//ergo:code NC-1174
+//ergo:message The request to {Route} could not complete {Operation}: operating system error {Errno}
+type RequestCompletionUnavailable struct {
+	Route     string `json:"route"`
+	Operation string `json:"operation"`
+	Errno     int32  `json:"errno"`
+}
+
+func (RequestCompletionUnavailable) isSharedFailure() {}
+
+// RequestDeadlineExceeded is a request that exceeded its configured deadline, with its declared route and duration in whole milliseconds.
+//
+//ergo:code NC-1170
+//ergo:message The request to {Route} exceeded its {TimeoutMilliseconds} millisecond deadline.
+type RequestDeadlineExceeded struct {
+	Route               string `json:"route"`
+	TimeoutMilliseconds uint32 `json:"timeout_milliseconds"`
+}
+
+func (RequestDeadlineExceeded) isSharedFailure() {}
+
 // RequestRefused is a request whose path segment, query parameter, header or body the route's input could not read. Every route that reads its request can answer it, before its handler runs.
 //
 //ergo:code NC-1001
@@ -80,6 +103,10 @@ func (MethodNotDeclared) isSharedFailure() {}
 // with its status, tag and code.
 func NocontractAnswerSharedFailure(outcome SharedFailure) Answer {
 	switch member := outcome.(type) {
+	case RequestCompletionUnavailable:
+		return Failed(Failure{Status: 503, Tag: "RequestCompletionUnavailable", Code: "NC-1174"}, member, AnswerMarshalers{})
+	case RequestDeadlineExceeded:
+		return Failed(Failure{Status: 503, Tag: "RequestDeadlineExceeded", Code: "NC-1170"}, member, AnswerMarshalers{})
 	case RequestRefused:
 		return Failed(Failure{Status: 400, Tag: "RequestRefused", Code: "NC-1001"}, member, AnswerMarshalers{})
 	case AnswerNotWritten:

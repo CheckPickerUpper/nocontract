@@ -30,15 +30,20 @@ func main() {
 // serve serves the API until the server stops, and is the exit code the stop gives.
 func serve(serverContext context.Context, api server.API, logger *slog.Logger) int {
 	options := nocontract.WithRequestLogger(nocontract.ListenOn(os.Getenv("SHOP_ADDRESS")), logger)
-	return outcome.Fold(server.Listen(serverContext, options, api), func(listening nocontract.ListeningServer) int {
-		defer func() {
-			outcome.Fold(listening.Stop(serverContext), func(nocontract.ServerStopped) struct{} { return struct{}{} }, func(cause error) struct{} {
-				fmt.Fprintln(os.Stderr, cause)
-				return struct{}{}
-			})
-		}()
-		return outcome.Fold(outcome.TupleToResult(fmt.Fprintf(os.Stdout, "Listening on http://%s\n", listening.Address())), func(int) int {
-			return outcome.Fold(listening.Wait(), func(nocontract.ServerStopped) int { return 0 }, func(cause error) int {
+	return outcome.Fold(nocontract.WithRequestDeadline(options, 50), func(options nocontract.ListenOptions) int {
+		return outcome.Fold(server.Listen(serverContext, options, api), func(listening nocontract.ListeningServer) int {
+			defer func() {
+				outcome.Fold(listening.Stop(serverContext), func(nocontract.ServerStopped) struct{} { return struct{}{} }, func(cause error) struct{} {
+					fmt.Fprintln(os.Stderr, cause)
+					return struct{}{}
+				})
+			}()
+			return outcome.Fold(outcome.TupleToResult(fmt.Fprintf(os.Stdout, "Listening on http://%s\n", listening.Address())), func(int) int {
+				return outcome.Fold(listening.Wait(), func(nocontract.ServerStopped) int { return 0 }, func(cause error) int {
+					fmt.Fprintln(os.Stderr, cause)
+					return 1
+				})
+			}, func(cause error) int {
 				fmt.Fprintln(os.Stderr, cause)
 				return 1
 			})

@@ -16,16 +16,28 @@ import (
 )
 
 func (index projectIndex) readRoute(source sourceRoute) outcome.Result[routeRead] {
-	if len(source.signature.Parameters) != 1 {
-		return outcome.Err[routeRead](DirectiveRefused{Declaration: source.route.Declaration, Requirement: "one record parameter on a route function"})
-	}
-	return outcome.Fold(index.readInput(source.signature.Parameters[0].Type), func(input bindings.Record) outcome.Result[routeRead] {
-		return outcome.Fold(index.readOutcome(source.signature.Returning, []compiler.Identity{}), func(output bindings.Outcome) outcome.Result[routeRead] {
-			return outcome.Fold(index.readGuard(source), func(guard outcome.Option[bindings.Guard]) outcome.Result[routeRead] {
-				return describedRoute(source, input, output, guard)
+	return outcome.Fold(readLifetimeInput(source), func(lifetime bindings.RequestLifetimeInput) outcome.Result[routeRead] {
+		return outcome.Fold(index.readInput(source.signature.Parameters[0].Type), func(input bindings.Record) outcome.Result[routeRead] {
+			return outcome.Fold(index.readOutcome(source.signature.Returning, []compiler.Identity{}), func(output bindings.Outcome) outcome.Result[routeRead] {
+				return outcome.Fold(index.readGuard(source), func(guard outcome.Option[bindings.Guard]) outcome.Result[routeRead] {
+					return describedRoute(source, input, output, guard, lifetime)
+				}, outcome.Err[routeRead])
 			}, outcome.Err[routeRead])
 		}, outcome.Err[routeRead])
 	}, outcome.Err[routeRead])
+}
+
+func readLifetimeInput(source sourceRoute) outcome.Result[bindings.RequestLifetimeInput] {
+	switch len(source.signature.Parameters) {
+	case 1:
+		return outcome.Ok[bindings.RequestLifetimeInput](bindings.WithoutRequestLifetime{})
+	case 2:
+		lifetime := compiler.Named{Identity: compiler.Identity{Package: "nocontract_runtime", Module: "nocontract_runtime/request_deadline", Name: "RequestLifetime"}, Arguments: []compiler.Type{}}
+		if compiler.Equal(source.signature.Parameters[1].Type, lifetime) {
+			return outcome.Ok[bindings.RequestLifetimeInput](bindings.WithRequestLifetime{})
+		}
+	}
+	return outcome.Err[bindings.RequestLifetimeInput](DirectiveRefused{Declaration: source.route.Declaration, Requirement: "one record input, optionally followed by nocontract_runtime/request_deadline.RequestLifetime"})
 }
 
 func (index projectIndex) readInput(written compiler.Type) outcome.Result[bindings.Record] {
@@ -44,9 +56,9 @@ func (index projectIndex) readInput(written compiler.Type) outcome.Result[bindin
 	}, outcome.Err[bindings.Record])
 }
 
-func describedRoute(source sourceRoute, input bindings.Record, output bindings.Outcome, guard outcome.Option[bindings.Guard]) outcome.Result[routeRead] {
+func describedRoute(source sourceRoute, input bindings.Record, output bindings.Outcome, guard outcome.Option[bindings.Guard], lifetime bindings.RequestLifetimeInput) outcome.Result[routeRead] {
 	return outcome.Fold(readHeaders(source, input), func(headers []assembling.DeclaredHeader) outcome.Result[routeRead] {
-		return describeRouteInput(source, input, output, guard, headers)
+		return describeRouteInput(source, input, output, guard, headers, lifetime)
 	}, outcome.Err[routeRead])
 }
 
@@ -94,7 +106,7 @@ func readHeaders(source sourceRoute, input bindings.Record) outcome.Result[[]ass
 	})
 }
 
-func describeRouteInput(source sourceRoute, input bindings.Record, output bindings.Outcome, guard outcome.Option[bindings.Guard], headers []assembling.DeclaredHeader) outcome.Result[routeRead] {
+func describeRouteInput(source sourceRoute, input bindings.Record, output bindings.Outcome, guard outcome.Option[bindings.Guard], headers []assembling.DeclaredHeader, lifetime bindings.RequestLifetimeInput) outcome.Result[routeRead] {
 	parameters, query := []description.Field{}, []description.Field{}
 	body := description.Body(description.NoBody{})
 	pathNames := map[string]struct{}{}
@@ -137,7 +149,7 @@ func describeRouteInput(source sourceRoute, input bindings.Record, output bindin
 	}
 	outcome.ForEachOption(guard, func(guard bindings.Guard) { failures = append(failures, guard.Output.Members()...) })
 	endpoint := description.EndpointName(publicName(source.name))
-	return outcome.Ok(routeRead{declared: assembling.DeclaredEndpoint{Name: endpoint, Method: source.route.Method, Path: source.route.Path, Params: parameters, Query: query, Headers: headers, Body: body, Successes: description.Successes{First: successes[0], Rest: successes[1:]}, Failures: failures, Position: source.route.Declaration.Position}, native: bindings.Route{Module: source.module, Function: source.name, Group: routeGroup(source.module), Endpoint: endpoint, Input: input, Output: output}, guard: guard})
+	return outcome.Ok(routeRead{declared: assembling.DeclaredEndpoint{Name: endpoint, Method: source.route.Method, Path: source.route.Path, Params: parameters, Query: query, Headers: headers, Body: body, Successes: description.Successes{First: successes[0], Rest: successes[1:]}, Failures: failures, Position: source.route.Declaration.Position}, native: bindings.Route{Module: source.module, Function: source.name, Group: routeGroup(source.module), Endpoint: endpoint, Input: input, Output: output, Lifetime: lifetime}, guard: guard})
 }
 
 func (index projectIndex) readGuard(source sourceRoute) outcome.Result[outcome.Option[bindings.Guard]] {

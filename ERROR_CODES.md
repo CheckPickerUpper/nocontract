@@ -1764,3 +1764,44 @@ Message: `The application did not finish successfully.`
 | `Application` | `running.StartedApplication` |
 | `Duration` | `time.Duration` |
 | `Cause` | `error` |
+
+## NC-1170 RequestDeadlineExceeded
+
+RequestDeadlineExceeded is a request that exceeded its configured deadline, with its declared route and duration in whole milliseconds.
+
+Declared in `go/nocontract_routes.go`.
+
+Message: `The request to {Route} exceeded its {TimeoutMilliseconds} millisecond deadline.`
+
+| Field | Type |
+| --- | --- |
+| `Route` | `string` |
+| `TimeoutMilliseconds` | `uint32` |
+
+## NC-1171 RequestDeadlineOutside
+
+RequestDeadlineOutside is a duration that cannot configure a request deadline.
+
+Declared in `go/request_deadline.go`.
+
+Message: `The request deadline {TimeoutMilliseconds} milliseconds is outside {Least} to {Most}.`
+
+| Field | Type |
+| --- | --- |
+| `TimeoutMilliseconds` | `uint32` |
+| `Least` | `uint32` |
+| `Most` | `uint32` |
+
+## NC-1174 RequestCompletionUnavailable
+
+RequestCompletionUnavailable is a request whose native completion resource could not be used, with its route, operation and original operating system error number.
+
+Declared in `go/nocontract_routes.go`.
+
+Message: `The request to {Route} could not complete {Operation}: operating system error {Errno}`
+
+| Field | Type |
+| --- | --- |
+| `Route` | `string` |
+| `Operation` | `string` |
+| `Errno` | `int32` |

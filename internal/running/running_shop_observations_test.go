@@ -34,7 +34,7 @@ func observedShopCode(code json.RawMessage) string {
 	return string(code)
 }
 
-func assertShopObservations(t *testing.T, contract shopContract, requests []shopAnsweredRequest, lines []string) {
+func readShopObservations(t *testing.T, lines []string) []shopObservation {
 	t.Helper()
 	entries := []shopObservation{}
 	for _, line := range lines {
@@ -52,6 +52,12 @@ func assertShopObservations(t *testing.T, contract shopContract, requests []shop
 			entries = append(entries, entry)
 		}
 	}
+	return entries
+}
+
+func assertShopObservations(t *testing.T, contract shopContract, requests []shopAnsweredRequest, lines []string) {
+	t.Helper()
+	entries := readShopObservations(t, lines)
 	if len(entries) < len(requests)*5 || len(entries)%5 != 0 {
 		t.Fatalf("got %d layer/log observations for %d checked HTTP answers; want four layer observations and one request log per answer:\n%s", len(entries), len(requests), strings.Join(lines, "\n"))
 	}
@@ -73,27 +79,41 @@ func assertShopObservations(t *testing.T, contract shopContract, requests []shop
 		if logged.Layer != "" || logged.Phase != "" || logged.Method != visit.Method || logged.Route != visit.Route {
 			t.Fatalf("request %d final event = %+v; want one request log for %+v", index, logged, visit)
 		}
-		outcome.Fold(outcome.TupleToResult(strconv.ParseInt(string(logged.DurationUS), 10, 64)), func(duration int64) struct{} {
-			if duration < 0 {
-				t.Errorf("request %d duration_us = %d; want nonnegative", index, duration)
-			}
-			return struct{}{}
-		}, func(cause error) struct{} { t.Errorf("request %d duration_us: %v", index, cause); return struct{}{} })
+		assertShopLoggedDuration(t, index, logged)
 		if index >= len(requests) {
 			continue
 		}
 		answered := requests[index]
+		assertShopLogMatchesAnswer(t, contract, answered, logged)
 		path, _, _ := strings.Cut(answered.request.path, "?")
-		route := outcome.FoldOption(matchShopOperation(contract, answered.request), func(matched shopOperationMatch) string { return matched.path }, func() string { return path })
-		body := struct {
-			Code json.RawMessage `json:"code"`
-		}{Code: json.RawMessage{}}
-		if answered.answer.body != "" {
-			scratchproject.StopOn(t, "reading the actual HTTP answer", json.Unmarshal([]byte(answered.answer.body), &body))
-		}
-		if visit.Method != answered.request.method || visit.Path != path || visit.Route != route || logged.Status != answered.answer.status || observedShopCode(logged.Code) != observedShopCode(body.Code) {
-			t.Fatalf("%s: visit %+v and log %+v disagree with HTTP %d %s (route %s)", answered.request.name, visit, logged, answered.answer.status, answered.answer.body, route)
+		if visit.Method != answered.request.method || visit.Path != path || visit.Route != logged.Route {
+			t.Fatalf("%s: visit %+v and log %+v disagree with HTTP %d %s", answered.request.name, visit, logged, answered.answer.status, answered.answer.body)
 		}
 	}
 	t.Logf("observed %d HTTP answers: outer before, inner before, inner after, outer after, one final request log; status and code match the returned answers", len(entries)/5)
+}
+
+func assertShopLoggedDuration(t *testing.T, index int, logged shopObservation) {
+	t.Helper()
+	outcome.Fold(outcome.TupleToResult(strconv.ParseInt(string(logged.DurationUS), 10, 64)), func(duration int64) struct{} {
+		if duration < 0 {
+			t.Errorf("request %d duration_us = %d; want nonnegative", index, duration)
+		}
+		return struct{}{}
+	}, func(cause error) struct{} { t.Errorf("request %d duration_us: %v", index, cause); return struct{}{} })
+}
+
+func assertShopLogMatchesAnswer(t *testing.T, contract shopContract, answered shopAnsweredRequest, logged shopObservation) {
+	t.Helper()
+	path, _, _ := strings.Cut(answered.request.path, "?")
+	route := outcome.FoldOption(matchShopOperation(contract, answered.request), func(matched shopOperationMatch) string { return matched.path }, func() string { return path })
+	body := struct {
+		Code json.RawMessage `json:"code"`
+	}{Code: json.RawMessage{}}
+	if answered.answer.body != "" {
+		scratchproject.StopOn(t, "reading the actual HTTP answer", json.Unmarshal([]byte(answered.answer.body), &body))
+	}
+	if logged.Method != answered.request.method || logged.Route != route || logged.Status != answered.answer.status || observedShopCode(logged.Code) != observedShopCode(body.Code) {
+		t.Fatalf("%s: log %+v disagrees with HTTP %d %s (route %s)", answered.request.name, logged, answered.answer.status, answered.answer.body, route)
+	}
 }

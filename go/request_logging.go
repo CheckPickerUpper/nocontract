@@ -11,7 +11,7 @@ import (
 // WithRequestLogger chooses the application's logger for the listener's request events.
 // Each event records route, method, status, duration_us, and the answer's code when present.
 func WithRequestLogger(options ListenOptions, logger *slog.Logger) ListenOptions {
-	return ListenOptions{address: options.address, requestLogger: outcome.EmptyableToOption(logger)}
+	return ListenOptions{address: options.address, requestLogger: outcome.EmptyableToOption(logger), deadline: options.deadline}
 }
 
 func logRequest(logger *slog.Logger, visit Visit, answered Answered, duration time.Duration) {

@@ -93,7 +93,7 @@ func Generate(project Project, checked assembling.APIAssembled) outcome.Result[[
 				}
 			}
 		}
-		return generateServer(project, checked.API, description.SharedFailures())
+		return generateServer(project, checked.API, description.CommonRuntimeFailures())
 	}, func(cause error) outcome.Result[[]native.File] {
 		return outcome.Err[[]native.File](ServerFolderRefused{Source: source, Server: project.Server, Cause: cause})
 	})
@@ -116,25 +116,33 @@ func generateServer(project Project, api description.API, failures []description
 				operations = append(operations, name)
 				routes = append(routes, "target.Route(operation: "+name+", method: "+quoted(endpoint.Method.Name())+", path: "+pathSegments(endpoint.Path)+")")
 				reader := fmt.Sprintf("read_route_%d", len(readers))
-				call := "case " + reader + "(request, parameters) { Ok(input) -> input |> " + generated.module(route.Module) + "." + route.Function + " |> " + generated.outcomeEncoder(route.Output) + " Error(cause) -> request_refused(cause) }"
+				parameters, arguments, lifetime := "", "", "_lifetime"
+				invocation := "input |> " + generated.module(route.Module) + "." + route.Function
+				switch route.Lifetime.(type) {
+				case WithRequestLifetime:
+					parameters, arguments, lifetime = ", lifetime: request_deadline.RequestLifetime", ", lifetime", "lifetime"
+					invocation = generated.module(route.Module) + "." + route.Function + "(input, lifetime)"
+				case WithoutRequestLifetime, nil:
+				}
+				call := "case " + reader + "(request, parameters) { Ok(input) -> " + invocation + " |> " + generated.outcomeEncoder(route.Output) + " Error(cause) -> request_refused(cause) }"
 				if guard, found := project.Guards[operation]; found {
 					generated.module("gleam/option")
 					generated.module("gleam/list")
 					call = "case " + generated.module(guard.Module) + "." + guard.Function + "(" + quoted(guard.Scope) + ", request.headers |> list.reverse |> dict.from_list) { option.Some(refusal) -> " + generated.outcomeEncoder(guard.Output) + "(refusal) option.None -> { " + call + " } }"
 				}
 				handler := fmt.Sprintf("serve_route_%d", len(readers))
-				readers = append(readers, generated.inputReader(reader, route.Input, endpoint)+"\nfn "+handler+"(request: wisp.Request, parameters: dict.Dict(String, String)) -> Answer { "+call+" }\n")
-				dispatch = append(dispatch, "target.Selected(operation: "+name+", parameters:) -> #("+quoted(description.PathTemplate(endpoint.Path))+", fn() { "+handler+"(request, parameters) })")
+				readers = append(readers, generated.inputReader(reader, route.Input, endpoint)+"\nfn "+handler+"(request: wisp.Request, parameters: dict.Dict(String, String)"+parameters+") -> Answer { "+call+" }\n")
+				dispatch = append(dispatch, "target.Selected(operation: "+name+", parameters:) -> #("+quoted(description.PathTemplate(endpoint.Path))+", SelectedRoute(run: fn("+lifetime+") { "+handler+"(request, parameters"+arguments+") }))")
 			}
 		}
 	}
 	generated.module("gleam/option")
 	main := "type Operation {\n" + strings.Join(operations, "\n") + "\n}\n\n" +
-		loggedRequest + "fn select_request(request: wisp.Request) -> #(String, fn() -> Answer) {\ncase target.match_target([" + strings.Join(routes, ",\n") + "], method: http.method_to_string(request.method), path: request.path) {\n" +
+		loggedRequest + "fn select_request(request: wisp.Request) -> #(String, RequestSelection) {\ncase target.match_target([" + strings.Join(routes, ",\n") + "], method: http.method_to_string(request.method), path: request.path) {\n" +
 		strings.Join(dispatch, "\n") + "\n" +
-		"target.UnknownPath(path:) -> #(request.path, fn() { shared_route_not_found(method: http.method_to_string(request.method), path:) })\n" +
-		"target.UndeclaredMethod(allowed:) -> #(request.path, fn() { refuse_method(method: request.method, allowed:) })\n" +
-		"target.UnreadablePath(segment:) -> #(request.path, fn() { let written = segment |> json.string |> json.to_string shared_request_refused(part: \"path\", name: segment, reason: \"invalid URL escape \" <> written) })\n}\n}\n\n" + strings.Join(readers, "\n")
+		"target.UnknownPath(path:) -> #(request.path, ImmediateAnswer(run: fn() { shared_route_not_found(method: http.method_to_string(request.method), path:) }))\n" +
+		"target.UndeclaredMethod(allowed:) -> #(request.path, ImmediateAnswer(run: fn() { refuse_method(method: request.method, allowed:) }))\n" +
+		"target.UnreadablePath(segment:) -> #(request.path, ImmediateAnswer(run: fn() { let written = segment |> json.string |> json.to_string shared_request_refused(part: \"path\", name: segment, reason: \"invalid URL escape \" <> written) }))\n}\n}\n\n" + strings.Join(readers, "\n")
 	main += queryTextFunction(api)
 	main += generated.recordSchemas(api.Structs) + sharedResponses(generated, failures) + serverStart
 	for _, definitions := range []map[string]string{generated.decoders, generated.encoders, generated.outcomes} {
@@ -149,7 +157,7 @@ func generateServer(project Project, api description.API, failures []description
 		}
 		return outcome.Err[[]native.File](GenerationRefused{Problems: problems})
 	}
-	imports := []string{"import gleam/dict", "import gleam/http", "import gleam/http/response", "import gleam/json", "import gleam/otp/actor", "import gleam/otp/static_supervisor", "import gleam/string", "import mist", "import nocontract_runtime/bind_address", "import nocontract_runtime/request_layers", "import nocontract_runtime/request_logging", "import nocontract_runtime/request_reading as request_input", "import nocontract_runtime/target_matching as target", "import nocontract_runtime/value_reading as wire", "import wisp", "import wisp/wisp_mist"}
+	imports := []string{"import gleam/dict", "import gleam/http", "import gleam/http/response", "import gleam/json", "import gleam/otp/actor", "import gleam/otp/static_supervisor", "import gleam/string", "import mist", "import nocontract_runtime/bind_address", "import nocontract_runtime/request_deadline", "import nocontract_runtime/request_layers", "import nocontract_runtime/request_logging", "import nocontract_runtime/request_reading as request_input", "import nocontract_runtime/target_matching as target", "import nocontract_runtime/value_reading as wire", "import wisp", "import wisp/wisp_mist"}
 	if len(generated.decoders) > 0 {
 		imports = append(imports, "import gleam/dynamic/decode")
 	}
@@ -166,13 +174,21 @@ type Answer {
   Answer(response: wisp.Response, code: option.Option(String))
 }
 
-fn handle_request(request: wisp.Request, layers: List(request_layers.Layer)) -> wisp.Response {
+type RequestSelection {
+  SelectedRoute(run: fn(request_deadline.RequestLifetime) -> Answer)
+  ImmediateAnswer(run: fn() -> Answer)
+}
+
+fn handle_request(request: wisp.Request, layers: List(request_layers.Layer), deadline: option.Option(request_deadline.RequestDeadline)) -> wisp.Response {
   let #(duration_us, #(route, answer)) = request_logging.measure_request(fn() {
-    let #(route, selected_answer) = select_request(request)
-    let finish = request_layers.enter(layers, request_layers.Visit(method: http.method_to_string(request.method), path: request.path, route:))
-    let answer = selected_answer()
-    finish(request_layers.Answered(status: answer.response.status, code: answer.code))
-    #(route, answer)
+    let #(route, selected) = select_request(request)
+    let visit = request_layers.Visit(method: http.method_to_string(request.method), path: request.path, route:)
+    case selected {
+      SelectedRoute(run:) -> #(route, answer_route(route:, deadline:, run: fn(lifetime) {
+        answer_through_layers(layers, visit, fn() { run(lifetime) })
+      }))
+      ImmediateAnswer(run:) -> #(route, answer_through_layers(layers, visit, run))
+    }
   })
   request_logging.log_request(request_logging.RequestLog(
     route:,
@@ -184,11 +200,31 @@ fn handle_request(request: wisp.Request, layers: List(request_layers.Layer)) -> 
   answer.response
 }
 
+fn answer_through_layers(layers: List(request_layers.Layer), visit: request_layers.Visit, run: fn() -> Answer) -> Answer {
+  let finish = request_layers.enter(layers, visit)
+  let answer = run()
+  finish(request_layers.Answered(status: answer.response.status, code: answer.code))
+  answer
+}
+
+fn answer_route(route route: String, deadline deadline: option.Option(request_deadline.RequestDeadline), run run: fn(request_deadline.RequestLifetime) -> Answer) -> Answer {
+  case deadline {
+    option.None -> request_deadline.without_deadline(run:)
+    option.Some(within) -> {
+      case request_deadline.answer_before_deadline(within:, run:) {
+        request_deadline.RequestCompleted(answer:) -> answer
+        request_deadline.RequestExpired(timeout_milliseconds:, ..) -> shared_request_deadline_exceeded(route:, timeout_milliseconds:)
+        request_deadline.RequestWorkerExited(stopped:) -> request_deadline.worker_exited(stopped)
+      }
+    }
+  }
+}
+
 `
 
 const serverStart = `
 /// A listening address and port, accepted only by options.
-pub opaque type StartOptions { StartOptions(address: bind_address.BindAddress, port: Int, layers: List(request_layers.Layer)) }
+pub opaque type StartOptions { StartOptions(address: bind_address.BindAddress, port: Int, layers: List(request_layers.Layer), deadline: option.Option(request_deadline.RequestDeadline)) }
 
 /// Why an address or port cannot start a listener.
 pub type OptionsRefusal {
@@ -204,7 +240,7 @@ pub fn options(address address: String, port port: Int) -> Result(StartOptions, 
     _, port if port < 0 || port > 65_535 -> Error(PortOutside(port:, least: 0, most: 65_535))
     _, _ -> {
       case bind_address.parse(address) {
-        Ok(address) -> Ok(StartOptions(address:, port:, layers: []))
+        Ok(address) -> Ok(StartOptions(address:, port:, layers: [], deadline: option.None))
         Error(cause) -> Error(AddressRefused(cause:))
       }
     }
@@ -216,12 +252,20 @@ pub fn with_layers(options: StartOptions, layers: List(request_layers.Layer)) ->
   StartOptions(..options, layers:)
 }
 
+/// Chooses a positive, bounded request deadline in whole milliseconds.
+pub fn with_request_deadline(options: StartOptions, milliseconds: Int) -> Result(StartOptions, request_deadline.DeadlineRefusal) {
+  case request_deadline.parse_deadline(milliseconds) {
+    Ok(deadline) -> Ok(StartOptions(..options, deadline: option.Some(deadline)))
+    Error(cause) -> Error(cause)
+  }
+}
+
 /// A listener that Mist could not start, with its attempted options and OTP error.
 pub type StartRefusal { ListenerNotStarted(options: StartOptions, cause: actor.StartError) }
 
 /// Starts only the declared routes inside the application's BEAM.
 pub fn start(options: StartOptions) -> Result(actor.Started(static_supervisor.Supervisor), StartRefusal) {
-  case handle_request(_, options.layers)
+  case handle_request(_, options.layers, options.deadline)
     |> wisp_mist.handler(wisp.random_string(64))
     |> mist.new
     |> mist.bind(bind_address.to_string(options.address))

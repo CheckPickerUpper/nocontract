@@ -173,22 +173,58 @@ func (writer *bindingWriter) memberResponse(id int, member description.Member) {
 
 func (writer *bindingWriter) sharedResponses() {
 	for _, failure := range description.SharedFailures() {
-		fields, values := []string{}, []string{}
+		fields, wireFields, values := []string{}, []string{}, []string{}
 		for _, field := range failure.Fields {
 			fieldType := ""
-			switch field.Schema.(type) {
+			wireType, encoded := "", "fields."+field.Name.Text()
+			switch schema := field.Schema.(type) {
 			case description.Text, description.Literals:
 				fieldType = "string"
+			case description.Integer:
+				fieldType = sharedIntegerName(schema.Width)
+				switch schema.Width.Wire().(type) {
+				case description.DecimalTextWire:
+					wireType = "string"
+					encoded = "fmt.tprintf(\"%d\", fields." + field.Name.Text() + ")"
+				case description.NumberWire, nil:
+				}
 			case description.List:
 				fieldType = "[]string"
-			case description.Integer, description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
+			case description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
 				writer.refuse(failure.Name+"."+field.Name.Text(), "shared failure has no Odin field representation")
 			}
 			fields = append(fields, field.Name.Text()+": "+fieldType+",")
-			values = append(values, field.Name.Text()+" = fields."+field.Name.Text()+",")
+			if wireType == "" {
+				wireType = fieldType
+			}
+			wireFields = append(wireFields, field.Name.Text()+": "+wireType+",")
+			values = append(values, field.Name.Text()+" = "+encoded+",")
 		}
-		fmt.Fprintf(writer.source, "\n@(private)\nnc_fields_%s :: struct #all_or_none {%s}\n@(private, require_results)\nnc_shared_%s :: proc(fields: nc_fields_%s, allowed: []string) -> nocontract.Answer {\n value := struct #all_or_none {_tag: string, code: string, %s}{_tag = %s, code = %s, %s}\n switch encoded in nocontract.encode_json(value) {\n case nocontract.Encoded_JSON: return nocontract.Answer{body = nocontract.JSON_Answer{status = %d, code = %s, encoded = encoded}, allowed = allowed}\n case nocontract.JSON_Not_Encoded(type_of(value)):\n log.errorf(\"NoContract could not encode its shared failure: %%v\", encoded)\n return nocontract.Answer{body = %s, allowed = allowed}\n }\n unreachable()\n}\n", failure.Name, strings.Join(fields, " "), failure.Name, failure.Name, strings.Join(fields, " "), strconv.Quote(failure.Name), strconv.Quote(failure.Code.String()), strings.Join(values, " "), failure.Status.Code(), strconv.Quote(failure.Code.String()), writer.encodingFailure(failure.Name))
+		fmt.Fprintf(writer.source, "\n@(private)\nnc_fields_%s :: struct #all_or_none {%s}\n@(private, require_results)\nnc_shared_%s :: proc(fields: nc_fields_%s, allowed: []string) -> nocontract.Answer {\n value := struct #all_or_none {_tag: string, code: string, %s}{_tag = %s, code = %s, %s}\n switch encoded in nocontract.encode_json(value) {\n case nocontract.Encoded_JSON: return nocontract.Answer{body = nocontract.JSON_Answer{status = %d, code = %s, encoded = encoded}, allowed = allowed}\n case nocontract.JSON_Not_Encoded(type_of(value)):\n log.errorf(\"NoContract could not encode its shared failure: %%v\", encoded)\n return nocontract.Answer{body = %s, allowed = allowed}\n }\n unreachable()\n}\n", failure.Name, strings.Join(fields, " "), failure.Name, failure.Name, strings.Join(wireFields, " "), strconv.Quote(failure.Name), strconv.Quote(failure.Code.String()), strings.Join(values, " "), failure.Status.Code(), strconv.Quote(failure.Code.String()), writer.encodingFailure(failure.Name))
 	}
+}
+
+func sharedIntegerName(width description.IntegerWidth) string {
+	switch width.(type) {
+	case description.Signed8:
+		return "i8"
+	case description.Signed16:
+		return "i16"
+	case description.Signed32:
+		return "i32"
+	case description.Signed64:
+		return "i64"
+	case description.Unsigned8:
+		return "u8"
+	case description.Unsigned16:
+		return "u16"
+	case description.Unsigned32:
+		return "u32"
+	case description.Unsigned64:
+		return "u64"
+	case nil:
+	}
+	return ""
 }
 
 func (writer *bindingWriter) encodingFailure(answer string) string {

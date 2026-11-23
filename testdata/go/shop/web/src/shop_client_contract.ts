@@ -13,13 +13,15 @@ export const readCadBalance = Effect.gen(function*() {
 }).pipe(Effect.catchTag("ShopperNotFound", ({ code }) => Effect.succeed<"SH-1001">(code)))
 
 type Shop = Effect.Success<typeof shopClient>
-type BalanceMethod = "readBalance" | "topUp"
+type BalanceMethod = "readBalance" | "readDelayedBalance" | "topUp"
 type ReadBalance = Shop["balance"]["readBalance"]
 type ReadBalanceFailure = Effect.Error<ReturnType<ReadBalance>>
 type ShopperId = Parameters<ReadBalance>[0]["params"]["shopper_id"]
 type PlaceOrder = Shop["orders"]["place"]
 type CourierNames = keyof Parameters<PlaceOrder>[0]["payload"]["courier_notes"]
 type ShopCouriers = "drone" | "post"
+type ReadDelayedBalance = Shop["balance"]["readDelayedBalance"]
+type DelayedBalanceFailure = Effect.Error<ReturnType<ReadDelayedBalance>>
 type ExpectNever<Unexpected extends never> = Unexpected
 
 export type BalanceUsesGroupLocalNames = ExpectNever<
@@ -29,4 +31,8 @@ export type ReadBalanceRefusesTopUpFailure = ExpectNever<Extract<"TopUpRefused",
 export type ReadBalanceRefusesStringAndNumberIds = ExpectNever<Extract<"1.5e3" | 7, ShopperId>>
 export type PlaceOrderAcceptsExactlyTheShopCouriers = ExpectNever<
   Exclude<CourierNames, ShopCouriers> | Exclude<ShopCouriers, CourierNames>
+>
+
+export type DelayedBalanceDeclaresRequestExpiration = ExpectNever<
+  Exclude<"RequestDeadlineExceeded", DelayedBalanceFailure["_tag"]>
 >

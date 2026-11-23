@@ -1,15 +1,48 @@
 //// Reads shoppers' balances and takes top-up requests.
 
+import gleam/erlang/process
 import gleam/option.{None, Some}
+import nocontract_runtime/request_deadline.{type RequestLifetime}
 import shop/money.{type Currency, type Money, Cad, Money, Usd}
 import shop/read_outcome.{type ReadOutcome}
-import shop/scalars.{Instant}
+import shop/scalars.{type UInt16, Instant}
 import shop/shopper_errors
 import shop/top_up_outcome.{type TopUpOutcome}
 
 /// Names the shopper and the currency to read the balance in.
 pub type ReadInput {
   ReadInput(shopper_id: Int, currency: Currency)
+}
+
+/// Names the shopper, currency and the fixture's preparation delay.
+pub type DelayedReadInput {
+  DelayedReadInput(
+    shopper_id: Int,
+    currency: Currency,
+    delay_milliseconds: UInt16,
+  )
+}
+
+/// nocontract:route GET /shoppers/{shopper_id}/delayed-balance
+/// Reads a balance while the listener owns the request's cancellation deadline.
+pub fn read_delayed_balance(
+  input: DelayedReadInput,
+  lifetime: RequestLifetime,
+) -> ReadOutcome {
+  case request_deadline.cancellation(lifetime) {
+    request_deadline.RequestRunning -> {
+      let waited: Result(Nil, Nil) =
+        process.selector_receive(
+          process.new_selector(),
+          within: input.delay_milliseconds.value,
+        )
+      case waited {
+        Ok(Nil) | Error(Nil) -> Nil
+      }
+    }
+    request_deadline.DeadlineElapsed(timeout_milliseconds: _) -> Nil
+  }
+  read_balance(ReadInput(shopper_id: input.shopper_id, currency: input.currency))
 }
 
 /// Names the shopper and carries the amount to add.

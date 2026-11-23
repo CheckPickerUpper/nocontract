@@ -18,6 +18,38 @@ type SharedFailure struct {
 	Answers SharedAnswer
 	Doc     string
 	Message []MessagePart
+	Runtime SharedFailureRuntime
+}
+
+// SharedFailureRuntime is which runtime supplies a shared refusal's implementation.
+//
+//sumtype:decl
+type SharedFailureRuntime interface{ isSharedFailureRuntime() }
+
+// EveryRuntime is a refusal that every language's runtime implements.
+//
+//ergo:not-an-error
+type EveryRuntime struct{}
+
+// OdinRuntime is a refusal of Odin's native completion resources.
+//
+//ergo:not-an-error
+type OdinRuntime struct{}
+
+func (EveryRuntime) isSharedFailureRuntime() {}
+func (OdinRuntime) isSharedFailureRuntime()  {}
+
+// CommonRuntimeFailures is the response implementation supplied by every server runtime.
+func CommonRuntimeFailures() []SharedFailure {
+	failures := []SharedFailure{}
+	for _, failure := range SharedFailures() {
+		switch failure.Runtime.(type) {
+		case EveryRuntime:
+			failures = append(failures, failure)
+		case OdinRuntime, nil:
+		}
+	}
+	return failures
 }
 
 // Member is the failure as every client declares it.
@@ -76,7 +108,31 @@ func (MessageField) isMessagePart() {}
 func SharedFailures() []SharedFailure {
 	return []SharedFailure{
 		{
+			Name: "RequestCompletionUnavailable", Status: FailureStatus{code: http.StatusServiceUnavailable}, Code: "NC-1174",
+			Runtime: OdinRuntime{},
+			Fields: []Field{
+				{Name: FieldName{text: "route"}, Schema: Text{}},
+				{Name: FieldName{text: "operation"}, Schema: Text{}},
+				{Name: FieldName{text: "errno"}, Schema: Integer{Width: Signed32{}}},
+			},
+			Answers: AnsweredByEveryRoute{},
+			Doc:     "RequestCompletionUnavailable is a request whose native completion resource could not be used, with its route, operation and original operating system error number.",
+			Message: []MessagePart{MessageText{Text: "The request to "}, MessageField{Field: "route"}, MessageText{Text: " could not complete "}, MessageField{Field: "operation"}, MessageText{Text: ": operating system error "}, MessageField{Field: "errno"}},
+		},
+		{
+			Name: "RequestDeadlineExceeded", Status: FailureStatus{code: http.StatusServiceUnavailable}, Code: "NC-1170",
+			Runtime: EveryRuntime{},
+			Fields: []Field{
+				{Name: FieldName{text: "route"}, Schema: Text{}},
+				{Name: FieldName{text: "timeout_milliseconds"}, Schema: Integer{Width: Unsigned32{}}},
+			},
+			Answers: AnsweredByEveryRoute{},
+			Doc:     "RequestDeadlineExceeded is a request that exceeded its configured deadline, with its declared route and duration in whole milliseconds.",
+			Message: []MessagePart{MessageText{Text: "The request to "}, MessageField{Field: "route"}, MessageText{Text: " exceeded its "}, MessageField{Field: "timeout_milliseconds"}, MessageText{Text: " millisecond deadline."}},
+		},
+		{
 			Name: "RequestRefused", Status: FailureStatus{code: http.StatusBadRequest}, Code: "NC-1001",
+			Runtime: EveryRuntime{},
 			Fields: []Field{
 				{Name: FieldName{text: "part"}, Schema: Literals{Values: []string{"path", "query", "header", "body"}}},
 				{Name: FieldName{text: "name"}, Schema: Text{}},
@@ -96,6 +152,7 @@ func SharedFailures() []SharedFailure {
 		},
 		{
 			Name: "AnswerNotWritten", Status: FailureStatus{code: http.StatusInternalServerError}, Code: "NC-1002",
+			Runtime: EveryRuntime{},
 			Fields:  []Field{{Name: FieldName{text: "answer"}, Schema: Text{}}, {Name: FieldName{text: "reason"}, Schema: Text{}}},
 			Answers: AnsweredByEveryRoute{},
 			Doc: "AnswerNotWritten is a route whose outcome could not be written as JSON, or that answered no " +
@@ -104,6 +161,7 @@ func SharedFailures() []SharedFailure {
 		},
 		{
 			Name: "RouteNotFound", Status: FailureStatus{code: http.StatusNotFound}, Code: "NC-1069",
+			Runtime: EveryRuntime{},
 			Fields:  []Field{{Name: FieldName{text: "method"}, Schema: Text{}}, {Name: FieldName{text: "path"}, Schema: Text{}}},
 			Answers: AnsweredWithoutRoute{},
 			Doc:     "RouteNotFound is a request to a path no route declares.",
@@ -116,6 +174,7 @@ func SharedFailures() []SharedFailure {
 		},
 		{
 			Name: "MethodNotDeclared", Status: FailureStatus{code: http.StatusMethodNotAllowed}, Code: "NC-1070",
+			Runtime: EveryRuntime{},
 			Fields:  []Field{{Name: FieldName{text: "method"}, Schema: Text{}}, {Name: FieldName{text: "allowed"}, Schema: List{Item: Text{}}}},
 			Answers: AnsweredWithoutRoute{},
 			Doc: "MethodNotDeclared is a request to a declared path with a method no route at that path declares, " +

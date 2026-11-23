@@ -42,27 +42,9 @@ func TestShopBackendsConformToTheSameHTTPContract(t *testing.T) {
 		assertShopBodySchema(t, contract, request)
 	}
 	client := prepareShopClient(t, checkout, expectedFiles.client)
-	for _, backend := range []shopBackend{
-		{language: "go", prepare: copyGoShop, open: openGoShop},
-		{language: "odin", prepare: copyShop, open: openOdinShop},
-		{language: "gleam", prepare: copyGleamShop, open: openGleamShop},
-	} {
+	for _, backend := range shopBackends() {
 		t.Run(backend.language, func(t *testing.T) {
-			fixture := readShopFixture(t, filepath.Join(checkout, "testdata", backend.language, "shop"))
-			project := backend.prepare(t, fixture)
-			for _, command := range []string{"generate", "check"} {
-				result := running.Run(running.Request{Arguments: []string{command, "-project", project}, Context: t.Context()})
-				if result.ExitCode() != 0 {
-					t.Fatalf("%s %s exited %d:\n%s", command, project, result.ExitCode(), strings.Join(result.Lines(), "\n"))
-				}
-			}
-			generated := readShopGeneratedFiles(t, project)
-			assertShopGeneratedFile(t, shopFileComparison{artifact: "TypeScript", expected: expectedFiles.client, actual: generated.client})
-			assertShopGeneratedFile(t, shopFileComparison{artifact: "OpenAPI", expected: expectedFiles.document, actual: generated.document})
-			if t.Failed() {
-				return
-			}
-			served := backend.open(t, project)
+			served := openCheckedShop(t, checkout, backend, expectedFiles)
 			observed := []shopAnsweredRequest{}
 			for _, request := range requests {
 				t.Run(request.name, func(t *testing.T) {
@@ -76,6 +58,33 @@ func TestShopBackendsConformToTheSameHTTPContract(t *testing.T) {
 			assertShopObservations(t, contract, observed, served.finish())
 		})
 	}
+}
+
+func shopBackends() []shopBackend {
+	return []shopBackend{
+		{language: "go", prepare: copyGoShop, open: openGoShop},
+		{language: "odin", prepare: copyShop, open: openOdinShop},
+		{language: "gleam", prepare: copyGleamShop, open: openGleamShop},
+	}
+}
+
+func openCheckedShop(t *testing.T, checkout string, backend shopBackend, expectedFiles shopGeneratedFiles) shopServerAddress {
+	t.Helper()
+	fixture := readShopFixture(t, filepath.Join(checkout, "testdata", backend.language, "shop"))
+	project := backend.prepare(t, fixture)
+	for _, command := range []string{"generate", "check"} {
+		result := running.Run(running.Request{Arguments: []string{command, "-project", project}, Context: t.Context()})
+		if result.ExitCode() != 0 {
+			t.Fatalf("%s %s exited %d:\n%s", command, project, result.ExitCode(), strings.Join(result.Lines(), "\n"))
+		}
+	}
+	generated := readShopGeneratedFiles(t, project)
+	assertShopGeneratedFile(t, shopFileComparison{artifact: "TypeScript", expected: expectedFiles.client, actual: generated.client})
+	assertShopGeneratedFile(t, shopFileComparison{artifact: "OpenAPI", expected: expectedFiles.document, actual: generated.document})
+	if t.Failed() {
+		t.FailNow()
+	}
+	return backend.open(t, project)
 }
 
 func openGoShop(t *testing.T, project string) shopServerAddress {

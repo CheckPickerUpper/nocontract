@@ -52,7 +52,20 @@ type routeBinding struct {
 	output      compiler.Union
 	guard       outcome.Option[guardBinding]
 	headers     []headerDirective
+	lifetime    routeLifetimeInput
 }
+
+//sumtype:decl
+type routeLifetimeInput interface{ isRouteLifetimeInput() }
+
+//ergo:not-an-error
+type withoutRequestLifetime struct{}
+
+//ergo:not-an-error
+type withRequestLifetime struct{}
+
+func (withoutRequestLifetime) isRouteLifetimeInput() {}
+func (withRequestLifetime) isRouteLifetimeInput()    {}
 
 type guardBinding struct {
 	declaration compiler.Declaration
@@ -138,20 +151,36 @@ func (index *readIndex) route(source routeSource) outcome.Result[routeBinding] {
 		return outcome.Err[routeBinding](refused("compiled reflection did not include this route procedure"))
 	}
 	return outcome.Fold(requireType[compiler.Procedure](index.graph.Types[index.graph.Roots[root].Type], refused("route must be a procedure")), func(procedure compiler.Procedure) outcome.Result[routeBinding] {
-		if len(procedure.Parameters) != 1 || len(procedure.Results) != 1 {
+		if len(procedure.Parameters) < 1 || len(procedure.Parameters) > 2 || len(procedure.Results) != 1 {
 			return outcome.Err[routeBinding](refused("a route must take one typed input struct and return one named union"))
 		}
-		input, output := procedure.Parameters[0], procedure.Results[0]
-		return outcome.Fold(requireType[compiler.Named](index.graph.Types[input], refused("input must be named")), func(compiler.Named) outcome.Result[routeBinding] {
-			return outcome.Fold(requireType[compiler.Named](index.graph.Types[output], refused("outcome must be named")), func(compiler.Named) outcome.Result[routeBinding] {
-				return outcome.Fold(requireType[compiler.Union](index.base(output), refused("outcome must be a union")), func(union compiler.Union) outcome.Result[routeBinding] {
-					return outcome.Fold(index.readGuard(source), func(guard outcome.Option[guardBinding]) outcome.Result[routeBinding] {
-						return outcome.Ok(routeBinding{declaration: declaration, endpoint: description.EndpointName(declaration.Entity.Name), method: source.method, path: source.path, input: input, output: union, guard: guard, headers: source.headers})
+		return outcome.Fold(index.readRouteLifetime(procedure, refused("a route's optional second parameter must be nocontract:odin/runtime/requestlifetime.Handler_Lifetime")), func(lifetime routeLifetimeInput) outcome.Result[routeBinding] {
+			input, output := procedure.Parameters[0], procedure.Results[0]
+			return outcome.Fold(requireType[compiler.Named](index.graph.Types[input], refused("input must be named")), func(compiler.Named) outcome.Result[routeBinding] {
+				return outcome.Fold(requireType[compiler.Named](index.graph.Types[output], refused("outcome must be named")), func(compiler.Named) outcome.Result[routeBinding] {
+					return outcome.Fold(requireType[compiler.Union](index.base(output), refused("outcome must be a union")), func(union compiler.Union) outcome.Result[routeBinding] {
+						return outcome.Fold(index.readGuard(source), func(guard outcome.Option[guardBinding]) outcome.Result[routeBinding] {
+							return outcome.Ok(routeBinding{declaration: declaration, endpoint: description.EndpointName(declaration.Entity.Name), method: source.method, path: source.path, input: input, output: union, guard: guard, headers: source.headers, lifetime: lifetime})
+						}, outcome.Err[routeBinding])
 					}, outcome.Err[routeBinding])
 				}, outcome.Err[routeBinding])
 			}, outcome.Err[routeBinding])
 		}, outcome.Err[routeBinding])
 	}, outcome.Err[routeBinding])
+}
+
+func (index *readIndex) readRouteLifetime(procedure compiler.Procedure, refusal DeclarationRefused) outcome.Result[routeLifetimeInput] {
+	if len(procedure.Parameters) == 1 {
+		return outcome.Ok[routeLifetimeInput](withoutRequestLifetime{})
+	}
+	return outcome.Fold(requireType[compiler.Named](index.graph.Types[procedure.Parameters[1]], refusal), func(named compiler.Named) outcome.Result[routeLifetimeInput] {
+		for _, collection := range index.request.OdinCollections {
+			if collection.Name == "nocontract" && named.Package == "requestlifetime" && named.Name == "Handler_Lifetime" && filepath.Clean(named.File) == filepath.Join(collection.Directory, "odin", "runtime", "requestlifetime", "request_lifetime.odin") {
+				return outcome.Ok[routeLifetimeInput](withRequestLifetime{})
+			}
+		}
+		return outcome.Err[routeLifetimeInput](refusal)
+	}, outcome.Err[routeLifetimeInput])
 }
 
 func (index *readIndex) base(id int) compiler.Type {

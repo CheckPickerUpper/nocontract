@@ -29,7 +29,13 @@ func (writer *bindingWriter) routeDeclaration(position int, binding endpointBind
 		}
 		writer.source.WriteString(" }\n")
 	})
-	fmt.Fprintf(writer.source, " switch input in nc_input_%d(request, received, parameters) {\n case nocontract.Read_Value(%s):\n switch answer in nc_package_%d.%s(input.value) {\n", position, writer.nativeType(binding.native.input), writer.importDirectory(filepath.Dir(binding.native.declaration.File)), binding.native.declaration.Entity.Name)
+	lifetime := ""
+	switch binding.native.lifetime.(type) {
+	case withRequestLifetime:
+		lifetime = ", request.lifetime"
+	case withoutRequestLifetime, nil:
+	}
+	fmt.Fprintf(writer.source, " switch input in nc_input_%d(request, received, parameters) {\n case nocontract.Read_Value(%s):\n switch answer in nc_package_%d.%s(input.value%s) {\n", position, writer.nativeType(binding.native.input), writer.importDirectory(filepath.Dir(binding.native.declaration.File)), binding.native.declaration.Entity.Name, lifetime)
 	for _, variant := range binding.native.output.Variants {
 		fmt.Fprintf(writer.source, " case %s: return nc_answer_%d(answer)\n", writer.nativeType(variant), variant)
 	}

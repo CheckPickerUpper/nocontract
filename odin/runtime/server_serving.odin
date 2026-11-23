@@ -5,6 +5,7 @@ package nocontract
 import "core:nbio"
 import "core:net"
 import "core:log"
+import "core:mem"
 import "core:slice"
 import "core:time"
 
@@ -12,6 +13,7 @@ import http "../dependencies/odin-http"
 import "httpbinding"
 import requestlayers "layers"
 import "requestlog"
+import "requestlifetime"
 
 // Received_Request is a method and body odin-http read for a request.
 Received_Request :: struct #all_or_none {
@@ -34,11 +36,14 @@ Request :: struct #all_or_none {
 	query:   string,
 	headers: map[string]string,
 	content: Request_Content,
+	lifetime: requestlifetime.Handler_Lifetime,
 }
 
 // Binding is the generated dispatcher that returns only typed route answers and refusals.
 Binding :: struct #all_or_none {
 	select: proc(request: Request) -> Route_Plan,
+	deadline_exceeded: proc(route: string, timeout_milliseconds: u32) -> Answer,
+	completion_unavailable: proc(route: string, operation: string, errno: i32) -> Answer,
 }
 
 @(private, not_an_error)
@@ -60,6 +65,7 @@ TCP_Listen_Options :: struct #all_or_none {
 	endpoint: net.Endpoint,
 	ready:    Listener_Notice,
 	layers:   []requestlayers.Layer,
+	deadline: Request_Deadline,
 }
 
 // Listen_Options is the closed listener configuration, built through listen_on.
@@ -70,19 +76,19 @@ Listen_Options :: struct #all_or_none {
 // listen_on selects the TCP endpoint a generated server listens on.
 @(require_results)
 listen_on :: proc(endpoint: net.Endpoint) -> Listen_Options {
-	return Listen_Options{tcp = TCP_Listen_Options{endpoint = endpoint, ready = No_Ready_Notice{}, layers = {}}}
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = endpoint, ready = No_Ready_Notice{}, layers = {}, deadline = No_Deadline{}}}
 }
 
 // notify_when_ready observes the actual bound endpoint without exposing the socket or handler.
 @(require_results)
 notify_when_ready :: proc(options: Listen_Options, notify: proc(endpoint: net.Endpoint)) -> Listen_Options {
-	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = Ready_Notice{notify = notify}, layers = options.tcp.layers}}
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = Ready_Notice{notify = notify}, layers = options.tcp.layers, deadline = options.tcp.deadline}}
 }
 
 // with_layers selects ordered request and answer observers for the listener.
 @(require_results)
 with_layers :: proc(options: Listen_Options, layers: []requestlayers.Layer) -> Listen_Options {
-	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = slice.clone(layers)}}
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = slice.clone(layers), deadline = options.tcp.deadline}}
 }
 
 // Bound_Endpoint is the address assigned to a listener the runtime successfully opened.
@@ -202,7 +208,7 @@ serve_on_event_loop :: proc(options: TCP_Listen_Options, binding: Binding) -> Se
 	case Ready_Notice:
 		notice.notify(endpoint)
 	}
-	bound := Serving_API{binding = binding, layers = options.layers}
+	bound := Serving_API{binding = binding, layers = options.layers, deadline = options.deadline, allocator = context.allocator}
 	handler := http.Handler{
 		user_data = &bound,
 		next = {},
@@ -217,7 +223,7 @@ serve_on_event_loop :: proc(options: TCP_Listen_Options, binding: Binding) -> Se
 				)
 				httpbinding.receive_body(request, pending, answer_received_request)
 			case nil:
-				respond(response, binding^, Request{path = request.url.path, query = request.url.query, headers = request.headers._kv, content = Request_Line_Not_Received{}}, started)
+				respond(response, binding, Request{path = request.url.path, query = request.url.query, headers = request.headers._kv, content = Request_Line_Not_Received{}, lifetime = requestlifetime.No_Request_Deadline{}}, started)
 			}
 		},
 	}
@@ -237,6 +243,8 @@ serve_on_event_loop :: proc(options: TCP_Listen_Options, binding: Binding) -> Se
 Serving_API :: struct #all_or_none {
 	binding: Binding,
 	layers:  []requestlayers.Layer,
+	deadline: Request_Deadline,
+	allocator: mem.Allocator,
 }
 
 @(private)
@@ -256,18 +264,41 @@ answer_received_request :: proc(pending: ^Pending_Request, receipt: httpbinding.
 		query = pending.request.url.query,
 		headers = pending.request.headers._kv,
 		content = Received_Request{method = pending.method, body = receipt},
+		lifetime = requestlifetime.No_Request_Deadline{},
 	}
-	respond(pending.response, pending.binding^, request, pending.started)
+	respond(pending.response, pending.binding, request, pending.started)
 }
 
 @(private)
-respond :: proc(response: ^http.Response, api: Serving_API, request: Request, started: time.Tick) {
+respond :: proc(response: ^http.Response, api: ^Serving_API, request: Request, started: time.Tick) {
 	plan := api.binding.select(request)
 	visit := visit_request(plan, request.path)
-	requestlayers.enter(api.layers, visit)
+	switch selected in plan.selection {
+	case Selected_Route:
+		switch deadline in api.deadline {
+		case Configured_Deadline:
+			start_deadline_request(api, response, request, selected, visit, deadline, started)
+			return
+		case No_Deadline:
+		}
+	case Immediate_Answer:
+	}
+	answer := answer_through_layers(api.layers, visit, plan, request)
+	publish_answer(response, visit, answer, started)
+}
+
+@(private, require_results)
+answer_through_layers :: proc(layers: []requestlayers.Layer, visit: requestlayers.Visit, plan: Route_Plan, request: Request) -> Answer {
+	requestlayers.enter(layers, visit)
 	answer := answer_planned_route(plan, request)
 	answered := describe_answer(answer)
-	requestlayers.leave(api.layers, visit, answered)
+	requestlayers.leave(layers, visit, answered)
+	return answer
+}
+
+@(private)
+publish_answer :: proc(response: ^http.Response, visit: requestlayers.Visit, answer: Answer, started: time.Tick) {
+	answered := describe_answer(answer)
 	switch emitted in requestlog.log_request(requestlog.Request_Log{route = visit.route, method = visit.method, status = answered.status, code = answered.code, duration = time.tick_since(started)}) {
 	case requestlog.Request_Logged:
 	case requestlog.Request_Log_Not_Encoded:

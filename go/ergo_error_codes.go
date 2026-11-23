@@ -682,3 +682,89 @@ func (failure ListenerNotStopped) Causes() []error {
 	}
 	return causes
 }
+
+func (RequestDeadlineExceeded) ErrorCode() ergo.Code { return "NC-1170" }
+
+// RequestDeadlineExceededArguments holds the arguments RequestDeadlineExceeded's message names, in the order the message first names them.
+type RequestDeadlineExceededArguments struct {
+	Route               string `json:"Route"`
+	TimeoutMilliseconds uint32 `json:"TimeoutMilliseconds"`
+}
+
+// ReportArguments marks RequestDeadlineExceededArguments as the arguments of a report.
+func (RequestDeadlineExceededArguments) ReportArguments() {}
+
+// Report is RequestDeadlineExceeded's code, its message in language and the arguments the message names.
+func (failure RequestDeadlineExceeded) Report(language messages.Language) ergo.Report {
+	arguments := RequestDeadlineExceededArguments{Route: string(failure.Route), TimeoutMilliseconds: uint32(failure.TimeoutMilliseconds)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The request to "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " exceeded its "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " millisecond deadline."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1170", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Route}, messageformat.UnsignedWhole{Value: uint64(arguments.TimeoutMilliseconds)}}}), Arguments: arguments}
+}
+
+// Causes is every error RequestDeadlineExceeded holds, then the causes of every failure it holds.
+func (failure RequestDeadlineExceeded) Causes() []error {
+	return nil
+}
+
+func (RequestDeadlineOutside) ErrorCode() ergo.Code { return "NC-1171" }
+
+// RequestDeadlineOutsideArguments holds the arguments RequestDeadlineOutside's message names, in the order the message first names them.
+type RequestDeadlineOutsideArguments struct {
+	TimeoutMilliseconds uint32 `json:"TimeoutMilliseconds"`
+	Least               uint32 `json:"Least"`
+	Most                uint32 `json:"Most"`
+}
+
+// ReportArguments marks RequestDeadlineOutsideArguments as the arguments of a report.
+func (RequestDeadlineOutsideArguments) ReportArguments() {}
+
+// Report is RequestDeadlineOutside's code, its message in language and the arguments the message names.
+func (failure RequestDeadlineOutside) Report(language messages.Language) ergo.Report {
+	arguments := RequestDeadlineOutsideArguments{TimeoutMilliseconds: uint32(failure.TimeoutMilliseconds), Least: uint32(failure.Least), Most: uint32(failure.Most)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The request deadline "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " milliseconds is outside "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " to "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1171", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.UnsignedWhole{Value: uint64(arguments.TimeoutMilliseconds)}, messageformat.UnsignedWhole{Value: uint64(arguments.Least)}, messageformat.UnsignedWhole{Value: uint64(arguments.Most)}}}), Arguments: arguments}
+}
+
+// Causes is every error RequestDeadlineOutside holds, then the causes of every failure it holds.
+func (failure RequestDeadlineOutside) Causes() []error {
+	return nil
+}
+
+func (RequestCompletionUnavailable) ErrorCode() ergo.Code { return "NC-1174" }
+
+// RequestCompletionUnavailableArguments holds the arguments RequestCompletionUnavailable's message names, in the order the message first names them.
+type RequestCompletionUnavailableArguments struct {
+	Route     string `json:"Route"`
+	Operation string `json:"Operation"`
+	Errno     int32  `json:"Errno"`
+}
+
+// ReportArguments marks RequestCompletionUnavailableArguments as the arguments of a report.
+func (RequestCompletionUnavailableArguments) ReportArguments() {}
+
+// Report is RequestCompletionUnavailable's code, its message in language and the arguments the message names.
+func (failure RequestCompletionUnavailable) Report(language messages.Language) ergo.Report {
+	arguments := RequestCompletionUnavailableArguments{Route: string(failure.Route), Operation: string(failure.Operation), Errno: int32(failure.Errno)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The request to "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " could not complete "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ": operating system error "}, messageformat.Argument{Index: 2}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1174", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Route}, messageformat.TextValue{Text: arguments.Operation}, messageformat.SignedWhole{Value: int64(arguments.Errno)}}}), Arguments: arguments}
+}
+
+// Causes is every error RequestCompletionUnavailable holds, then the causes of every failure it holds.
+func (failure RequestCompletionUnavailable) Causes() []error {
+	return nil
+}

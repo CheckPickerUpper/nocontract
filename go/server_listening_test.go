@@ -1,6 +1,7 @@
 package nocontract
 
 import (
+	"context"
 	"errors"
 	"net"
 	"testing"
@@ -25,14 +26,15 @@ func TestStopWaitsForTheBoundListenerBeforeReportingSuccess(t *testing.T) {
 		}()
 		synctest.Test(t, func(t *testing.T) {
 			beginServing, shutdownStarted := make(chan struct{}), make(chan struct{})
-			server := newHTTPServer(t.Context(), ListenOn(listener.Addr().String()), BindRoutes([]Endpoint{}, []Layer{}), listener.Addr().String())
+			workers := &errgroup.Group{}
+			server := newHTTPServer(t.Context(), ListenOn(listener.Addr().String()), BindRoutes([]Endpoint{}, []Layer{}), listener.Addr().String(), workers)
 			server.RegisterOnShutdown(func() { close(shutdownStarted) })
 			serving := &errgroup.Group{}
 			serving.Go(func() error {
 				<-beginServing
 				return serveListener(server, listener)
 			})
-			listening := ListeningServer{server: server, tasks: serving}
+			listening := newListeningServer(server, serving, workers)
 			stopped := make(chan outcome.Result[ServerStopped], 1)
 			stopping := &errgroup.Group{}
 			stopping.Go(func() error {
@@ -59,4 +61,46 @@ func TestStopWaitsForTheBoundListenerBeforeReportingSuccess(t *testing.T) {
 		})
 		return struct{}{}
 	}, func(cause error) struct{} { t.Fatal(cause); return struct{}{} })
+}
+
+func TestStopHonorsItsContextWhileJoiningExpiredRequestWorkers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		workers := &errgroup.Group{}
+		stopping := &errgroup.Group{}
+		workers.Go(func() error { <-release; return nil })
+		defer func() {
+			close(release)
+			outcome.ForEachOption(outcome.EmptyableToOption(workers.Wait()), func(cause error) { t.Error(cause) })
+			outcome.ForEachOption(outcome.EmptyableToOption(stopping.Wait()), func(cause error) { t.Error(cause) })
+		}()
+		server := newHTTPServer(t.Context(), ListenOn("127.0.0.1:0"), BindRoutes([]Endpoint{}, []Layer{}), "127.0.0.1:0", workers)
+		listening := newListeningServer(server, &errgroup.Group{}, workers)
+		shutdownContext, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		stopped := make(chan outcome.Result[ServerStopped], 2)
+		for range 2 {
+			stopping.Go(func() error { stopped <- listening.Stop(shutdownContext); return nil })
+		}
+		synctest.Wait()
+		cancel()
+		synctest.Wait()
+		for range 2 {
+			select {
+			case result := <-stopped:
+				outcome.Fold(result, func(ServerStopped) struct{} {
+					t.Error("Stop reported success while its expired request worker was still running")
+					return struct{}{}
+				}, func(cause error) struct{} {
+					failure, refused := errors.AsType[ListenerNotStopped](cause)
+					if !refused || failure.Address != listening.Address() || !errors.Is(failure.Cause, context.Canceled) {
+						t.Errorf("Stop returned %v; want ListenerNotStopped retaining its address and cancellation", cause)
+					}
+					return struct{}{}
+				})
+			default:
+				t.Error("Stop kept waiting for its expired request worker after its context was cancelled")
+			}
+		}
+	})
 }

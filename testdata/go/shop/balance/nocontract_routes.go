@@ -30,6 +30,17 @@ func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
 	return nocontract.NoOutcome()
 }
 
+// NocontractRouteReadDelayedBalance answers one request to GET /shoppers/{shopper_id}/delayed-balance. Only the generated server calls it.
+func NocontractRouteReadDelayedBalance(receiver Ledger, request *http.Request) nocontract.Answer {
+	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(readShopperID int) nocontract.Answer {
+		return nocontract.Then(nocontract.Literal[Currency](nocontract.Query(request, "currency"), "CAD", "USD"), func(readCurrency Currency) nocontract.Answer {
+			return nocontract.Then(nocontract.Unsigned[uint16](nocontract.Query(request, "delay_milliseconds")), func(readDelayMilliseconds uint16) nocontract.Answer {
+				return nocontractAnswerReadOutcome(receiver.ReadDelayedBalance(request.Context(), DelayedReadInput{ShopperID: readShopperID, Currency: readCurrency, DelayMilliseconds: readDelayMilliseconds}))
+			})
+		})
+	})
+}
+
 // NocontractRouteTopUp answers one request to POST /shoppers/{shopper_id}/top-ups. Only the generated server calls it.
 func NocontractRouteTopUp(request *http.Request) nocontract.Answer {
 	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(readShopperID int) nocontract.Answer {
