@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -21,14 +20,10 @@ import (
 // An empty frontend can generate and check the same Gleam route Monzae serves.
 func TestGleamLivenessGeneratesAndChecksAClientInAnEmptyFrontend(t *testing.T) {
 	directory := t.TempDir()
-	checkout := scratchproject.PathOrStop(t, "locating NoContract", outcome.TupleToResult(filepath.Abs("..")))
-	manifestPath := filepath.Join(checkout, "testdata", "gleam", "shop", "gleam.toml")
-	manifest := scratchproject.BytesOrStop(t, "reading the native example manifest", outcome.TupleToResult(os.ReadFile(manifestPath)))
-	runtime := filepath.Join(checkout, "gleam", "runtime")
-	readWebProject(t, runtime)
-	manifest = bytes.ReplaceAll(manifest, []byte(`"../../../gleam/runtime"`), []byte(strconv.Quote(runtime)))
-	manifest = bytes.ReplaceAll(manifest, []byte(`"nocontract_shop"`), []byte(`"monzae_client"`))
-	scratchproject.WriteFile(t, directory, "gleam.toml", manifest)
+	scratchproject.WriteFile(t, directory, "gleam.toml", []byte(`name = "monzae_client"
+version = "0.1.0"
+target = "erlang"
+`))
 	scratchproject.WriteFile(t, directory, "src/monzae/health/read_liveness.gleam", []byte(`pub type LivenessRequest {
   LivenessRequest
 }
