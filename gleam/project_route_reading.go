@@ -130,7 +130,11 @@ func (index projectIndex) projectBindings(request native.Request, routes []route
 	}
 	declared := assembling.Declared{API: request.API, Groups: declaredGroups, Members: members, Structs: structs}
 	return native.Project{Declared: declared, Generate: func(checked assembling.APIAssembled) outcome.Result[[]native.File] {
-		return bindings.Generate(bindings.Project{Directory: request.Directory, Server: request.Server, Routes: nativeRoutes, Guards: nativeGuards, Records: index.records}, checked)
+		return outcome.Fold(bindings.Generate(bindings.Project{Directory: request.Directory, Server: request.Server, Routes: nativeRoutes, Guards: nativeGuards, Records: index.records}, checked), func(files []native.File) outcome.Result[[]native.File] {
+			return outcome.Fold(bindings.GenerateFilesTest(request), func(test native.File) outcome.Result[[]native.File] {
+				return outcome.Ok(append(files, test))
+			}, outcome.Err[[]native.File])
+		}, outcome.Err[[]native.File])
 	}, Execution: native.GleamListener{Directory: request.Directory}}
 }
 
