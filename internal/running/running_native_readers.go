@@ -12,8 +12,9 @@ import (
 )
 
 func readNative(context context.Context, backend projectfile.Backend, request native.Request) outcome.Result[native.Project] {
-	switch backend.(type) {
+	switch backend := backend.(type) {
 	case projectfile.OdinBackend:
+		request.OdinCollections = backend.Collections()
 		return odin.Read(context, request)
 	case projectfile.GleamBackend:
 		return gleam.Read(context, request)

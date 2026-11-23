@@ -188,6 +188,10 @@ OpenAPI output and version, and the server output folder. Paths are relative to
 description as the OpenAPI document. The API name must be a TypeScript identifier. Configuration errors name their
 line and column.
 
+Odin projects can set `collections` to an object mapping import collection names to directories.
+For example, `"collections": {"credentials": "./packages"}` lets a route import
+`"credentials:verification"` from the `verification` package under that directory.
+
 ```json
 {
   "language": "go",

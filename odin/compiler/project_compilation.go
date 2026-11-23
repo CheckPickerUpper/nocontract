@@ -15,6 +15,8 @@ import (
 	"text/scanner"
 
 	"github.com/CheckPickerUpper/outcome"
+
+	"github.com/CheckPickerUpper/nocontract/internal/native"
 )
 
 // Attribute is an attribute the compiler resolved on a declaration.
@@ -185,9 +187,13 @@ func (failure ReflectionFailed) Error() string {
 // Unwrap preserves the compiler's full command and diagnostics.
 func (failure ReflectionFailed) Unwrap() error { return failure.Cause }
 
-// Flags is the compiler's strictness shared by checking, reflection, and generated bindings.
-func Flags(packages []string) []string {
-	return []string{"-vet", "-vet-packages:" + strings.Join(packages, ","), "-vet-cast", "-vet-using-param", "-vet-unused-procedures", "-strict-style", "-disallow-do", "-warnings-as-errors", "-custom-attribute:error_code,not_an_error"}
+// Flags applies the compiler's common strictness and the project's import collections.
+func Flags(packages []string, collections ...native.OdinCollection) []string {
+	flags := []string{"-vet", "-vet-packages:" + strings.Join(packages, ","), "-vet-cast", "-vet-using-param", "-vet-unused-procedures", "-strict-style", "-disallow-do", "-warnings-as-errors", "-custom-attribute:error_code,not_an_error"}
+	for _, collection := range collections {
+		flags = append(flags, "-collection:"+collection.Name+"="+collection.Directory)
+	}
+	return flags
 }
 
 // Run captures stdout separately so compiler diagnostics cannot become protocol data.
@@ -203,12 +209,12 @@ func Run(context context.Context, directory string, arguments []string) outcome.
 }
 
 // ReadDeclarations checks the packages and retrieves source identities and attached comments.
-func ReadDeclarations(context context.Context, directory, scratch string, packages []string) outcome.Result[[]Declaration] {
+func ReadDeclarations(context context.Context, directory, scratch string, packages []string, collections ...native.OdinCollection) outcome.Result[[]Declaration] {
 	declarations := outcome.Ok([]Declaration{})
 	for index, path := range packages {
 		declarations = outcome.Fold(declarations, func(previous []Declaration) outcome.Result[[]Declaration] {
 			export := filepath.Join(scratch, fmt.Sprintf("semantics-%d.json", index))
-			arguments := append([]string{"odin", "check", filepath.Join(directory, path), "-no-entry-point"}, Flags([]string{"nocontract_probe"})...)
+			arguments := append([]string{"odin", "check", filepath.Join(directory, path), "-no-entry-point"}, Flags([]string{"nocontract_probe"}, collections...)...)
 			arguments = append(arguments, "-export-semantics:json", "-export-semantics-file:"+export)
 			return outcome.Fold(Run(context, directory, arguments), func([]byte) outcome.Result[[]Declaration] {
 				return outcome.Fold(decodeFile(export, Semantics{Files: []string{}, Entities: []Entity{}}), func(semantics Semantics) outcome.Result[[]Declaration] {
@@ -327,7 +333,7 @@ func attributeStart(tokens []sourceToken, end int) int {
 }
 
 // ReflectProcedures compiles a reflection program against the selected procedures.
-func ReflectProcedures(context context.Context, directory, scratch string, packages []string, roots []Declaration) outcome.Result[Graph] {
+func ReflectProcedures(context context.Context, directory, scratch string, packages []string, roots []Declaration, collections ...native.OdinCollection) outcome.Result[Graph] {
 	if len(roots) == 0 {
 		return outcome.Ok(Graph{Types: []Type{}, Roots: []Root{}})
 	}
@@ -362,7 +368,7 @@ func ReflectProcedures(context context.Context, directory, scratch string, packa
 	return outcome.FoldOption(outcome.EmptyableToOption(os.WriteFile(path, []byte(source.String()), 0o644)), func(cause error) outcome.Result[Graph] {
 		return outcome.Err[Graph](SourceUnwritable{Path: path, Contents: []byte(source.String()), Cause: cause})
 	}, func() outcome.Result[Graph] {
-		arguments := append([]string{"odin", "run", scratch}, Flags([]string{"nocontract_probe"})...)
+		arguments := append([]string{"odin", "run", scratch}, Flags([]string{"nocontract_probe"}, collections...)...)
 		arguments = append(arguments, "-out:"+filepath.Join(scratch, "reflection"))
 		return outcome.Fold(Run(context, directory, arguments), func(content []byte) outcome.Result[Graph] {
 			graph := graphJSON{Types: []compilerTypeJSON{}, Roots: []Root{}}

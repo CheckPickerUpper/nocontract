@@ -10,10 +10,17 @@ import (
 
 // Request names the project folder, packages to read, API, and generated server folder.
 type Request struct {
+	Directory       string
+	Packages        []string
+	API             assembling.NamedAPI
+	Server          string
+	OdinCollections []OdinCollection
+}
+
+// OdinCollection is a named directory that Odin searches for imported packages.
+type OdinCollection struct {
+	Name      string
 	Directory string
-	Packages  []string
-	API       assembling.NamedAPI
-	Server    string
 }
 
 // Project is a compiler's declarations and the native bindings for serving them.

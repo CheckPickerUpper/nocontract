@@ -71,13 +71,13 @@ func Read(context context.Context, request native.Request) outcome.Result[native
 }
 
 func readProject(context context.Context, request native.Request, scratch string) outcome.Result[native.Project] {
-	return outcome.Fold(compiler.ReadDeclarations(context, request.Directory, scratch, request.Packages), func(declarations []compiler.Declaration) outcome.Result[native.Project] {
+	return outcome.Fold(compiler.ReadDeclarations(context, request.Directory, scratch, request.Packages, request.OdinCollections...), func(declarations []compiler.Declaration) outcome.Result[native.Project] {
 		return outcome.Fold(readDocumentation(declarations), func(documentation documentedProject) outcome.Result[native.Project] {
 			if len(documentation.routes) == 0 {
 				return outcome.Err[native.Project](DeclarationRefused{Position: request.API.Position, Declaration: request.Directory, Rule: "no //nocontract:route procedure was declared"})
 			}
 			procedures := reflectedProcedures(declarations, documentation.routes)
-			return outcome.Fold(compiler.ReflectProcedures(context, request.Directory, scratch, request.Packages, procedures), func(graph compiler.Graph) outcome.Result[native.Project] {
+			return outcome.Fold(compiler.ReflectProcedures(context, request.Directory, scratch, request.Packages, procedures, request.OdinCollections...), func(graph compiler.Graph) outcome.Result[native.Project] {
 				index := &readIndex{request: request, declarations: declarations, documentation: documentation, graph: graph, structs: []assembling.DeclaredStruct{}, members: []assembling.DeclaredMember{}}
 				return index.project()
 			}, outcome.Err[native.Project])
@@ -103,7 +103,7 @@ func (index *readIndex) project() outcome.Result[native.Project] {
 				})
 			}
 			declared := assembling.Declared{API: index.request.API, Groups: groups, Members: index.members, Structs: index.structs}
-			arguments := append([]string{"run", index.request.Server}, compiler.Flags([]string{"nocontract_server"})...)
+			arguments := append([]string{"run", index.request.Server}, compiler.Flags([]string{"nocontract_server"}, index.request.OdinCollections...)...)
 			arguments = append(arguments, "-out:"+filepath.Join(index.request.Directory, ".scratch", "nocontract-odin-server"))
 			return outcome.Ok(native.Project{Declared: declared, Execution: native.OdinDispatcher{Guards: guarded, Command: native.Command{Directory: index.request.Directory, Executable: "odin", Arguments: arguments}}, Generate: func(assembling.APIAssembled) outcome.Result[[]native.File] {
 				return outcome.Fold(generateBindings(index.request, index.graph, bindings), func(files []native.File) outcome.Result[[]native.File] {

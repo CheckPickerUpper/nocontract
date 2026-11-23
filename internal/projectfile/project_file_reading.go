@@ -16,6 +16,7 @@ import (
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/internal/keyed"
+	"github.com/CheckPickerUpper/nocontract/internal/native"
 )
 
 // Project is a project file read: the file itself, its backend's language, the package patterns
@@ -85,7 +86,12 @@ type GoBackend struct{}
 // OdinBackend is a backend written in Odin.
 //
 //ergo:not-an-error
-type OdinBackend struct{}
+type OdinBackend struct{ collections []native.OdinCollection }
+
+// Collections returns the Odin project's named compiler search directories.
+func (backend OdinBackend) Collections() []native.OdinCollection {
+	return slices.Clone(backend.collections)
+}
 
 // GleamBackend is a backend written in Gleam.
 //
@@ -154,7 +160,7 @@ func (parse *projectParse) project(root readValue) outcome.Option[Project] {
 		parse.refuse(root.start, ProjectNotObject{Written: root.written})
 		return outcome.None[Project]()
 	}
-	fields := parse.fields(object, "", []string{"language", "packages", "typescript", "api", "openapi", "server"})
+	fields := parse.fields(object, "", []string{"language", "packages", "typescript", "api", "openapi", "server", "collections"})
 	directory := filepath.Dir(parse.file)
 	language := parse.backend(fields, root.start)
 	packages := parse.patterns(fields, root.start)
@@ -195,14 +201,14 @@ func keyPath(prefix, name string) string {
 	return prefix + "." + name
 }
 
-// fields is each key of object that names one of keys, with its first field, refusing every other
-// key and every key written again.
+// fields keeps the first field for each allowed key and refuses repeats. A nil key list
+// accepts every key.
 func (parse *projectParse) fields(object jsonObject, prefix string, keys []string) map[string]jsonField {
 	found := map[string]jsonField{}
 	for _, field := range object.fields {
 		first, isRepeated := found[field.key]
 		switch {
-		case !slices.Contains(keys, field.key):
+		case keys != nil && !slices.Contains(keys, field.key):
 			parse.refuse(field.keyStart, KeyUnknown{Key: keyPath(prefix, field.key)})
 		case isRepeated:
 			parse.refuse(field.keyStart, KeyRepeated{Key: keyPath(prefix, field.key), First: parse.at(first.keyStart)})
@@ -255,7 +261,7 @@ func (parse *projectParse) backend(fields map[string]jsonField, objectStart int)
 			for _, backend := range types {
 				name := backend.language()
 				if name == language {
-					return outcome.Some(backend)
+					return outcome.Some(parse.backendWithCollections(backend, fields))
 				}
 				known = append(known, name)
 			}
