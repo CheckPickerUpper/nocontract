@@ -92,6 +92,15 @@ type Guard struct {
 	Scope    string
 }
 
+// Header binds a native input field to the header spelling written on its route.
+//
+//ergo:not-an-error
+type Header struct {
+	Field    string
+	Name     string
+	Position assembling.Position
+}
+
 //ergo:not-an-error
 type statusDirective struct{ Status description.Status }
 
@@ -100,6 +109,7 @@ type literalDirective struct{ Spelling string }
 
 func (routeDirective) isDirective()   {}
 func (Guard) isDirective()            {}
+func (Header) isDirective()           {}
 func (statusDirective) isDirective()  {}
 func (literalDirective) isDirective() {}
 
@@ -124,6 +134,11 @@ func parseDocumentation(documentation string, position assembling.Position) outc
 		}
 		name := words[0]
 		return outcome.Fold(parseDirective(line, name, words[1:]), func(parsed directive) outcome.Result[attachedDirective] {
+			switch parsed.(type) {
+			case Header:
+				return outcome.Ok(attachedDirective{statement: line, value: parsed})
+			case routeDirective, Guard, statusDirective, literalDirective, nil:
+			}
 			if previous, seen := first[name]; seen {
 				return outcome.Err[attachedDirective](directiveRepeated{First: previous, Repeated: line})
 			}
@@ -138,6 +153,11 @@ func parseDirective(line statement, name string, arguments []string) outcome.Res
 		return outcome.Err[directive](directiveArgumentsWrong{Statement: line, Expected: expected})
 	}
 	switch name {
+	case "header":
+		if len(arguments) != 2 {
+			return wrong("one public input field and one HTTP header name")
+		}
+		return outcome.Ok[directive](Header{Field: arguments[0], Name: arguments[1], Position: line.Position})
 	case "route":
 		if len(arguments) != 2 {
 			return wrong("an HTTP method and absolute route path")

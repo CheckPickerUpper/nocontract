@@ -8,12 +8,6 @@ func (failed backendMissing) Error() string {
 	return fmt.Sprintf("%s has no backend language", failed.Directory)
 }
 
-type goServerNeedsMain struct{ Directory string }
-
-func (failed goServerNeedsMain) Error() string {
-	return fmt.Sprintf("the Go project in %s starts its generated server in its own main package", failed.Directory)
-}
-
 type nativeContractMissing struct{ Directory string }
 
 func (failed nativeContractMissing) Error() string {

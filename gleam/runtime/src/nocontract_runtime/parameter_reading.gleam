@@ -3,9 +3,10 @@ import gleam/dynamic/decode
 import gleam/int
 import gleam/json
 import gleam/list
+import gleam/string
 import nocontract_runtime/value_reading as values
 
-/// One supported URL parameter shape from the shared description.
+/// One supported textual parameter shape from the shared description.
 pub type ParameterSchema {
   TextParameter
   IntegerParameter(least: Int, most: Int, parser: String)
@@ -13,9 +14,10 @@ pub type ParameterSchema {
   LiteralParameter(values: List(String))
 }
 
-/// Why a URL parameter could not be read as the declared type.
+/// Why a textual parameter could not be read as the declared type.
 pub type ParameterRefusal {
   ParameterMissing(name: String)
+  HeaderMissing(name: String)
   DecimalNotCanonical(read: String)
   IntegerOutside(read: String, least: Int, most: Int, parser: String)
   TruthUnreadable(read: String)
@@ -23,7 +25,7 @@ pub type ParameterRefusal {
   NativeMismatch(read: String, errors: List(decode.DecodeError))
 }
 
-/// Reads a present URL value into the native constructor's declared scalar shape.
+/// Reads present text into the native constructor's declared scalar shape.
 pub fn read(
   text: String,
   schema: ParameterSchema,
@@ -50,6 +52,23 @@ pub fn read_query(
   case list.key_find(query, name) {
     Ok(text) -> read(text, schema, decoder)
     Error(Nil) -> Error(ParameterMissing(name:))
+  }
+}
+
+/// Combines matching header lines in wire order before reading the declared scalar.
+pub fn read_header(
+  headers: List(#(String, String)),
+  name: String,
+  schema: ParameterSchema,
+  decoder: decode.Decoder(a),
+) -> Result(a, ParameterRefusal) {
+  let values =
+    headers
+    |> list.filter(fn(header) { string.lowercase(header.0) == name })
+    |> list.map(fn(header) { header.1 })
+  case values {
+    [] -> Error(HeaderMissing(name:))
+    [_, ..] -> read(string.join(values, ", "), schema, decoder)
   }
 }
 
@@ -88,6 +107,7 @@ fn parse(
 pub fn describe(refusal: ParameterRefusal) -> String {
   case refusal {
     ParameterMissing(..) -> "the query parameter is missing"
+    HeaderMissing(..) -> "the header is missing"
     DecimalNotCanonical(read:) ->
       json.to_string(json.string(read)) <> " " <> values.decimal_requirement()
     IntegerOutside(read:, parser:, ..) ->
@@ -104,7 +124,7 @@ pub fn describe(refusal: ParameterRefusal) -> String {
       json.to_string(json.string(read))
       <> " is not one of the values this field accepts."
     NativeMismatch(read:, errors:) ->
-      "native URL value "
+      "native parameter value "
       <> read
       <> ": "
       <> int.to_string(list.length(errors))

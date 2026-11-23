@@ -1,11 +1,13 @@
 package nocontract_test
 
 import (
+	"context"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
+	"github.com/CheckPickerUpper/outcome"
 )
 
 // answeredWith is a route answering every request with tag, so a test can tell which route ran.
@@ -36,11 +38,25 @@ func TestATextSegmentTakesARequestBeforeAParameterAtTheSamePlace(t *testing.T) {
 	} {
 		t.Run(each.name, func(t *testing.T) {
 			t.Parallel()
-			recorder := httptest.NewRecorder()
-			nocontract.Respond(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, each.path, http.NoBody), each.endpoints, []nocontract.Layer{})
-			if recorder.Code != http.StatusOK || recorder.Body.String() != each.body {
-				t.Fatalf("GET %s was answered %d %s; want 200 %s", each.path, recorder.Code, recorder.Body.String(), each.body)
-			}
+			outcome.Fold(nocontract.Listen(t.Context(), nocontract.ListenOn("127.0.0.1:0"), nocontract.BindRoutes(each.endpoints, []nocontract.Layer{})), func(server nocontract.ListeningServer) struct{} {
+				t.Cleanup(func() {
+					outcome.Fold(server.Stop(context.WithoutCancel(t.Context())), func(nocontract.ServerStopped) struct{} { return struct{}{} }, func(cause error) struct{} { t.Error(cause); return struct{}{} })
+				})
+				outcome.Fold(outcome.TupleToResult(http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+server.Address()+each.path, http.NoBody)), func(request *http.Request) struct{} {
+					return outcome.Fold(outcome.TupleToResult(http.DefaultClient.Do(request)), func(response *http.Response) struct{} {
+						defer func() {
+							outcome.ForEachOption(outcome.EmptyableToOption(response.Body.Close()), func(cause error) { t.Error(cause) })
+						}()
+						return outcome.Fold(outcome.TupleToResult(io.ReadAll(response.Body)), func(body []byte) struct{} {
+							if response.StatusCode != http.StatusOK || string(body) != each.body {
+								t.Errorf("GET %s was answered %d %s; want 200 %s", each.path, response.StatusCode, body, each.body)
+							}
+							return struct{}{}
+						}, func(cause error) struct{} { t.Fatal(cause); return struct{}{} })
+					}, func(cause error) struct{} { t.Fatal(cause); return struct{}{} })
+				}, func(cause error) struct{} { t.Fatal(cause); return struct{}{} })
+				return struct{}{}
+			}, func(cause error) struct{} { t.Fatal(cause); return struct{}{} })
 		})
 	}
 }

@@ -35,6 +35,7 @@ func New(layers []nocontract.Layer, balanceLedger balance.Ledger, balanceShopper
 			}},
 			{Method: "POST", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "top-ups"}}, Answer: func(request *http.Request) nocontract.Answer { return balance.NocontractRouteTopUp(request) }},
 			{Method: "POST", Path: []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}, nocontract.PathText{Text: "orders"}}, Answer: func(request *http.Request) nocontract.Answer { return orders.NocontractRoutePlace(request) }},
+			{Method: "GET", Path: []nocontract.PathSegment{nocontract.PathText{Text: "headers"}, nocontract.PathText{Text: "order-count"}}, Answer: func(request *http.Request) nocontract.Answer { return orders.NocontractRouteReadOrderCount(request) }},
 		}, layers)})
 	}, mo.Err[API])
 }

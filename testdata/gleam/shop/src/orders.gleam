@@ -47,3 +47,23 @@ pub type PlaceOutcome {
 pub fn place(input: PlaceInput) -> PlaceOutcome {
   OrderPlaced(order: input.body)
 }
+
+/// Reads the required order count header.
+pub type OrderCountInput {
+  OrderCountInput(order_count: Int)
+}
+
+/// The answer to reading the order count header.
+pub type OrderCountOutcome {
+  /// nocontract:status 200
+  /// The order count the request declared.
+  /// ergleam:not-an-error
+  OrderCountRead(order_count: Int)
+}
+
+/// Answers with the typed order count header.
+/// nocontract:route GET /headers/order-count
+/// nocontract:header order_count X-Order-Count
+pub fn read_order_count(input: OrderCountInput) -> OrderCountOutcome {
+  OrderCountRead(order_count: input.order_count)
+}

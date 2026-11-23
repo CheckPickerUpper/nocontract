@@ -1,13 +1,10 @@
 package running_test
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +14,6 @@ import (
 
 	"github.com/CheckPickerUpper/outcome"
 
-	nocontract "github.com/CheckPickerUpper/nocontract/go"
 	"github.com/CheckPickerUpper/nocontract/internal/running"
 	"github.com/CheckPickerUpper/nocontract/internal/scratchproject"
 )
@@ -25,6 +21,7 @@ import (
 type shopServerAddress struct {
 	url    string
 	client *http.Client
+	finish func() []string
 }
 
 type shopBackend struct {
@@ -33,27 +30,26 @@ type shopBackend struct {
 	open     func(*testing.T, string) shopServerAddress
 }
 
-type shopProject struct {
-	backend shopBackend
-	path    string
-}
-
 // Every backend serves the same routes, exact decimal values and body shapes, and publishes the
 // same operations and schemas. Builds happen once per backend; every request uses a real listener.
 func TestShopBackendsConformToTheSameHTTPContract(t *testing.T) {
 	checkout := scratchproject.PathOrStop(t, "locating the checkout", outcome.TupleToResult(filepath.Abs(filepath.Join("..", ".."))))
 	expectedFiles := readShopGeneratedFiles(t, filepath.Join(checkout, "testdata", "go", "shop", "nocontract.json"))
 	requests := shopRequests()
-	projects := []shopProject{}
+	contract := readShopContract(t, expectedFiles.document)
+	assertShopOperationIDs(t, contract)
+	for _, request := range requests {
+		assertShopBodySchema(t, contract, request)
+	}
+	client := prepareShopClient(t, checkout, expectedFiles.client)
 	for _, backend := range []shopBackend{
 		{language: "go", prepare: copyGoShop, open: openGoShop},
-		{language: "odin", prepare: copyShop, open: openNativeShop},
+		{language: "odin", prepare: copyShop, open: openOdinShop},
 		{language: "gleam", prepare: copyGleamShop, open: openGleamShop},
 	} {
-		fixture := readShopFixture(t, filepath.Join(checkout, "testdata", backend.language, "shop"))
-		project := backend.prepare(t, fixture)
-		projects = append(projects, shopProject{backend: backend, path: project})
-		t.Run("generated/"+backend.language, func(t *testing.T) {
+		t.Run(backend.language, func(t *testing.T) {
+			fixture := readShopFixture(t, filepath.Join(checkout, "testdata", backend.language, "shop"))
+			project := backend.prepare(t, fixture)
 			for _, command := range []string{"generate", "check"} {
 				result := running.Run(running.Request{Arguments: []string{command, "-project", project}, Context: t.Context()})
 				if result.ExitCode() != 0 {
@@ -63,28 +59,21 @@ func TestShopBackendsConformToTheSameHTTPContract(t *testing.T) {
 			generated := readShopGeneratedFiles(t, project)
 			assertShopGeneratedFile(t, shopFileComparison{artifact: "TypeScript", expected: expectedFiles.client, actual: generated.client})
 			assertShopGeneratedFile(t, shopFileComparison{artifact: "OpenAPI", expected: expectedFiles.document, actual: generated.document})
-		})
-	}
-	if t.Failed() {
-		return
-	}
-	contract := readShopContract(t, expectedFiles.document)
-	assertShopOperationIDs(t, contract)
-	for _, request := range requests {
-		assertShopBodySchema(t, contract, request)
-	}
-	client := prepareShopClient(t, checkout, expectedFiles.client)
-	for _, project := range projects {
-		t.Run(project.backend.language, func(t *testing.T) {
-			served := project.backend.open(t, project.path)
+			if t.Failed() {
+				return
+			}
+			served := backend.open(t, project)
+			observed := []shopAnsweredRequest{}
 			for _, request := range requests {
 				t.Run(request.name, func(t *testing.T) {
 					answer := sendShopRequest(t, served, request)
 					assertShopAnswer(t, request, answer)
 					assertShopResponseSchema(t, contract, request, answer)
+					observed = append(observed, shopAnsweredRequest{request: request, answer: answer})
 				})
 			}
 			assertShopClientAnswers(t, client, served)
+			assertShopObservations(t, contract, observed, served.finish())
 		})
 	}
 }
@@ -95,55 +84,23 @@ func openGoShop(t *testing.T, project string) shopServerAddress {
 	binary := filepath.Join(t.TempDir(), "shop")
 	build := exec.CommandContext(t.Context(), "go", "build", "-o", binary, "./cmd/shop")
 	build.Dir = directory
-	started := time.Now()
-	compiled := scratchproject.BytesOrStop(t, "building the Go shop", outcome.TupleToResult(build.CombinedOutput()))
-	t.Logf("Go shop compilation: %s\n%s", time.Since(started), compiled)
+	runShopCommand(t, build)
 	processContext, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), time.Minute)
 	t.Cleanup(cancel)
 	command := exec.CommandContext(processContext, binary)
 	command.Dir = directory
 	command.Env = append(os.Environ(), "SHOP_ADDRESS=127.0.0.1:0")
-	stderr := &bytes.Buffer{}
-	command.Stderr = stderr
-	return outcome.Fold(outcome.TupleToResult(command.StdoutPipe()), func(stdout io.ReadCloser) shopServerAddress {
-		scratchproject.StopOn(t, "starting the Go shop", command.Start())
-		t.Cleanup(func() {
-			cancel()
-			outcome.ForEachOption(outcome.EmptyableToOption(command.Wait()), func(cause error) {
+	command.Cancel = func() error { return command.Process.Signal(os.Interrupt) }
+	return openShopProcess(t, command, shopProcessShutdown{
+		stop: cancel,
+		verify: func(cause error) {
+			outcome.ForEachOption(outcome.EmptyableToOption(cause), func(cause error) {
 				exited := &exec.ExitError{ProcessState: command.ProcessState, Stderr: []byte{}}
 				if !errors.As(cause, &exited) {
-					t.Errorf("stopping the Go shop: %v\nstderr:\n%s", cause, stderr)
+					t.Errorf("stopping the Go shop: %v", cause)
 				}
 			})
-			if t.Failed() {
-				t.Logf("Go shop stderr:\n%s", stderr)
-			}
-		})
-		address := scratchproject.PathOrStop(t, "reading the Go shop's listening address", outcome.TupleToResult(bufio.NewReader(stdout).ReadString('\n')))
-		client := *http.DefaultClient
-		client.Timeout = 10 * time.Second
-		return shopServerAddress{url: "http://" + strings.TrimSpace(address), client: &client}
-	}, func(cause error) shopServerAddress {
-		t.Fatalf("opening Go shop stdout: %v", cause)
-		return shopServerAddress{url: "", client: http.DefaultClient}
-	})
-}
-
-func openNativeShop(t *testing.T, project string) shopServerAddress {
-	t.Helper()
-	relocated := filepath.Join(t.TempDir(), "shop")
-	scratchproject.StopOn(t, "moving the generated shop to "+relocated, os.Rename(filepath.Dir(project), relocated))
-	project = filepath.Join(relocated, filepath.Base(project))
-	processContext, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), time.Minute)
-	t.Cleanup(cancel)
-	return outcome.Fold(running.OpenNativeServer(processContext, project, []nocontract.Layer{}), func(opened running.NativeServer) shopServerAddress {
-		t.Cleanup(func() { scratchproject.StopOn(t, "closing the native shop from "+project, opened.Close()) })
-		served := httptest.NewServer(opened.Handler)
-		t.Cleanup(served.Close)
-		return shopServerAddress{url: served.URL, client: served.Client()}
-	}, func(cause error) shopServerAddress {
-		t.Fatalf("opening the shop from %s: %v", project, cause)
-		return shopServerAddress{url: "", client: http.DefaultClient}
+		},
 	})
 }
 
@@ -154,34 +111,19 @@ func openGleamShop(t *testing.T, project string) shopServerAddress {
 	command := exec.CommandContext(lifetime, "gleam", "run", "--no-print-progress", "-m", "shop_server")
 	command.Dir = filepath.Dir(project)
 	command.WaitDelay = 2 * time.Second
-	diagnostics := &bytes.Buffer{}
-	command.Stderr = diagnostics
-	return outcome.Fold(outcome.TupleToResult(command.StdoutPipe()), func(stdout io.ReadCloser) shopServerAddress {
-		scratchproject.StopOn(t, "starting the Gleam shop", command.Start())
-		t.Cleanup(func() {
-			cancel()
-			outcome.ForEachOption(outcome.EmptyableToOption(command.Wait()), func(cause error) {
+	configureGleamShopProcess(command)
+	return openShopProcess(t, command, shopProcessShutdown{
+		stop: cancel,
+		verify: func(cause error) {
+			outcome.ForEachOption(outcome.EmptyableToOption(cause), func(cause error) {
+				if errors.Is(cause, context.Canceled) && command.ProcessState.Success() {
+					return
+				}
 				if _, exited := errors.AsType[*exec.ExitError](cause); !exited {
 					t.Errorf("stopping the Gleam shop: %v", cause)
 				}
 			})
-			if t.Failed() {
-				t.Logf("Gleam shop diagnostics:\n%s", diagnostics)
-			}
-		})
-		lines := bufio.NewScanner(stdout)
-		for lines.Scan() {
-			if address, listening := strings.CutPrefix(lines.Text(), "Listening on "); listening {
-				client := *http.DefaultClient
-				client.Timeout = 10 * time.Second
-				return shopServerAddress{url: address, client: &client}
-			}
-		}
-		t.Fatalf("Gleam shop did not start its listener from %s: %v", project, lines.Err())
-		return shopServerAddress{url: "", client: http.DefaultClient}
-	}, func(cause error) shopServerAddress {
-		t.Fatalf("opening Gleam shop stdout: %v", cause)
-		return shopServerAddress{url: "", client: http.DefaultClient}
+		},
 	})
 }
 
@@ -197,6 +139,9 @@ func sendShopRequest(t *testing.T, served shopServerAddress, request shopRequest
 		func(built *http.Request) shopAnswer {
 			built.Header.Set("X-Shopper", request.shopper)
 			built.Header.Set("Content-Type", "application/json")
+			for _, header := range request.headers {
+				built.Header[header.name] = []string{header.value}
+			}
 			return outcome.Fold(outcome.TupleToResult(served.client.Do(built)), func(response *http.Response) shopAnswer {
 				defer func() { scratchproject.StopOn(t, "closing the response body", response.Body.Close()) }()
 				body := scratchproject.BytesOrStop(t, "reading the response body", outcome.TupleToResult(io.ReadAll(response.Body)))

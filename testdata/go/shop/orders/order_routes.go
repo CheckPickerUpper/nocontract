@@ -66,3 +66,32 @@ func (OrderPlaced) isPlaceOutcome() {}
 func Place(_ context.Context, input PlaceInput) PlaceOutcome {
 	return OrderPlaced{Order: input.Body}
 }
+
+// OrderCountInput reads the required order count header.
+type OrderCountInput struct {
+	OrderCount int64 `header:"X-Order-Count"`
+}
+
+// OrderCountOutcome is the answer to reading the order count header.
+//
+//sumtype:decl
+type OrderCountOutcome interface {
+	isOrderCountOutcome()
+}
+
+// OrderCountRead is the order count the request declared.
+//
+//ergo:not-an-error
+//nocontract:status 200
+type OrderCountRead struct {
+	OrderCount int64 `json:"order_count"`
+}
+
+func (OrderCountRead) isOrderCountOutcome() {}
+
+// ReadOrderCount answers with the typed order count header.
+//
+//nocontract:route GET /headers/order-count
+func ReadOrderCount(_ context.Context, input OrderCountInput) OrderCountOutcome {
+	return OrderCountRead{OrderCount: input.OrderCount}
+}

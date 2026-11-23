@@ -124,17 +124,17 @@ func generateServer(project Project, api description.API, failures []description
 				}
 				handler := fmt.Sprintf("serve_route_%d", len(readers))
 				readers = append(readers, generated.inputReader(reader, route.Input, endpoint)+"\nfn "+handler+"(request: wisp.Request, parameters: dict.Dict(String, String)) -> Answer { "+call+" }\n")
-				dispatch = append(dispatch, "target.Selected(operation: "+name+", parameters:) -> #("+quoted(description.PathTemplate(endpoint.Path))+", "+handler+"(request, parameters))")
+				dispatch = append(dispatch, "target.Selected(operation: "+name+", parameters:) -> #("+quoted(description.PathTemplate(endpoint.Path))+", fn() { "+handler+"(request, parameters) })")
 			}
 		}
 	}
 	generated.module("gleam/option")
 	main := "type Operation {\n" + strings.Join(operations, "\n") + "\n}\n\n" +
-		loggedRequest + "fn answer_request(request: wisp.Request) -> #(String, Answer) {\ncase target.match_target([" + strings.Join(routes, ",\n") + "], method: http.method_to_string(request.method), path: request.path) {\n" +
+		loggedRequest + "fn select_request(request: wisp.Request) -> #(String, fn() -> Answer) {\ncase target.match_target([" + strings.Join(routes, ",\n") + "], method: http.method_to_string(request.method), path: request.path) {\n" +
 		strings.Join(dispatch, "\n") + "\n" +
-		"target.UnknownPath(path:) -> #(request.path, shared_route_not_found(method: http.method_to_string(request.method), path:))\n" +
-		"target.UndeclaredMethod(allowed:) -> #(request.path, refuse_method(method: request.method, allowed:))\n" +
-		"target.UnreadablePath(segment:) -> { let written = segment |> json.string |> json.to_string #(request.path, shared_request_refused(part: \"path\", name: segment, reason: \"invalid URL escape \" <> written)) }\n}\n}\n\n" + strings.Join(readers, "\n")
+		"target.UnknownPath(path:) -> #(request.path, fn() { shared_route_not_found(method: http.method_to_string(request.method), path:) })\n" +
+		"target.UndeclaredMethod(allowed:) -> #(request.path, fn() { refuse_method(method: request.method, allowed:) })\n" +
+		"target.UnreadablePath(segment:) -> #(request.path, fn() { let written = segment |> json.string |> json.to_string shared_request_refused(part: \"path\", name: segment, reason: \"invalid URL escape \" <> written) })\n}\n}\n\n" + strings.Join(readers, "\n")
 	main += queryTextFunction(api)
 	main += generated.recordSchemas(api.Structs) + sharedResponses(generated, failures) + serverStart
 	for _, definitions := range []map[string]string{generated.decoders, generated.encoders, generated.outcomes} {
@@ -149,7 +149,7 @@ func generateServer(project Project, api description.API, failures []description
 		}
 		return outcome.Err[[]native.File](GenerationRefused{Problems: problems})
 	}
-	imports := []string{"import gleam/dict", "import gleam/http", "import gleam/http/response", "import gleam/json", "import gleam/otp/actor", "import gleam/otp/static_supervisor", "import gleam/string", "import mist", "import nocontract_runtime/bind_address", "import nocontract_runtime/request_logging", "import nocontract_runtime/request_reading as request_input", "import nocontract_runtime/target_matching as target", "import nocontract_runtime/value_reading as wire", "import wisp", "import wisp/wisp_mist"}
+	imports := []string{"import gleam/dict", "import gleam/http", "import gleam/http/response", "import gleam/json", "import gleam/otp/actor", "import gleam/otp/static_supervisor", "import gleam/string", "import mist", "import nocontract_runtime/bind_address", "import nocontract_runtime/request_layers", "import nocontract_runtime/request_logging", "import nocontract_runtime/request_reading as request_input", "import nocontract_runtime/target_matching as target", "import nocontract_runtime/value_reading as wire", "import wisp", "import wisp/wisp_mist"}
 	if len(generated.decoders) > 0 {
 		imports = append(imports, "import gleam/dynamic/decode")
 	}
@@ -166,8 +166,14 @@ type Answer {
   Answer(response: wisp.Response, code: option.Option(String))
 }
 
-fn handle_request(request: wisp.Request) -> wisp.Response {
-  let #(duration_us, #(route, answer)) = request_logging.measure_request(fn() { answer_request(request) })
+fn handle_request(request: wisp.Request, layers: List(request_layers.Layer)) -> wisp.Response {
+  let #(duration_us, #(route, answer)) = request_logging.measure_request(fn() {
+    let #(route, selected_answer) = select_request(request)
+    let finish = request_layers.enter(layers, request_layers.Visit(method: http.method_to_string(request.method), path: request.path, route:))
+    let answer = selected_answer()
+    finish(request_layers.Answered(status: answer.response.status, code: answer.code))
+    #(route, answer)
+  })
   request_logging.log_request(request_logging.RequestLog(
     route:,
     method: http.method_to_string(request.method),
@@ -182,7 +188,7 @@ fn handle_request(request: wisp.Request) -> wisp.Response {
 
 const serverStart = `
 /// A listening address and port, accepted only by options.
-pub opaque type StartOptions { StartOptions(address: bind_address.BindAddress, port: Int) }
+pub opaque type StartOptions { StartOptions(address: bind_address.BindAddress, port: Int, layers: List(request_layers.Layer)) }
 
 /// Why an address or port cannot start a listener.
 pub type OptionsRefusal {
@@ -198,11 +204,16 @@ pub fn options(address address: String, port port: Int) -> Result(StartOptions, 
     _, port if port < 0 || port > 65_535 -> Error(PortOutside(port:, least: 0, most: 65_535))
     _, _ -> {
       case bind_address.parse(address) {
-        Ok(address) -> Ok(StartOptions(address:, port:))
+        Ok(address) -> Ok(StartOptions(address:, port:, layers: []))
         Error(cause) -> Error(AddressRefused(cause:))
       }
     }
   }
+}
+
+/// Selects ordered request and answer observers without exposing the HTTP response.
+pub fn with_layers(options: StartOptions, layers: List(request_layers.Layer)) -> StartOptions {
+  StartOptions(..options, layers:)
 }
 
 /// A listener that Mist could not start, with its attempted options and OTP error.
@@ -210,7 +221,7 @@ pub type StartRefusal { ListenerNotStarted(options: StartOptions, cause: actor.S
 
 /// Starts only the declared routes inside the application's BEAM.
 pub fn start(options: StartOptions) -> Result(actor.Started(static_supervisor.Supervisor), StartRefusal) {
-  case handle_request
+  case handle_request(_, options.layers)
     |> wisp_mist.handler(wisp.random_string(64))
     |> mist.new
     |> mist.bind(bind_address.to_string(options.address))

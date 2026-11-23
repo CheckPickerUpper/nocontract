@@ -21,8 +21,14 @@ type shopRequestCase struct {
 	path       string
 	shopper    string
 	body       string
+	headers    []shopRequestHeader
 	want       shopAnswer
 	bodySchema outcome.Option[shopBodySchema]
+}
+
+type shopRequestHeader struct {
+	name  string
+	value string
 }
 
 type shopBodySchema struct {
@@ -87,38 +93,52 @@ func shopRefused(refusal shopRefusal) shopAnswer {
 func shopRequests() []shopRequestCase {
 	requests := []shopRequestCase{
 		{
-			name: "a shopper reads the balance", method: http.MethodGet, path: "/shoppers/7/balance?currency=CAD", shopper: "shopper-7", body: "",
+			name: "a mixed-case header reaches its typed input", method: http.MethodGet, path: "/headers/order-count", shopper: "", body: "",
+			headers: []shopRequestHeader{{name: "x-OrDeR-cOuNt", value: "9007199254740993"}},
+			want:    shopAnswer{status: 200, allow: "", body: `{"_tag":"OrderCountRead","order_count":"9007199254740993"}`}, bodySchema: outcome.None[shopBodySchema](),
+		},
+		{
+			name: "a required header is missing", method: http.MethodGet, path: "/headers/order-count", shopper: "", body: "", headers: []shopRequestHeader{},
+			want: shopRefused(shopRefusal{Tag: "RequestRefused", Code: "NC-1001", Part: "header", Name: "x-order-count", Reason: "the header is missing"}), bodySchema: outcome.None[shopBodySchema](),
+		},
+		{
+			name: "a declared header contains noncanonical decimal text", method: http.MethodGet, path: "/headers/order-count", shopper: "", body: "",
+			headers: []shopRequestHeader{{name: "X-Order-Count", value: "007"}},
+			want:    shopParameterRefused(shopParameterProblem{part: "header", name: "x-order-count", read: "007"}), bodySchema: outcome.None[shopBodySchema](),
+		},
+		{
+			name: "a shopper reads the balance", method: http.MethodGet, path: "/shoppers/7/balance?currency=CAD", shopper: "shopper-7", body: "", headers: []shopRequestHeader{},
 			want: shopAnswer{status: 200, allow: "", body: `{"_tag":"BalanceRead","balance":{"cents":"1250","currency":"CAD"},"overdraft":null,` +
 				`"changed":"2026-11-14T12:00:00Z","note":"first top-up"}`}, bodySchema: outcome.None[shopBodySchema](),
 		},
 		{
-			name: "a path no route declares", method: http.MethodGet, path: "/shoppers/7/balances", shopper: "", body: "",
+			name: "a path no route declares", method: http.MethodGet, path: "/shoppers/7/balances", shopper: "", body: "", headers: []shopRequestHeader{},
 			want:       shopAnswer{status: 404, allow: "", body: `{"_tag":"RouteNotFound","code":"NC-1069","method":"GET","path":"/shoppers/7/balances"}`},
 			bodySchema: outcome.None[shopBodySchema](),
 		},
 		{
-			name: "a method no route at the path declares", method: http.MethodDelete, path: "/shoppers/7/balance", shopper: "", body: "",
+			name: "a method no route at the path declares", method: http.MethodDelete, path: "/shoppers/7/balance", shopper: "", body: "", headers: []shopRequestHeader{},
 			want:       shopAnswer{status: 405, allow: "GET", body: `{"_tag":"MethodNotDeclared","code":"NC-1070","method":"DELETE","allowed":["GET"]}`},
 			bodySchema: outcome.None[shopBodySchema](),
 		},
 		{
-			name: "an OPTIONS request to a declared path", method: http.MethodOptions, path: "/shoppers/7/top-ups", shopper: "", body: "",
+			name: "an OPTIONS request to a declared path", method: http.MethodOptions, path: "/shoppers/7/top-ups", shopper: "", body: "", headers: []shopRequestHeader{},
 			want: shopAnswer{status: 204, allow: "POST", body: ""}, bodySchema: outcome.None[shopBodySchema](),
 		},
 		{
-			name: "the guard refuses a request without a shopper", method: http.MethodGet, path: "/shoppers/7/balance?currency=CAD", shopper: "", body: "",
+			name: "the guard refuses a request without a shopper", method: http.MethodGet, path: "/shoppers/7/balance?currency=CAD", shopper: "", body: "", headers: []shopRequestHeader{},
 			want: shopAnswer{status: 401, allow: "", body: `{"_tag":"NotSignedIn","code":"SH-1101","scope":"read-balance"}`}, bodySchema: outcome.None[shopBodySchema](),
 		},
 		{
-			name: "the guard refuses an unverified shopper before reading the balance", method: http.MethodGet, path: "/shoppers/7/balance?currency=CAD", shopper: "shopper-8", body: "",
+			name: "the guard refuses an unverified shopper before reading the balance", method: http.MethodGet, path: "/shoppers/7/balance?currency=CAD", shopper: "shopper-8", body: "", headers: []shopRequestHeader{},
 			want: shopAnswer{status: 401, allow: "", body: `{"_tag":"ShopperCredentialRejected","code":"SH-1102","scope":"read-balance"}`}, bodySchema: outcome.None[shopBodySchema](),
 		},
 		{
-			name: "an admitted shopper has no ledger", method: http.MethodGet, path: "/shoppers/8/balance?currency=CAD", shopper: "shopper-7", body: "",
+			name: "an admitted shopper has no ledger", method: http.MethodGet, path: "/shoppers/8/balance?currency=CAD", shopper: "shopper-7", body: "", headers: []shopRequestHeader{},
 			want: shopAnswer{status: 404, allow: "", body: `{"_tag":"ShopperNotFound","code":"SH-1001","shopper_id":"8"}`}, bodySchema: outcome.None[shopBodySchema](),
 		},
 		{
-			name: "the shopper has no balance in the requested currency", method: http.MethodGet, path: "/shoppers/7/balance?currency=USD", shopper: "shopper-7", body: "",
+			name: "the shopper has no balance in the requested currency", method: http.MethodGet, path: "/shoppers/7/balance?currency=USD", shopper: "shopper-7", body: "", headers: []shopRequestHeader{},
 			want: shopAnswer{status: 404, allow: "", body: `{"_tag":"BalanceNotOpened","code":"SH-1003","currency":"USD"}`}, bodySchema: outcome.None[shopBodySchema](),
 		},
 	}
@@ -130,14 +150,14 @@ func shopRequests() []shopRequestCase {
 		{name: "a shopper at the signed 64-bit minimum", text: "-9223372036854775808"},
 	} {
 		requests = append(requests, shopRequestCase{
-			name: boundary.name, method: http.MethodGet, path: "/shoppers/" + boundary.text + "/balance?currency=CAD",
+			name: boundary.name, method: http.MethodGet, path: "/shoppers/" + boundary.text + "/balance?currency=CAD", headers: []shopRequestHeader{},
 			shopper: "shopper-7", body: "", want: shopAnswer{status: 404, allow: "", body: `{"_tag":"ShopperNotFound","code":"SH-1001","shopper_id":"` + boundary.text + `"}`},
 			bodySchema: outcome.None[shopBodySchema](),
 		})
 	}
 	requests = append(requests, shopRequestCase{
 		name: "a shopper above the signed 64-bit maximum", method: http.MethodGet,
-		path: "/shoppers/9223372036854775808/balance?currency=CAD", shopper: "shopper-7", body: "",
+		path: "/shoppers/9223372036854775808/balance?currency=CAD", shopper: "shopper-7", body: "", headers: []shopRequestHeader{},
 		want: shopRefused(shopRefusal{
 			Tag: "RequestRefused", Code: "NC-1001", Part: "path", Name: "shopper_id",
 			Reason: `strconv.ParseInt: parsing "9223372036854775808": value out of range`,
@@ -151,7 +171,7 @@ func shopRequests() []shopRequestCase {
 		{name: "a negative store", text: "-1"},
 	} {
 		requests = append(requests, shopRequestCase{
-			name: boundary.name, method: http.MethodPost, path: "/shoppers/7/orders?store=" + boundary.text,
+			name: boundary.name, method: http.MethodPost, path: "/shoppers/7/orders?store=" + boundary.text, headers: []shopRequestHeader{},
 			shopper: "shopper-7", body: shopEmptyOrder, want: shopRefused(shopRefusal{
 				Tag: "RequestRefused", Code: "NC-1001", Part: "query", Name: "store",
 				Reason: fmt.Sprintf("strconv.ParseUint: parsing %q: value out of range", boundary.text),
@@ -168,7 +188,7 @@ func shopRequests() []shopRequestCase {
 		{name: "a 64-bit shopper of minus zero", path: "/shoppers/-0/balance?currency=CAD", read: "-0"},
 	} {
 		requests = append(requests, shopRequestCase{
-			name: parameter.name, method: http.MethodGet, path: parameter.path, shopper: "shopper-7", body: "",
+			name: parameter.name, method: http.MethodGet, path: parameter.path, shopper: "shopper-7", body: "", headers: []shopRequestHeader{},
 			want: shopParameterRefused(shopParameterProblem{part: "path", name: "shopper_id", read: parameter.read}), bodySchema: outcome.None[shopBodySchema](),
 		})
 	}
@@ -182,14 +202,14 @@ func shopRequests() []shopRequestCase {
 		{name: "a 16-bit store of minus zero", path: "/shoppers/7/orders?store=-0", read: "-0"},
 	} {
 		requests = append(requests, shopRequestCase{
-			name: parameter.name, method: http.MethodPost, path: parameter.path, shopper: "shopper-7", body: shopEmptyOrder,
+			name: parameter.name, method: http.MethodPost, path: parameter.path, shopper: "shopper-7", body: shopEmptyOrder, headers: []shopRequestHeader{},
 			want: shopParameterRefused(shopParameterProblem{part: "query", name: "store", read: parameter.read}), bodySchema: outcome.None[shopBodySchema](),
 		})
 	}
 	for _, route := range shopBodyRoutes() {
 		for _, body := range route.cases {
 			requests = append(requests, shopRequestCase{
-				name: body.name, method: http.MethodPost, path: route.path, shopper: "", body: body.body, want: body.want,
+				name: body.name, method: http.MethodPost, path: route.path, shopper: "", body: body.body, want: body.want, headers: []shopRequestHeader{},
 				bodySchema: outcome.Some(shopBodySchema{path: route.documentPath, accepts: body.want.status != http.StatusBadRequest}),
 			})
 		}
@@ -246,6 +266,11 @@ func shopBodyRoutes() []shopBodyRoute {
 	wholeOrder := shopOrderBody(shopOrderParts{items: tea, between: december, wrapped: "true", courierNotes: porch})
 	orderCases := []shopBodyCase{
 		{name: "a whole typed nested order", body: wholeOrder, want: shopAnswer{status: 201, allow: "", body: placed}},
+		{
+			name: "an offset instant keeps nine fractional digits in UTC",
+			body: strings.Replace(wholeOrder, "2026-12-01T10:00:00+01:00", "2026-12-01T10:30:00.123456789+01:30", 1),
+			want: shopAnswer{status: 201, allow: "", body: strings.Replace(placed, "2026-12-01T09:00:00Z", "2026-12-01T09:00:00.123456789Z", 1)},
+		},
 		{name: "a small JSON integer accepts numeric minus zero", body: strings.Replace(wholeOrder, `"quantity":2`, `"quantity":-0`, 1), want: shopAnswer{status: 201, allow: "", body: strings.Replace(placed, `"quantity":2`, `"quantity":0`, 1)}},
 		{name: "an empty typed order", body: shopEmptyOrder, want: shopAnswer{status: 201, allow: "", body: `{"_tag":"OrderPlaced","order":` + shopEmptyOrder + `}`}},
 		{

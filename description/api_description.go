@@ -147,6 +147,7 @@ type Endpoint struct {
 	Method    Method
 	Path      []PathSegment
 	Query     []Parameter
+	Headers   []HeaderParameter
 	Body      Body
 	Successes Successes
 	Failures  []Member
@@ -321,7 +322,14 @@ type Parameter struct {
 	Schema ParameterSchema
 }
 
-// ParameterSchema is a schema NoContract can read from one URL parameter.
+// HeaderParameter binds one checked HTTP header to its native input field and scalar schema.
+type HeaderParameter struct {
+	Name   HeaderName
+	Field  FieldName
+	Schema ParameterSchema
+}
+
+// ParameterSchema is a schema NoContract can read from one textual request parameter.
 //
 //sumtype:decl
 type ParameterSchema interface {
@@ -334,7 +342,7 @@ func (Integer) isParameterSchema()  {}
 func (Truth) isParameterSchema()    {}
 func (Literals) isParameterSchema() {}
 
-// ParseParameter keeps a field only when its schema can be read from a URL.
+// ParseParameter keeps a field only when its schema can be read from request text.
 func ParseParameter(field Field) outcome.Option[Parameter] {
 	schema, accepted := field.Schema.(ParameterSchema)
 	if !accepted {

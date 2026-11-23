@@ -31,7 +31,7 @@ func (failure SharedFailure) Member() Member {
 type SharedAnswer interface{ isSharedAnswer() }
 
 // AnsweredWhenRequestRead is a failure every route whose input reads a path segment, a query
-// parameter or a body can answer, before its handler runs.
+// parameter, a header or a body can answer, before its handler runs.
 //
 //ergo:not-an-error
 type AnsweredWhenRequestRead struct{}
@@ -78,12 +78,12 @@ func SharedFailures() []SharedFailure {
 		{
 			Name: "RequestRefused", Status: FailureStatus{code: http.StatusBadRequest}, Code: "NC-1001",
 			Fields: []Field{
-				{Name: FieldName{text: "part"}, Schema: Literals{Values: []string{"path", "query", "body"}}},
+				{Name: FieldName{text: "part"}, Schema: Literals{Values: []string{"path", "query", "header", "body"}}},
 				{Name: FieldName{text: "name"}, Schema: Text{}},
 				{Name: FieldName{text: "reason"}, Schema: Text{}},
 			},
 			Answers: AnsweredWhenRequestRead{},
-			Doc: "RequestRefused is a request whose path segment, query parameter or body the route's input could " +
+			Doc: "RequestRefused is a request whose path segment, query parameter, header or body the route's input could " +
 				"not read. Every route that reads its request can answer it, before its handler runs.",
 			Message: []MessagePart{
 				MessageText{Text: "The request's "},

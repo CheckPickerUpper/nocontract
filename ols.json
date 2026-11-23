@@ -1,0 +1,4 @@
+{
+  "checker_args": "-custom-attribute:error_code,not_an_error",
+  "collections": [{ "name": "nocontract", "path": "." }]
+}

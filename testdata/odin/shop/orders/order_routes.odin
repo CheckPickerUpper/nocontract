@@ -52,3 +52,28 @@ PlaceOutcome :: union {
 Place :: proc(input: PlaceInput) -> PlaceOutcome {
 	return OrderPlaced{order = input.body}
 }
+
+// OrderCountInput reads the required order count header.
+OrderCountInput :: struct #all_or_none {
+	order_count: i64,
+}
+
+// OrderCountRead is the order count the request declared.
+//nocontract:status 200
+@(not_an_error)
+OrderCountRead :: struct #all_or_none {
+	order_count: i64,
+}
+
+// OrderCountOutcome is the answer to reading the order count header.
+OrderCountOutcome :: union {
+	OrderCountRead,
+}
+
+// ReadOrderCount answers with the typed order count header.
+//nocontract:route GET /headers/order-count
+//nocontract:header order_count X-Order-Count
+@(require_results)
+ReadOrderCount :: proc(input: OrderCountInput) -> OrderCountOutcome {
+	return OrderCountRead{order_count = input.order_count}
+}

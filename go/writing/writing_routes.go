@@ -98,7 +98,10 @@ func readNames(serves serverplan.Routing) []string {
 	case serverplan.ServesRoutes:
 		for _, route := range routes.Routes {
 			for _, param := range slices.Concat(route.Params, route.Query) {
-				read = append(read, readName(param.GoField))
+				read = append(read, readName(param.Field.GoField))
+			}
+			for _, header := range route.Headers {
+				read = append(read, readName(header.Field.GoField))
 			}
 			switch body := route.Body.(type) {
 			case serverplan.BodyFieldRead:
@@ -131,12 +134,16 @@ func routeText(route serverplan.Route, names *imports, readers *bodyReaders) str
 		name, route.Method.Name(), route.Path.Text(), name, routeParameters(route.Handler), names.runtime("Answer"))
 	steps, fields := []string{}, []string{}
 	for _, param := range route.Params {
-		steps = append(steps, paramStep(param, names.runtime("Path")+"(request, "+strconv.Quote(param.Name)+")", names))
-		fields = append(fields, param.GoField+": "+readName(param.GoField))
+		steps = append(steps, paramStep(param.Field, names.runtime("Path")+"(request, "+strconv.Quote(param.Name)+")", names))
+		fields = append(fields, param.Field.GoField+": "+readName(param.Field.GoField))
 	}
 	for _, param := range route.Query {
-		steps = append(steps, paramStep(param, names.runtime("Query")+"(request, "+strconv.Quote(param.Name)+")", names))
-		fields = append(fields, param.GoField+": "+readName(param.GoField))
+		steps = append(steps, paramStep(param.Field, names.runtime("Query")+"(request, "+strconv.Quote(param.Name)+")", names))
+		fields = append(fields, param.Field.GoField+": "+readName(param.Field.GoField))
+	}
+	for _, header := range route.Headers {
+		steps = append(steps, paramStep(header.Field, names.runtime("Header")+"(request, "+strconv.Quote(header.Name.Text())+")", names))
+		fields = append(fields, header.Field.GoField+": "+readName(header.Field.GoField))
 	}
 	switch body := route.Body.(type) {
 	case serverplan.BodyFieldRead:
@@ -157,9 +164,9 @@ func routeText(route serverplan.Route, names *imports, readers *bodyReaders) str
 }
 
 // paramStep opens the step that reads one parameter's text as its field's type.
-func paramStep(param serverplan.Param, text string, names *imports) string {
-	goType := names.goType(param.GoType)
-	return fmt.Sprintf("return %s(%s, func(%s %s) %s {\n", names.runtime("Then"), readCall(param.Text, goType, text, names), readName(param.GoField), goType,
+func paramStep(field serverplan.TextField, text string, names *imports) string {
+	goType := names.goType(field.GoType)
+	return fmt.Sprintf("return %s(%s, func(%s %s) %s {\n", names.runtime("Then"), readCall(field.Text, goType, text, names), readName(field.GoField), goType,
 		names.runtime("Answer"))
 }
 

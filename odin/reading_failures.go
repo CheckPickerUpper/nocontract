@@ -58,15 +58,3 @@ type MemberStatusContradiction struct {
 func (failure MemberStatusContradiction) Error() string {
 	return fmt.Sprintf("%s Odin member %s status %d contradicts attributes %v", failure.Position.String(), failure.Member, failure.Status.Code(), failure.Attributes)
 }
-
-type portableSourceSiteUnavailable struct {
-	Project string
-	Source  assembling.Position
-	Cause   error
-}
-
-func (failure portableSourceSiteUnavailable) Error() string {
-	return fmt.Sprintf("describing %s relative to %s: %v", failure.Source, failure.Project, failure.Cause)
-}
-
-func (failure portableSourceSiteUnavailable) Unwrap() error { return failure.Cause }

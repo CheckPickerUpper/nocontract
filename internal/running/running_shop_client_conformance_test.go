@@ -43,10 +43,10 @@ func prepareShopClient(t *testing.T, checkout string, generated shopSourceFile) 
 	copyShopSources(t, shopFixture{directory: fixture.directory, files: sources}, directory)
 	install := exec.CommandContext(t.Context(), "bun", "install", "--frozen-lockfile")
 	install.Dir = directory
-	runShopClientCommand(t, install)
+	runShopCommand(t, install)
 	check := exec.CommandContext(t.Context(), "bun", "run", "--no-install", "typecheck")
 	check.Dir = directory
-	runShopClientCommand(t, check)
+	runShopCommand(t, check)
 	return directory
 }
 
@@ -91,11 +91,11 @@ func assertShopClientAnswers(t *testing.T, directory string, served shopServerAd
 	command := exec.CommandContext(t.Context(), "bun", "run", "--no-install", "src/round_trip.ts")
 	command.Dir = directory
 	command.Env = append(os.Environ(), "SHOP_URL="+served.url)
-	decoded := runShopClientCommand(t, command)
+	decoded := runShopCommand(t, command)
 	t.Logf("Decoded shop answers: %s", bytes.TrimSpace(decoded))
 }
 
-func runShopClientCommand(t *testing.T, command *exec.Cmd) []byte {
+func runShopCommand(t *testing.T, command *exec.Cmd) []byte {
 	t.Helper()
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	command.Stdout = stdout

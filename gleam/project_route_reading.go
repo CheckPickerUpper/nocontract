@@ -45,11 +45,7 @@ type sourceRoute struct {
 type routeRead struct {
 	declared assembling.DeclaredEndpoint
 	native   bindings.Route
-	guard    outcome.Option[guardRead]
-}
-type guardRead struct {
-	native bindings.Guard
-	route  native.GuardedRoute
+	guard    outcome.Option[bindings.Guard]
 }
 
 func (index projectIndex) readRoutes(request native.Request, selection []string) outcome.Result[[]routeRead] {
@@ -106,8 +102,8 @@ func (index projectIndex) projectBindings(request native.Request, routes []route
 		group.Endpoints = append(group.Endpoints, route.declared)
 		groups[group.Name] = group
 		nativeRoutes = append(nativeRoutes, route.native)
-		outcome.ForEachOption(route.guard, func(guard guardRead) {
-			nativeGuards[description.OperationID(guard.route.Group, guard.route.Endpoint)] = guard.native
+		outcome.ForEachOption(route.guard, func(guard bindings.Guard) {
+			nativeGuards[description.OperationID(route.native.Group, route.native.Endpoint)] = guard
 		})
 	}
 	declaredGroups := []assembling.DeclaredGroup{}
@@ -135,7 +131,7 @@ func (index projectIndex) projectBindings(request native.Request, routes []route
 				return outcome.Ok(append(files, test))
 			}, outcome.Err[[]native.File])
 		}, outcome.Err[[]native.File])
-	}, Execution: native.GleamListener{Directory: request.Directory}}
+	}}
 }
 
 func sortedIdentities[T any](values map[compiler.Identity]T) []compiler.Identity {

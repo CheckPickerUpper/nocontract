@@ -216,15 +216,11 @@ func (answerResponse) isResponse()  {}
 func (methodResponse) isResponse()  {}
 func (optionsResponse) isResponse() {}
 
-// Respond answers one request to a generated server through its layers: the route its method and
+// respond answers one request to a generated server through its layers: the route its method and
 // path match; 204 with Allow to an OPTIONS request for a declared path; MethodNotDeclared to
 // another method on a declared path; RouteNotFound to a path no route declares; and RequestRefused
-// to a path holding a segment that is not valid escaping. It uses the same dispatcher as the
-// runtime's private HTTP handler.
-func Respond(writer http.ResponseWriter, request *http.Request, endpoints []Endpoint, layers []Layer) {
-	respond(writer, request, endpoints, layers, outcome.None[*slog.Logger](), time.Now)
-}
-
+// to a path holding a segment that is not valid escaping. The runtime's private HTTP handler
+// calls it with the generated API's binding and request logger.
 func respond(writer http.ResponseWriter, request *http.Request, endpoints []Endpoint, layers []Layer, logger outcome.Option[*slog.Logger], clock func() time.Time) {
 	started := clock()
 	matched := matchRequest(endpoints, request)

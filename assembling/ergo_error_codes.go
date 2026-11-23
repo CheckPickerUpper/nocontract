@@ -228,21 +228,21 @@ func (failure APIRefused) Causes() []error {
 	return nil
 }
 
-func (URLParameterUnsupported) ErrorCode() ergo.Code { return "NC-1138" }
+func (ParameterUnsupported) ErrorCode() ergo.Code { return "NC-1138" }
 
-// URLParameterUnsupportedArguments holds the arguments URLParameterUnsupported's message names, in the order the message first names them.
-type URLParameterUnsupportedArguments struct {
+// ParameterUnsupportedArguments holds the arguments ParameterUnsupported's message names, in the order the message first names them.
+type ParameterUnsupportedArguments struct {
 	Part   string `json:"Part"`
 	Field  string `json:"Field"`
 	Schema string `json:"Schema"`
 }
 
-// ReportArguments marks URLParameterUnsupportedArguments as the arguments of a report.
-func (URLParameterUnsupportedArguments) ReportArguments() {}
+// ReportArguments marks ParameterUnsupportedArguments as the arguments of a report.
+func (ParameterUnsupportedArguments) ReportArguments() {}
 
-// Report is URLParameterUnsupported's code, its message in language and the arguments the message names.
-func (failure URLParameterUnsupported) Report(language messages.Language) ergo.Report {
-	arguments := URLParameterUnsupportedArguments{Part: string(failure.Part), Field: string(failure.Field), Schema: string(failure.Schema)}
+// Report is ParameterUnsupported's code, its message in language and the arguments the message names.
+func (failure ParameterUnsupported) Report(language messages.Language) ergo.Report {
+	arguments := ParameterUnsupportedArguments{Part: string(failure.Part), Field: string(failure.Field), Schema: string(failure.Schema)}
 	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " parameter "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " cannot be read as "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: "."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
@@ -252,8 +252,8 @@ func (failure URLParameterUnsupported) Report(language messages.Language) ergo.R
 	return ergo.Report{Code: "NC-1138", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Part}, messageformat.TextValue{Text: arguments.Field}, messageformat.TextValue{Text: arguments.Schema}}}), Arguments: arguments}
 }
 
-// Causes is every error URLParameterUnsupported holds, then the causes of every failure it holds.
-func (failure URLParameterUnsupported) Causes() []error {
+// Causes is every error ParameterUnsupported holds, then the causes of every failure it holds.
+func (failure ParameterUnsupported) Causes() []error {
 	return nil
 }
 
@@ -284,5 +284,125 @@ func (failure FailureCodeTaken) Report(language messages.Language) ergo.Report {
 
 // Causes is every error FailureCodeTaken holds, then the causes of every failure it holds.
 func (failure FailureCodeTaken) Causes() []error {
+	return nil
+}
+
+func (HeaderNameRepeated) ErrorCode() ergo.Code { return "NC-1156" }
+
+// HeaderNameRepeatedArguments holds the arguments HeaderNameRepeated's message names, in the order the message first names them.
+type HeaderNameRepeatedArguments struct {
+	Name          string `json:"Name"`
+	Field         string `json:"Field"`
+	FirstName     string `json:"FirstName"`
+	FirstField    string `json:"FirstField"`
+	FirstPosition string `json:"FirstPosition"`
+}
+
+// ReportArguments marks HeaderNameRepeatedArguments as the arguments of a report.
+func (HeaderNameRepeatedArguments) ReportArguments() {}
+
+// Report is HeaderNameRepeated's code, its message in language and the arguments the message names.
+func (failure HeaderNameRepeated) Report(language messages.Language) ergo.Report {
+	arguments := HeaderNameRepeatedArguments{Name: string(failure.Name), Field: string(failure.Field), FirstName: string(failure.FirstName), FirstField: string(failure.FirstField), FirstPosition: string(failure.FirstPosition)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The header "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " on "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " is already read as "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: " by "}, messageformat.Argument{Index: 3}, messageformat.Literal{Text: " at "}, messageformat.Argument{Index: 4}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1156", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Name}, messageformat.TextValue{Text: arguments.Field}, messageformat.TextValue{Text: arguments.FirstName}, messageformat.TextValue{Text: arguments.FirstField}, messageformat.TextValue{Text: arguments.FirstPosition}}}), Arguments: arguments}
+}
+
+// Causes is every error HeaderNameRepeated holds, then the causes of every failure it holds.
+func (failure HeaderNameRepeated) Causes() []error {
+	return nil
+}
+
+func (HeaderFieldRepeated) ErrorCode() ergo.Code { return "NC-1157" }
+
+// HeaderFieldRepeatedArguments holds the arguments HeaderFieldRepeated's message names, in the order the message first names them.
+type HeaderFieldRepeatedArguments struct {
+	Field         string `json:"Field"`
+	Name          string `json:"Name"`
+	FirstName     string `json:"FirstName"`
+	FirstPosition string `json:"FirstPosition"`
+}
+
+// ReportArguments marks HeaderFieldRepeatedArguments as the arguments of a report.
+func (HeaderFieldRepeatedArguments) ReportArguments() {}
+
+// Report is HeaderFieldRepeated's code, its message in language and the arguments the message names.
+func (failure HeaderFieldRepeated) Report(language messages.Language) ergo.Report {
+	arguments := HeaderFieldRepeatedArguments{Field: string(failure.Field), Name: string(failure.Name), FirstName: string(failure.FirstName), FirstPosition: string(failure.FirstPosition)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The input field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " reads header "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " and already reads "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: " at "}, messageformat.Argument{Index: 3}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1157", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Field}, messageformat.TextValue{Text: arguments.Name}, messageformat.TextValue{Text: arguments.FirstName}, messageformat.TextValue{Text: arguments.FirstPosition}}}), Arguments: arguments}
+}
+
+// Causes is every error HeaderFieldRepeated holds, then the causes of every failure it holds.
+func (failure HeaderFieldRepeated) Causes() []error {
+	return nil
+}
+
+func (HeaderBindingConflict) ErrorCode() ergo.Code { return "NC-1158" }
+
+// HeaderBindingConflictArguments holds the arguments HeaderBindingConflict's message names, in the order the message first names them.
+type HeaderBindingConflictArguments struct {
+	Field   string `json:"Field"`
+	Name    string `json:"Name"`
+	Part    string `json:"Part"`
+	Binding string `json:"Binding"`
+}
+
+// ReportArguments marks HeaderBindingConflictArguments as the arguments of a report.
+func (HeaderBindingConflictArguments) ReportArguments() {}
+
+// Report is HeaderBindingConflict's code, its message in language and the arguments the message names.
+func (failure HeaderBindingConflict) Report(language messages.Language) ergo.Report {
+	arguments := HeaderBindingConflictArguments{Field: string(failure.Field), Name: string(failure.Name), Part: string(failure.Part), Binding: string(failure.Binding)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The input field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " reads header "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " and also reads "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: " "}, messageformat.Argument{Index: 3}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1158", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Field}, messageformat.TextValue{Text: arguments.Name}, messageformat.TextValue{Text: arguments.Part}, messageformat.TextValue{Text: arguments.Binding}}}), Arguments: arguments}
+}
+
+// Causes is every error HeaderBindingConflict holds, then the causes of every failure it holds.
+func (failure HeaderBindingConflict) Causes() []error {
+	return nil
+}
+
+func (HeaderFieldUndeclared) ErrorCode() ergo.Code { return "NC-1159" }
+
+// HeaderFieldUndeclaredArguments holds the arguments HeaderFieldUndeclared's message names, in the order the message first names them.
+type HeaderFieldUndeclaredArguments struct {
+	Name      string `json:"Name"`
+	Field     string `json:"Field"`
+	Available string `json:"Available"`
+}
+
+// ReportArguments marks HeaderFieldUndeclaredArguments as the arguments of a report.
+func (HeaderFieldUndeclaredArguments) ReportArguments() {}
+
+// Report is HeaderFieldUndeclared's code, its message in language and the arguments the message names.
+func (failure HeaderFieldUndeclared) Report(language messages.Language) ergo.Report {
+	arguments := HeaderFieldUndeclaredArguments{Name: string(failure.Name), Field: string(failure.Field), Available: string(failure.Available)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The header "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " names input field "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", which is not one of the public input fields "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: "."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1159", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Name}, messageformat.TextValue{Text: arguments.Field}, messageformat.TextValue{Text: arguments.Available}}}), Arguments: arguments}
+}
+
+// Causes is every error HeaderFieldUndeclared holds, then the causes of every failure it holds.
+func (failure HeaderFieldUndeclared) Causes() []error {
 	return nil
 }

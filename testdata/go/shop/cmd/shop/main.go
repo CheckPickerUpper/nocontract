@@ -19,16 +19,17 @@ import (
 
 func main() {
 	serverContext := context.Background()
-	built := server.New([]nocontract.Layer{}, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: mo.None[int]()}, shopperauth.Check{})
-	os.Exit(mo.Fold(built, func(api server.API) int { return serve(serverContext, api) }, func(cause error) int {
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	built := server.New([]nocontract.Layer{observeRequest("outer", logger), observeRequest("inner", logger)}, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: mo.None[int]()}, shopperauth.Check{})
+	os.Exit(mo.Fold(built, func(api server.API) int { return serve(serverContext, api, logger) }, func(cause error) int {
 		fmt.Fprintln(os.Stderr, cause)
 		return 1
 	}))
 }
 
 // serve serves the API until the server stops, and is the exit code the stop gives.
-func serve(serverContext context.Context, api server.API) int {
-	options := nocontract.WithRequestLogger(nocontract.ListenOn(os.Getenv("SHOP_ADDRESS")), slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+func serve(serverContext context.Context, api server.API, logger *slog.Logger) int {
+	options := nocontract.WithRequestLogger(nocontract.ListenOn(os.Getenv("SHOP_ADDRESS")), logger)
 	return outcome.Fold(server.Listen(serverContext, options, api), func(listening nocontract.ListeningServer) int {
 		defer func() {
 			outcome.Fold(listening.Stop(serverContext), func(nocontract.ServerStopped) struct{} { return struct{}{} }, func(cause error) struct{} {
@@ -36,7 +37,7 @@ func serve(serverContext context.Context, api server.API) int {
 				return struct{}{}
 			})
 		}()
-		return outcome.Fold(outcome.TupleToResult(fmt.Fprintln(os.Stdout, listening.Address())), func(int) int {
+		return outcome.Fold(outcome.TupleToResult(fmt.Fprintf(os.Stdout, "Listening on http://%s\n", listening.Address())), func(int) int {
 			return outcome.Fold(listening.Wait(), func(nocontract.ServerStopped) int { return 0 }, func(cause error) int {
 				fmt.Fprintln(os.Stderr, cause)
 				return 1

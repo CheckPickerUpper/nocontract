@@ -85,6 +85,9 @@ func routeOperation(groupName string, endpoint description.Endpoint) operation {
 	for _, query := range endpoint.Query {
 		parameters = append(parameters, parameter{Name: query.Name.Text(), In: "query", Required: true, Schema: fieldSchema(query.Schema)})
 	}
+	for _, header := range endpoint.Headers {
+		parameters = append(parameters, parameter{Name: header.Name.Text(), In: "header", Required: true, Schema: fieldSchema(header.Schema)})
+	}
 	tags := []string{groupName}
 	// Endpoint names are unique within a group, so the group's name makes the id unique.
 	operationID := description.OperationID(groupName, endpoint.Name)

@@ -69,11 +69,11 @@ type PathParameterUndeclared struct{ Parameter string }
 //ergo:message An input field reads the path segment named {Parameter}, which the path does not have.
 type PathFieldUnused struct{ Parameter string }
 
-// URLParameterUnsupported is a field that cannot be read from one path or query parameter.
+// ParameterUnsupported is a field that cannot be read from one textual request parameter.
 //
 //ergo:code NC-1138
 //ergo:message The {Part} parameter {Field} cannot be read as {Schema}.
-type URLParameterUnsupported struct {
+type ParameterUnsupported struct {
 	Part   string
 	Field  string
 	Schema string

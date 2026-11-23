@@ -1,5 +1,5 @@
 // Package running implements the NoContract CLI. Generate writes server bindings, OpenAPI, and the
-// Effect client. Check verifies those files against the project. Serve starts Odin and Gleam APIs.
+// Effect client. Check verifies those files against the project. Serve checks and starts the app.
 package running
 
 import (
@@ -21,11 +21,13 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
+	"github.com/CheckPickerUpper/nocontract/gleam"
 	"github.com/CheckPickerUpper/nocontract/go/reading"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
 	"github.com/CheckPickerUpper/nocontract/go/writing"
 	"github.com/CheckPickerUpper/nocontract/internal/projectfile"
 	"github.com/CheckPickerUpper/nocontract/messages"
+	"github.com/CheckPickerUpper/nocontract/odin"
 )
 
 // DefaultProjectFile is the project file read when -project names none.
@@ -72,7 +74,7 @@ type DeclarationsRefused struct{ Refusals []assembling.Refusal }
 // the command is run.
 //
 //ergo:code NC-1036
-//ergo:message The command could not run: {Problem}.
+//ergo:message The command could not run.
 type UsageRefused struct {
 	Problem UsageProblem
 	Usage   string
@@ -229,7 +231,24 @@ func placedRefusals(lines []string, refusals []assembling.Refusal) []string {
 
 // Lines is the failure, then how the command is run.
 func (refused UsageRefused) Lines() []string {
-	return append(described(refused), "usage: "+refused.Usage)
+	return append(append(described(refused), usageProblemLines(refused.Problem)...), "usage: "+refused.Usage)
+}
+
+func usageProblemLines(problem UsageProblem) []string {
+	switch problem := problem.(type) {
+	case NoCommand:
+		return described(problem)
+	case UnknownCommand:
+		return described(problem)
+	case ExtraArguments:
+		return append(described(problem), fmt.Sprintf("arguments: %q", problem.Arguments))
+	case FlagsUnread:
+		return described(problem)
+	case MissingApplicationCommand:
+		return []string{fmt.Sprintf("serve needs an application command after -- (arguments: %q)", problem.Arguments)}
+	case nil:
+	}
+	return []string{}
 }
 
 // Lines is the failure and its cause.
@@ -359,7 +378,15 @@ func Run(request Request) Outcome {
 	case projectRun:
 		return absolute(parsed.projectFile, func(projectFile string) Outcome { return generated(request.Context, projectFile, parsed.finish) })
 	case projectServe:
-		return serveNative(request.Context, parsed)
+		return absolute(parsed.projectFile, func(projectFile string) Outcome {
+			return readProject(projectFile, func(project projectfile.Project) Outcome {
+				checked := generatedProject(request.Context, project, compareFiles)
+				if _, current := checked.(FilesCurrent); !current {
+					return checked
+				}
+				return startApplication(request.Context, project, parsed.application)
+			})
+		})
 	case UsageRefused:
 		return parsed
 	case nil:
@@ -385,20 +412,28 @@ type generatedFile struct {
 // generated reads the project, renders its files and hands them, with what their paths hold, to
 // finish.
 func generated(ctx context.Context, projectFile string, finish finisher) Outcome {
-	return projectfile.Read(projectFile, func(project projectfile.Project) Outcome {
-		switch project.Backend().(type) {
-		case projectfile.GoBackend:
-			return generatedGo(ctx, project, finish)
-		case projectfile.OdinBackend, projectfile.GleamBackend:
-			return generatedNative(ctx, project, finish)
-		case nil:
-		}
-		return NativeBackendFailed{Path: project.File(), Cause: backendMissing{Directory: project.Directory()}}
-	}, func(cause error) Outcome {
+	return readProject(projectFile, func(project projectfile.Project) Outcome { return generatedProject(ctx, project, finish) })
+}
+
+func readProject(projectFile string, next func(projectfile.Project) Outcome) Outcome {
+	return projectfile.Read(projectFile, next, func(cause error) Outcome {
 		return ProjectUnreadable{Path: projectFile, Cause: cause}
 	}, func(refusals []assembling.Refusal) Outcome {
 		return ProjectFileRefused{Path: projectFile, Refusals: refusals}
 	})
+}
+
+func generatedProject(ctx context.Context, project projectfile.Project, finish finisher) Outcome {
+	switch project.Backend().(type) {
+	case projectfile.GoBackend:
+		return generatedGo(ctx, project, finish)
+	case projectfile.OdinBackend:
+		return generatedNative(ctx, project, odin.Read, finish)
+	case projectfile.GleamBackend:
+		return generatedNative(ctx, project, gleam.Read, finish)
+	case nil:
+	}
+	return NativeBackendFailed{Path: project.File(), Cause: backendMissing{Directory: project.Directory()}}
 }
 
 // generatedGo reads a Go backend's routes, renders its files and hands them, with what their paths

@@ -11,6 +11,7 @@ import wisp
 pub type RequestRefusal {
   PathRefused(name: String, cause: parameter.ParameterRefusal)
   QueryRefused(name: String, cause: parameter.ParameterRefusal)
+  HeaderRefused(name: String, cause: parameter.ParameterRefusal)
   BodyRefused(cause: value.ValueRefusal)
   BodyNotReceived(path: String)
   BodyNotUtf8(path: String, content: BitArray)
@@ -44,6 +45,17 @@ pub fn read_query(
   |> result.map_error(QueryRefused(name:, cause: _))
 }
 
+/// Reads the declared header's combined value and retains its typed input refusal.
+pub fn read_header(
+  headers: List(#(String, String)),
+  name: String,
+  schema: parameter.ParameterSchema,
+  decoder: decode.Decoder(a),
+) -> Result(a, RequestRefusal) {
+  parameter.read_header(headers, name, schema, decoder)
+  |> result.map_error(HeaderRefused(name:, cause: _))
+}
+
 /// Reads JSON with Wisp, parses its exact contract and constructs the native value.
 pub fn read_body(
   request: wisp.Request,
@@ -74,6 +86,7 @@ pub fn describe(refusal: RequestRefusal) -> #(String, String, String) {
   case refusal {
     PathRefused(name:, cause:) -> #("path", name, parameter.describe(cause))
     QueryRefused(name:, cause:) -> #("query", name, parameter.describe(cause))
+    HeaderRefused(name:, cause:) -> #("header", name, parameter.describe(cause))
     BodyRefused(cause:) -> {
       let #(name, reason) = value.describe(cause)
       #("body", name, reason)

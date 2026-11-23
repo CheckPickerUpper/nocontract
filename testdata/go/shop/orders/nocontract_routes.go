@@ -29,6 +29,22 @@ func nocontractAnswerPlaceOutcome(outcome PlaceOutcome) nocontract.Answer {
 	return nocontract.NoOutcome()
 }
 
+// NocontractRouteReadOrderCount answers one request to GET /headers/order-count. Only the generated server calls it.
+func NocontractRouteReadOrderCount(request *http.Request) nocontract.Answer {
+	return nocontract.Then(nocontract.Signed[int64](nocontract.Header(request, "x-order-count")), func(readOrderCount int64) nocontract.Answer {
+		return nocontractAnswerOrderCountOutcome(ReadOrderCount(request.Context(), OrderCountInput{OrderCount: readOrderCount}))
+	})
+}
+
+func nocontractAnswerOrderCountOutcome(outcome OrderCountOutcome) nocontract.Answer {
+	switch member := outcome.(type) {
+	case OrderCountRead:
+		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "OrderCountRead"}, member, nocontract.AnswerMarshalers{nocontract.SignedText[int64]()})
+	case nil:
+	}
+	return nocontract.NoOutcome()
+}
+
 // nocontractBodyItemMembers holds each member nocontractBodyItem has read.
 type nocontractBodyItemMembers struct {
 	SKU      mo.Option[string]

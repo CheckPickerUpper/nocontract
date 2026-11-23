@@ -215,13 +215,13 @@ func readEntry(index projectIndex, handler handlerDeclaration, parts routeParts)
 		loaded: handler.loaded, position: handler.function.Name.Pos(),
 		endpoint: assembling.DeclaredEndpoint{
 			Name: name, Method: parts.route.method, Path: parts.route.path, Params: parameterFields(parts.input.params),
-			Query: parameterFields(parts.input.query), Body: describedBody(parts.input.body), Successes: parts.outcome.successes,
+			Query: parameterFields(parts.input.query), Headers: headerDeclarations(parts.input.headers), Body: describedBody(parts.input.body), Successes: parts.outcome.successes,
 			Failures: slices.Concat(parts.outcome.failures, parts.guard.members), Position: index.placed(handler.function.Name.Pos()),
 		},
 		route: serverplan.Route{
 			Name: name, Method: parts.route.method, Path: parts.route.path, Handler: parts.handler.handler, Guard: parts.guard.plan,
 			Input: parts.input.name, Outcome: parts.outcome.name, Params: parameterPlans(parts.input.params), Query: parameterPlans(parts.input.query),
-			Body: bodyRead(parts.input.body),
+			Headers: headerPlans(parts.input.headers), Body: bodyRead(parts.input.body),
 		},
 		outcome: serverplan.OutcomeAnswer{Outcome: parts.outcome.name, Members: parts.outcome.plans},
 	}
@@ -309,10 +309,32 @@ func parameterPlans(params []parameter) []serverplan.Param {
 
 // inputShape is a route's input type and what it reads from its request.
 type inputShape struct {
-	name   serverplan.GoName
-	params []parameter
-	query  []parameter
-	body   inputBody
+	name    serverplan.GoName
+	params  []parameter
+	query   []parameter
+	headers []headerParameter
+	body    inputBody
+}
+
+type headerParameter struct {
+	declaration assembling.DeclaredHeader
+	plan        serverplan.HeaderParam
+}
+
+func headerDeclarations(headers []headerParameter) []assembling.DeclaredHeader {
+	declarations := []assembling.DeclaredHeader{}
+	for _, header := range headers {
+		declarations = append(declarations, header.declaration)
+	}
+	return declarations
+}
+
+func headerPlans(headers []headerParameter) []serverplan.HeaderParam {
+	plans := []serverplan.HeaderParam{}
+	for _, header := range headers {
+		plans = append(plans, header.plan)
+	}
+	return plans
 }
 
 // inputBody is whether a route's input reads the JSON body.
@@ -343,6 +365,23 @@ type pathField struct{ name string }
 //ergo:not-an-error
 type queryField struct{ name string }
 
+// headerField reads the header its tag names.
+//
+//ergo:not-an-error
+type headerField struct {
+	first string
+	rest  []string
+}
+
+// headerFieldConflict is a header tag on a field already bound to another request location.
+//
+//ergo:not-an-error
+type headerFieldConflict struct {
+	name    string
+	part    string
+	binding string
+}
+
 // bodyField reads the JSON body.
 //
 //ergo:not-an-error
@@ -363,12 +402,14 @@ type unplacedField struct{}
 //ergo:not-an-error
 type twicePlacedField struct{ path, query string }
 
-func (pathField) isInputField()          {}
-func (queryField) isInputField()         {}
-func (bodyField) isInputField()          {}
-func (embeddedInputField) isInputField() {}
-func (unplacedField) isInputField()      {}
-func (twicePlacedField) isInputField()   {}
+func (pathField) isInputField()           {}
+func (queryField) isInputField()          {}
+func (headerField) isInputField()         {}
+func (headerFieldConflict) isInputField() {}
+func (bodyField) isInputField()           {}
+func (embeddedInputField) isInputField()  {}
+func (unplacedField) isInputField()       {}
+func (twicePlacedField) isInputField()    {}
 
 // inputFieldPlace is where the generated code reads an input field whose tags are tags from.
 func inputFieldPlace(field indexedField, tags fieldTags) inputField {
@@ -378,6 +419,32 @@ func inputFieldPlace(field indexedField, tags fieldTags) inputField {
 	case !field.variable.Exported():
 		return unplacedField{}
 	}
+	if len(tags.headers) == 0 {
+		return inputFieldWithoutHeader(field, tags)
+	}
+	rest := []string{}
+	for _, header := range tags.headers[1:] {
+		rest = append(rest, header.text)
+	}
+	return headerFieldPlace(field, tags, headerField{first: tags.headers[0].text, rest: rest})
+}
+
+func headerFieldPlace(field indexedField, tags fieldTags, header headerField) inputField {
+	return outcome.FoldOption(tags.lookup("path"), func(path tagValue) inputField {
+		return headerFieldConflict{name: header.first, part: "path", binding: path.text}
+	}, func() inputField {
+		return outcome.FoldOption(tags.lookup("query"), func(query tagValue) inputField {
+			return headerFieldConflict{name: header.first, part: "query", binding: query.text}
+		}, func() inputField {
+			if field.variable.Name() == serverplan.BodyFieldName {
+				return headerFieldConflict{name: header.first, part: "body", binding: serverplan.BodyFieldName}
+			}
+			return header
+		})
+	})
+}
+
+func inputFieldWithoutHeader(field indexedField, tags fieldTags) inputField {
 	query := tags.lookup("query")
 	return outcome.FoldOption(tags.lookup("path"), func(path tagValue) inputField {
 		return outcome.FoldOption(query, func(query tagValue) inputField {
@@ -408,6 +475,11 @@ type pathRead struct{ read parameter }
 //ergo:not-an-error
 type queryRead struct{ read parameter }
 
+// headerRead keeps the header's source declaration and its native scalar reader together.
+//
+//ergo:not-an-error
+type headerRead struct{ reads []headerParameter }
+
 // bodyFieldRead is the field read from the JSON body: the shape the description declares, and how
 // the generated code reads it.
 //
@@ -419,6 +491,7 @@ type bodyFieldRead struct {
 
 func (pathRead) isPlacedField()      {}
 func (queryRead) isPlacedField()     {}
+func (headerRead) isPlacedField()    {}
 func (bodyFieldRead) isPlacedField() {}
 
 // readInput reads a route's input: a named struct each of whose fields is read from one part of
@@ -461,6 +534,12 @@ func readPlacedFieldTagged(index projectIndex, loaded *packages.Package, field i
 		return andThen(readFieldName(index, position, place.name), func(name description.FieldName) reading[placedField] {
 			return mapped(readParameter(index, loaded, field.variable, name), func(read parameter) placedField { return queryRead{read: read} })
 		})
+	case headerField:
+		return readHeaderParameters(index, loaded, field, place)
+	case headerFieldConflict:
+		return notRead[placedField](index.refused(position, assembling.HeaderBindingConflict{
+			Name: place.name, Field: field.variable.Name(), Part: place.part, Binding: place.binding,
+		}))
 	case bodyField:
 		return andThen(readValue(index, field.variable.Type(), field.variable.Type(), position, []openBodyType{}), func(read valueRead) reading[placedField] {
 			return mapped(writableBody(index, read.body, loaded.PkgPath, position), func(value serverplan.BodyValue) placedField {
@@ -478,13 +557,15 @@ func readPlacedFieldTagged(index projectIndex, loaded *packages.Package, field i
 
 // sortedInput is an input's fields, sorted by where each is read.
 func sortedInput(name serverplan.GoName, placed []placedField) inputShape {
-	shape := inputShape{name: name, params: []parameter{}, query: []parameter{}, body: noInputBody{}}
+	shape := inputShape{name: name, params: []parameter{}, query: []parameter{}, headers: []headerParameter{}, body: noInputBody{}}
 	for _, field := range placed {
 		switch read := field.(type) {
 		case pathRead:
 			shape.params = append(shape.params, read.read)
 		case queryRead:
 			shape.query = append(shape.query, read.read)
+		case headerRead:
+			shape.headers = append(shape.headers, read.reads...)
 		case bodyFieldRead:
 			shape.body = read
 		case nil:
@@ -493,7 +574,28 @@ func sortedInput(name serverplan.GoName, placed []placedField) inputShape {
 	return shape
 }
 
-// readParameter reads a path or query field, whose text the generated code parses by its type.
+func readHeaderParameters(index projectIndex, loaded *packages.Package, field indexedField, header headerField) reading[placedField] {
+	return andThen(readFieldName(index, field.variable.Pos(), field.variable.Name()), func(name description.FieldName) reading[placedField] {
+		return andThen(readParameter(index, loaded, field.variable, name), func(read parameter) reading[placedField] {
+			readings := []reading[headerParameter]{}
+			for _, written := range append([]string{header.first}, header.rest...) {
+				switch parsed := description.ParseHeaderName(written).(type) {
+				case description.HeaderNameRead:
+					readings = append(readings, readAs(headerParameter{
+						declaration: assembling.DeclaredHeader{Name: written, Field: read.field, Position: index.placed(field.variable.Pos())},
+						plan:        serverplan.HeaderParam{Name: parsed.Name, Field: read.plan.Field},
+					}, nothingFound()))
+				case description.HeaderNameRefused:
+					readings = append(readings, notRead[headerParameter](index.refused(field.variable.Pos(), parsed.Problem)))
+				case nil:
+				}
+			}
+			return mapped(collected(readings, itself), func(headers []headerParameter) placedField { return headerRead{reads: headers} })
+		})
+	})
+}
+
+// readParameter reads a textual request field, whose value the generated code parses by its type.
 func readParameter(index projectIndex, loaded *packages.Package, field *types.Var, name description.FieldName) reading[parameter] {
 	unsupported := notRead[parameter](index.refused(field.Pos(), ParameterTypeUnsupported{Field: field.Name(), Type: types.TypeString(field.Type(), nil)}))
 	if _, isBasic := field.Type().Underlying().(*types.Basic); !isBasic {
@@ -504,7 +606,7 @@ func readParameter(index projectIndex, loaded *packages.Package, field *types.Va
 			return mo.Fold(textKind(schema), func(kind serverplan.TextKind) reading[parameter] {
 				return readAs(parameter{
 					field:    description.Field{Name: name, Schema: schema},
-					plan:     serverplan.Param{Name: name.Text(), GoField: field.Name(), Text: kind, GoType: goType},
+					plan:     serverplan.Param{Name: name.Text(), Field: serverplan.TextField{GoField: field.Name(), Text: kind, GoType: goType}},
 					variable: field,
 				}, nothingFound())
 			}, func(error) reading[parameter] { return unsupported })

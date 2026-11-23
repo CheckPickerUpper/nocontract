@@ -20,7 +20,7 @@ type taggedFailure[M any] struct {
 //sumtype:decl
 type SharedFailure interface{ isSharedFailure() }
 
-// RequestRefused is a request whose path segment, query parameter or body the route's input could not read. Every route that reads its request can answer it, before its handler runs.
+// RequestRefused is a request whose path segment, query parameter, header or body the route's input could not read. Every route that reads its request can answer it, before its handler runs.
 //
 //ergo:code NC-1001
 //ergo:message The request's {Part} {Name} could not be read: {Reason}
@@ -35,9 +35,10 @@ type RequestRefusedPart string
 
 // The values a RequestRefused's part field holds.
 const (
-	RequestRefusedPartPath  RequestRefusedPart = "path"
-	RequestRefusedPartQuery RequestRefusedPart = "query"
-	RequestRefusedPartBody  RequestRefusedPart = "body"
+	RequestRefusedPartPath   RequestRefusedPart = "path"
+	RequestRefusedPartQuery  RequestRefusedPart = "query"
+	RequestRefusedPartHeader RequestRefusedPart = "header"
+	RequestRefusedPartBody   RequestRefusedPart = "body"
 )
 
 func (RequestRefused) isSharedFailure() {}

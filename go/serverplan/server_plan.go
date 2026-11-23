@@ -271,14 +271,26 @@ type Route struct {
 	Outcome GoName
 	Params  []Param
 	Query   []Param
+	Headers []HeaderParam
 	Body    BodyRead
+}
+
+// HeaderParam is a checked header name and the native field and scalar codec that read it.
+type HeaderParam struct {
+	Name  description.HeaderName
+	Field TextField
 }
 
 // Param is one input field read from a path segment or a query parameter: its name in the
 // request, its Go field, how its text is read and the field's Go type, which the generated code
 // can name and its text is read as.
 type Param struct {
-	Name    string
+	Name  string
+	Field TextField
+}
+
+// TextField binds a native input field to its declared scalar text reader.
+type TextField struct {
 	GoField string
 	Text    TextKind
 	GoType  types.Type

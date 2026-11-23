@@ -105,6 +105,13 @@ func endpointText(endpoint description.Endpoint, prefix string) string {
 	if len(endpoint.Query) > 0 {
 		options = append(options, "query: "+parameterFields(endpoint.Query, prefix))
 	}
+	if len(endpoint.Headers) > 0 {
+		fields := []string{}
+		for _, header := range endpoint.Headers {
+			fields = append(fields, "      ["+quoted(header.Name.Text())+"]: "+renderSchema(header.Schema, prefix, "      ").codec+",")
+		}
+		options = append(options, "headers: {\n"+strings.Join(fields, "\n")+"\n    }")
+	}
 	switch body := endpoint.Body.(type) {
 	case description.JSONBody:
 		// A schema keeps the body JSON; a field list would select form encoding.

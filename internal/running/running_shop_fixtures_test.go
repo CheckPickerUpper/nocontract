@@ -92,6 +92,7 @@ func copyShopSources(t *testing.T, fixture shopFixture, directory string) {
 		if file.path == "nocontract.json" && bytes.Contains(content, []byte(relativeCollection)) {
 			collection := filepath.Clean(filepath.Join(fixture.directory, "..", "..", ".."))
 			readShopFixture(t, filepath.Join(collection, "odin", "runtime"))
+			readShopFixture(t, filepath.Join(collection, "odin", "dependencies", "odin-http"))
 			content = bytes.ReplaceAll(content, []byte(relativeCollection), []byte(`"nocontract": `+strconv.Quote(collection)))
 		}
 		scratchproject.WriteFile(t, directory, file.path, content)

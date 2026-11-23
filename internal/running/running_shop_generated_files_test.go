@@ -176,6 +176,7 @@ import "core:testing"
 
 @(test)
 shopper_balance_is_read :: proc(t: ^testing.T) {
+	_ = serve
 	switch answer in balance.ReadBalance(balance.ReadInput{shopper_id = 7, currency = .CAD}) {
 	case balance.BalanceRead:
 		testing.expect_value(t, answer.balance.cents, 1250)

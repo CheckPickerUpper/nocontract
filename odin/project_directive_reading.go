@@ -31,6 +31,12 @@ type routeSource struct {
 	method      description.Method
 	path        description.RoutePath
 	guard       outcome.Option[guardDirective]
+	headers     []headerDirective
+}
+
+type headerDirective struct {
+	field string
+	name  string
 }
 
 type guardDirective struct {
@@ -42,6 +48,11 @@ type guardDirective struct {
 type writtenDirective struct {
 	comment   string
 	arguments []string
+}
+
+type declarationDirectives struct {
+	single  map[string]writtenDirective
+	headers []writtenDirective
 }
 
 // RouteArgumentsWrong preserves the directive and procedure when a route needs a method and path.
@@ -66,9 +77,9 @@ func readDocumentation(declarations []compiler.Declaration) outcome.Result[docum
 		}
 		packages[declaration.Entity.Package] = directory
 		read = outcome.Fold(read, func(project documentedProject) outcome.Result[documentedProject] {
-			return outcome.Fold(readDirectives(declaration), func(directives map[string]writtenDirective) outcome.Result[documentedProject] {
-				if declaration.Entity.Kind == "Type" && len(directives) != 0 {
-					project.typeDirectives[nameOf(declaration)] = directives
+			return outcome.Fold(readDirectives(declaration), func(directives declarationDirectives) outcome.Result[documentedProject] {
+				if declaration.Entity.Kind == "Type" && len(directives.single) != 0 {
+					project.typeDirectives[nameOf(declaration)] = directives.single
 				}
 				return outcome.Fold(readRouteSource(declaration, directives), func(route outcome.Option[routeSource]) outcome.Result[documentedProject] {
 					outcome.ForEachOption(route, func(route routeSource) { project.routes = append(project.routes, route) })
@@ -80,10 +91,10 @@ func readDocumentation(declarations []compiler.Declaration) outcome.Result[docum
 	return read
 }
 
-func readDirectives(declaration compiler.Declaration) outcome.Result[map[string]writtenDirective] {
-	directives := map[string]writtenDirective{}
-	refuse := func(rule string) outcome.Result[map[string]writtenDirective] {
-		return outcome.Err[map[string]writtenDirective](DeclarationRefused{Position: placed(declaration), Declaration: declaration.Entity.Name, Rule: rule})
+func readDirectives(declaration compiler.Declaration) outcome.Result[declarationDirectives] {
+	directives := declarationDirectives{single: map[string]writtenDirective{}, headers: []writtenDirective{}}
+	refuse := func(rule string) outcome.Result[declarationDirectives] {
+		return outcome.Err[declarationDirectives](DeclarationRefused{Position: placed(declaration), Declaration: declaration.Entity.Name, Rule: rule})
 	}
 	for _, comment := range declaration.Comments {
 		body, matched := strings.CutPrefix(comment, "//nocontract:")
@@ -96,7 +107,7 @@ func readDirectives(declaration compiler.Declaration) outcome.Result[map[string]
 		}
 		name := words[0]
 		switch name {
-		case "route", "guard":
+		case "route", "guard", "header":
 			if declaration.Entity.Kind != "Procedure" {
 				return refuse(comment + " belongs on a procedure")
 			}
@@ -107,17 +118,22 @@ func readDirectives(declaration compiler.Declaration) outcome.Result[map[string]
 		default:
 			return refuse("unknown directive " + comment)
 		}
-		if first, already := directives[name]; already {
+		written := writtenDirective{comment: comment, arguments: words[1:]}
+		if name == "header" {
+			directives.headers = append(directives.headers, written)
+			continue
+		}
+		if first, already := directives.single[name]; already {
 			return refuse(comment + " repeats " + first.comment)
 		}
-		directives[name] = writtenDirective{comment: comment, arguments: words[1:]}
+		directives.single[name] = written
 	}
 	return outcome.Ok(directives)
 }
 
-func readRouteSource(declaration compiler.Declaration, directives map[string]writtenDirective) outcome.Result[outcome.Option[routeSource]] {
-	route, routed := directives["route"]
-	guard, guarded := directives["guard"]
+func readRouteSource(declaration compiler.Declaration, directives declarationDirectives) outcome.Result[outcome.Option[routeSource]] {
+	route, routed := directives.single["route"]
+	guard, guarded := directives.single["guard"]
 	refuse := func(rule string) outcome.Result[outcome.Option[routeSource]] {
 		return outcome.Err[outcome.Option[routeSource]](DeclarationRefused{Position: placed(declaration), Declaration: declaration.Entity.Name, Rule: rule})
 	}
@@ -125,16 +141,26 @@ func readRouteSource(declaration compiler.Declaration, directives map[string]wri
 		if guarded {
 			return refuse(guard.comment + " requires a route on the same procedure")
 		}
+		if len(directives.headers) > 0 {
+			return refuse(directives.headers[0].comment + " requires a route on the same procedure")
+		}
 		return outcome.Ok(outcome.None[routeSource]())
 	}
 	if len(route.arguments) != 2 {
 		return outcome.Err[outcome.Option[routeSource]](RouteArgumentsWrong{Position: placed(declaration), Procedure: declaration.Entity.Name, Written: route.comment})
 	}
+	headers := []headerDirective{}
+	for _, header := range directives.headers {
+		if len(header.arguments) != 2 {
+			return refuse(header.comment + " requires field Header-Name")
+		}
+		headers = append(headers, headerDirective{field: header.arguments[0], name: header.arguments[1]})
+	}
 	return outcome.FoldOption(description.ParseMethod(route.arguments[0]), func(method description.Method) outcome.Result[outcome.Option[routeSource]] {
 		switch path := description.ParseRoutePath(route.arguments[1]).(type) {
 		case description.RoutePathRead:
-			return outcome.Fold(readGuardDirective(keyed.Entry(directives, "guard"), declaration), func(guard outcome.Option[guardDirective]) outcome.Result[outcome.Option[routeSource]] {
-				return outcome.Ok(outcome.Some(routeSource{declaration: declaration, method: method, path: path.Path, guard: guard}))
+			return outcome.Fold(readGuardDirective(keyed.Entry(directives.single, "guard"), declaration), func(guard outcome.Option[guardDirective]) outcome.Result[outcome.Option[routeSource]] {
+				return outcome.Ok(outcome.Some(routeSource{declaration: declaration, method: method, path: path.Path, guard: guard, headers: headers}))
 			}, outcome.Err[outcome.Option[routeSource]])
 		case description.RoutePathRefused:
 			return refuse(path.Problem.Report(indexLanguage()).Message)

@@ -22,11 +22,12 @@ type Declaration struct {
 	Directives []string
 }
 
-// Route is a declared route function with its HTTP method, path, and optional guard.
+// Route is a declared route function with its HTTP method, path, headers and optional guard.
 type Route struct {
 	Declaration Declaration
 	Method      description.Method
 	Path        description.RoutePath
+	Headers     []Header
 	Guard       outcome.Option[Guard]
 }
 
@@ -104,29 +105,35 @@ func functionRoute(documentation string, position assembling.Position) outcome.R
 	return outcome.Fold(parseDocumentation(documentation, position), func(directives []attachedDirective) outcome.Result[outcome.Option[Route]] {
 		route := outcome.None[routeDirective]()
 		guard := outcome.None[Guard]()
+		headers := []Header{}
 		for _, attached := range directives {
 			switch parsed := attached.value.(type) {
 			case routeDirective:
 				route = outcome.Some(parsed)
 			case Guard:
 				guard = outcome.Some(parsed)
+			case Header:
+				headers = append(headers, parsed)
 			case statusDirective, literalDirective, nil:
 				return outcome.Err[outcome.Option[Route]](directiveMisplaced{Statement: attached.statement, Owner: "a function"})
 			}
 		}
 		return outcome.FoldOption(route, func(parsed routeDirective) outcome.Result[outcome.Option[Route]] {
-			return outcome.Ok(outcome.Some(Route{Declaration: declaration(position, directives), Method: parsed.Method, Path: parsed.Path, Guard: guard}))
+			return outcome.Ok(outcome.Some(Route{Declaration: declaration(position, directives), Method: parsed.Method, Path: parsed.Path, Headers: headers, Guard: guard}))
 		}, func() outcome.Result[outcome.Option[Route]] {
+			if len(headers) > 0 {
+				return outcome.Err[outcome.Option[Route]](routeRequired{Declaration: declaration(position, directives)})
+			}
 			return outcome.FoldOption(guard, func(Guard) outcome.Result[outcome.Option[Route]] {
-				return outcome.Err[outcome.Option[Route]](guardWithoutRoute{Declaration: declaration(position, directives)})
+				return outcome.Err[outcome.Option[Route]](routeRequired{Declaration: declaration(position, directives)})
 			}, func() outcome.Result[outcome.Option[Route]] { return outcome.Ok(outcome.None[Route]()) })
 		})
 	}, outcome.Err[outcome.Option[Route]])
 }
 
-type guardWithoutRoute struct{ Declaration Declaration }
+type routeRequired struct{ Declaration Declaration }
 
-func (failure guardWithoutRoute) Error() string {
+func (failure routeRequired) Error() string {
 	return fmt.Sprintf("%s: %q requires a route on the same function", failure.Declaration.Position, failure.Declaration.Directives)
 }
 
@@ -140,7 +147,7 @@ func constructorMetadata(documentation string, position assembling.Position) out
 				status = outcome.Some(parsed.Status)
 			case literalDirective:
 				literal = outcome.Some(parsed.Spelling)
-			case routeDirective, Guard, nil:
+			case routeDirective, Guard, Header, nil:
 				return outcome.Err[Constructor](directiveMisplaced{Statement: attached.statement, Owner: "a constructor"})
 			}
 		}

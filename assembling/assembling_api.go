@@ -48,6 +48,7 @@ type DeclaredEndpoint struct {
 	Path      description.RoutePath
 	Params    []description.Field
 	Query     []description.Field
+	Headers   []DeclaredHeader
 	Body      description.Body
 	Successes description.Successes
 	Failures  []description.Member
@@ -176,6 +177,8 @@ func (endpointRefused) isEndpointCheck() {}
 // every shared failure it can answer.
 func checkedEndpoint(declared DeclaredEndpoint, shared []description.SharedFailure) endpointCheck {
 	refusals := bodyRefusals(declared)
+	headers := checkedHeaders(declared.Headers)
+	refusals = append(refusals, headers.refusals...)
 	query := make([]description.Parameter, 0, len(declared.Query))
 	for _, field := range declared.Query {
 		outcome.FoldOption(description.ParseParameter(field), func(parameter description.Parameter) struct{} {
@@ -196,7 +199,7 @@ func checkedEndpoint(declared DeclaredEndpoint, shared []description.SharedFailu
 		sortMembersByName(successes)
 		sortMembersByName(failures)
 		return endpointChecked{endpoint: description.Endpoint{
-			Name: declared.Name, Method: declared.Method, Path: path.segments, Query: query, Body: declared.Body,
+			Name: declared.Name, Method: declared.Method, Path: path.segments, Query: query, Headers: headers.parameters, Body: declared.Body,
 			Successes: description.Successes{First: successes[0], Rest: successes[1:]},
 			Failures:  failures,
 		}}
@@ -226,7 +229,7 @@ func bodyRefusals(declared DeclaredEndpoint) []Refusal {
 //sumtype:decl
 type requestUse interface{ isRequestUse() }
 
-// requestRead is an input reading a path segment, a query parameter or the body.
+// requestRead is an input reading a path segment, a query parameter, a header or the body.
 //
 //ergo:not-an-error
 type requestRead struct{}
@@ -246,7 +249,7 @@ func requestUseDeclared(declared DeclaredEndpoint) requestUse {
 		return requestRead{}
 	case description.NoBody, nil:
 	}
-	if len(declared.Params) > 0 || len(declared.Query) > 0 {
+	if len(declared.Params) > 0 || len(declared.Query) > 0 || len(declared.Headers) > 0 {
 		return requestRead{}
 	}
 	return requestUnread{}

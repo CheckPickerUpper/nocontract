@@ -164,10 +164,10 @@ type RecursiveStruct struct{ Struct string }
 //ergo:message The route input {Input} is not a named struct.
 type InputNotStruct struct{ Input string }
 
-// InputFieldUnread is an input field with no path or query tag that is not named Body.
+// InputFieldUnread is an input field with no path, query or header tag that is not named Body.
 //
 //ergo:code NC-1021
-//ergo:message The input field {Field} has no path or query tag and is not named Body.
+//ergo:message The input field {Field} has no path, query or header tag and is not named Body.
 type InputFieldUnread struct{ Field string }
 
 // FieldPlacedTwice is an input field tagged both path and query, which names two parts of the
@@ -194,11 +194,11 @@ type TypeNotReachable struct{ Type string }
 //ergo:message The outcome member {Member} has no //nocontract:status line.
 type StatusDirectiveMissing struct{ Member string }
 
-// ParameterTypeUnsupported is a path or query field whose type is not text, a whole number, a
+// ParameterTypeUnsupported is a path, query or header field whose type is not text, a whole number, a
 // boolean or a set of string constants.
 //
 //ergo:code NC-1030
-//ergo:message The path or query field {Field} is a {Type}, not text, a whole number, a boolean or a set of string constants.
+//ergo:message The path, query or header field {Field} is a {Type}, not text, a whole number, a boolean or a set of string constants.
 type ParameterTypeUnsupported struct {
 	Field string
 	Type  string

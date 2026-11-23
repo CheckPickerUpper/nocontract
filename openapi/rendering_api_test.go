@@ -84,13 +84,13 @@ func itemAPI(t *testing.T) description.API {
 			{
 				Name: "readItem", Method: description.Get{},
 				Path:  []description.PathSegment{description.PathText{Text: "items"}, itemParameter},
-				Query: []description.Parameter{{Name: sortBy.Name, Schema: description.Literals{Values: []string{"name", "price"}}}},
-				Body:  description.NoBody{}, Successes: description.Successes{First: itemRead, Rest: []description.Member{}}, Failures: []description.Member{itemMissing, shopClosed, requestRefused},
+				Query: []description.Parameter{{Name: sortBy.Name, Schema: description.Literals{Values: []string{"name", "price"}}}}, Headers: []description.HeaderParameter{},
+				Body: description.NoBody{}, Successes: description.Successes{First: itemRead, Rest: []description.Member{}}, Failures: []description.Member{itemMissing, shopClosed, requestRefused},
 			},
 			{
 				Name: "addItem", Method: description.Post{},
 				Path:  []description.PathSegment{description.PathText{Text: "items"}},
-				Query: []description.Parameter{},
+				Query: []description.Parameter{}, Headers: []description.HeaderParameter{},
 				Body: description.JSONBody{Schema: description.InlineStruct{Fields: []description.Field{
 					field("item", description.StructRef{Name: "Item"}),
 				}}},
@@ -99,7 +99,7 @@ func itemAPI(t *testing.T) description.API {
 			{
 				Name: "removeItem", Method: description.Delete{},
 				Path:  []description.PathSegment{description.PathText{Text: "items"}, itemParameter},
-				Query: []description.Parameter{}, Body: description.NoBody{},
+				Query: []description.Parameter{}, Headers: []description.HeaderParameter{}, Body: description.NoBody{},
 				Successes: description.Successes{First: itemRemoved, Rest: []description.Member{}}, Failures: []description.Member{itemMissing},
 			},
 		}}},

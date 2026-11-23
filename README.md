@@ -256,6 +256,60 @@ Gleam request body limits wait for Mist to release bounded reads of chunked requ
 
 Gleam graceful shutdown waits for Mist and Glisten to release a listener stop operation that lets active requests finish. The fixes are on the [Mist `graceful-listener` branch](https://github.com/CheckPickerUpper/mist/commit/40b25eaa3f2f4c85d54e72e2f453a4cb834e4236) and the [Glisten `stop-accepting` branch](https://github.com/CheckPickerUpper/glisten/commit/705d4b68797feb2785b89767fbe28680139446bf). [Glisten PR #56](https://github.com/rawhat/glisten/pull/56) tracks the upstream change.
 
+## Odin server
+
+The Odin application calls its generated `serve` function on the thread that owns
+the native event loop. Odin servers require Linux. Other targets fail to compile
+because Odin's native event loop cannot cancel an accept and report whether it
+accepted a connection on those platforms.
+
+Use the same NoContract revision for the generator and the runtime source
+collection. Initialize that checkout's Git submodules with
+`git submodule update --init --recursive`; the runtime imports the pinned
+`odin-http` source. No package registry is needed.
+
+Set `language` to `odin`, list the packages holding routes, and set `server` to the
+generated package's folder. An application's `main.odin` can then start it:
+
+```odin
+package main
+
+import "core:fmt"
+import "core:net"
+import "core:os"
+import nocontract "nocontract:odin/runtime"
+import server "./server"
+
+main :: proc() {
+	options := nocontract.listen_on(net.Endpoint{address = net.IP4_Loopback, port = 8080})
+	switch terminal in server.serve(options) {
+	case nocontract.Server_Stopped:
+	case nocontract.Listener_Event_Loop_Not_Available, nocontract.Listener_Not_Opened,
+		nocontract.Listener_Endpoint_Not_Read, nocontract.Listener_Not_Served:
+		fmt.eprintln(terminal)
+		os.exit(1)
+	}
+}
+```
+
+Build with `-collection:nocontract=<NoContract checkout>` and
+`-custom-attribute:error_code,not_an_error`. `serve` blocks until the HTTP library's
+interrupt handler stops the listener and joins its workers. For an ephemeral
+port, pass port zero and use `nocontract.notify_when_ready(options, callback)` to
+observe the actual bound endpoint. The generated package owns request decoding,
+route calls and typed responses.
+
+## Running an application
+
+`nocontract serve -project nocontract.json -- <app command> [arguments]` checks the
+generated outputs, then runs the application's command from the project folder
+with the CLI's standard input, output and error streams. This works for Go,
+Gleam and Odin. The application chooses its listener options and starts its
+generated server. On POSIX the application has a separate process group, so an
+interrupt reaches the CLI and is forwarded once to the application's process.
+Pass the executable that starts your generated server. For example,
+`nocontract serve -- ./shop` runs the compiled Go or Odin shop.
+
 ## Calling from TypeScript
 
 ```ts

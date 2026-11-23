@@ -23,7 +23,7 @@ func found() description.Member {
 func route(t *testing.T, name string, path string, line int) assembling.DeclaredEndpoint {
 	t.Helper()
 	return assembling.DeclaredEndpoint{
-		Name: name, Method: description.Get{}, Path: routePath(t, path), Params: []description.Field{}, Query: []description.Field{},
+		Name: name, Method: description.Get{}, Path: routePath(t, path), Params: []description.Field{}, Query: []description.Field{}, Headers: []assembling.DeclaredHeader{},
 		Body: description.NoBody{}, Successes: description.Successes{First: found(), Rest: []description.Member{}},
 		Failures: []description.Member{}, Position: at(line),
 	}

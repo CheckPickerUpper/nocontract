@@ -30,6 +30,12 @@ type shopContract struct {
 	compiler *jsonschema.Compiler
 }
 
+type shopOperationMatch struct {
+	path      string
+	method    string
+	operation shopDocumentOperation
+}
+
 func canonicalShopJSON(t *testing.T, content string) string {
 	t.Helper()
 	value := jsontext.Value(content)
@@ -80,6 +86,7 @@ func assertShopOperationIDs(t *testing.T, contract shopContract) {
 		{path: "/shoppers/{shopper_id}/balance", method: "get", name: "balance.readBalance"},
 		{path: "/shoppers/{shopper_id}/top-ups", method: "post", name: "balance.topUp"},
 		{path: "/shoppers/{shopper_id}/orders", method: "post", name: "orders.place"},
+		{path: "/headers/order-count", method: "get", name: "orders.readOrderCount"},
 	} {
 		methods, foundPath := contract.document.Paths[operation.path]
 		if !foundPath {
@@ -123,34 +130,40 @@ func assertShopBodySchema(t *testing.T, contract shopContract, request shopReque
 	})
 }
 
-func assertShopResponseSchema(t *testing.T, contract shopContract, request shopRequestCase, answer shopAnswer) {
-	t.Helper()
+func matchShopOperation(contract shopContract, request shopRequestCase) outcome.Option[shopOperationMatch] {
 	path, _, _ := strings.Cut(request.path, "?")
 	segments := strings.Split(path, "/")
 	if len(segments) != 4 {
-		return
+		return outcome.None[shopOperationMatch]()
 	}
 	documentPath := "/shoppers/{shopper_id}/" + segments[3]
 	methods, foundPath := contract.document.Paths[documentPath]
 	if !foundPath {
-		return
+		return outcome.None[shopOperationMatch]()
 	}
 	method := strings.ToLower(request.method)
 	operation, foundMethod := methods[method]
 	if !foundMethod {
-		return
+		return outcome.None[shopOperationMatch]()
 	}
-	status := fmt.Sprint(answer.status)
-	if _, foundStatus := operation.Responses[status]; !foundStatus {
-		t.Fatalf("the contract declares no %s %s response with status %s", method, documentPath, status)
-	}
-	compileShopSchema(t, contract, func(schema *jsonschema.Schema) {
-		outcome.Fold(outcome.TupleToResult(jsonschema.UnmarshalJSON(strings.NewReader(answer.body))), func(value any) struct{} {
-			scratchproject.StopOn(t, "validating the response body "+answer.body, schema.Validate(value))
-			return struct{}{}
-		}, func(cause error) struct{} {
-			t.Fatalf("parsing response body %s for validation: %v", answer.body, cause)
-			return struct{}{}
-		})
-	}, "paths", documentPath, method, "responses", status, "content", "application/json", "schema")
+	return outcome.Some(shopOperationMatch{path: documentPath, method: method, operation: operation})
+}
+
+func assertShopResponseSchema(t *testing.T, contract shopContract, request shopRequestCase, answer shopAnswer) {
+	t.Helper()
+	outcome.ForEachOption(matchShopOperation(contract, request), func(matched shopOperationMatch) {
+		status := fmt.Sprint(answer.status)
+		if _, foundStatus := matched.operation.Responses[status]; !foundStatus {
+			t.Fatalf("the contract declares no %s %s response with status %s", matched.method, matched.path, status)
+		}
+		compileShopSchema(t, contract, func(schema *jsonschema.Schema) {
+			outcome.Fold(outcome.TupleToResult(jsonschema.UnmarshalJSON(strings.NewReader(answer.body))), func(value any) struct{} {
+				scratchproject.StopOn(t, "validating the response body "+answer.body, schema.Validate(value))
+				return struct{}{}
+			}, func(cause error) struct{} {
+				t.Fatalf("parsing response body %s for validation: %v", answer.body, cause)
+				return struct{}{}
+			})
+		}, "paths", matched.path, matched.method, "responses", status, "content", "application/json", "schema")
+	})
 }

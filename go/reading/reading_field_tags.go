@@ -46,8 +46,11 @@ type tagValue struct {
 	options []string
 }
 
-// fieldTags is each key's value in a field's tag, read as reflect reads it.
-type fieldTags struct{ values map[string]tagValue }
+// fieldTags keeps reflect's first value for each key and every declared header binding.
+type fieldTags struct {
+	values  map[string]tagValue
+	headers []tagValue
+}
 
 // lookup is the value the tag gives key, when it gives one.
 func (tags fieldTags) lookup(key string) outcome.Option[tagValue] {
@@ -58,17 +61,22 @@ func (tags fieldTags) lookup(key string) outcome.Option[tagValue] {
 func readFieldTags(index projectIndex, field indexedField) reading[fieldTags] {
 	// structtag reads a tag of nothing but spaces as no tags at all, a nil *Tags.
 	if strings.Trim(field.tag, " ") == "" {
-		return readAs(fieldTags{values: map[string]tagValue{}}, nothingFound())
+		return readAs(fieldTags{values: map[string]tagValue{}, headers: []tagValue{}}, nothingFound())
 	}
 	return outcome.Fold(outcome.TupleToResult(structtag.Parse(field.tag)), func(parsed *structtag.Tags) reading[fieldTags] {
 		values := map[string]tagValue{}
+		headers := []tagValue{}
 		for _, tag := range parsed.Tags() {
+			if tag.Key == "header" {
+				headers = append(headers, tagValue{text: tag.Value(), name: tag.Name, options: tag.Options})
+				continue
+			}
 			// reflect gives a key repeated in one tag its first value.
 			if _, isTaken := values[tag.Key]; !isTaken {
 				values[tag.Key] = tagValue{text: tag.Value(), name: tag.Name, options: tag.Options}
 			}
 		}
-		return readAs(fieldTags{values: values}, nothingFound())
+		return readAs(fieldTags{values: values, headers: headers}, nothingFound())
 	}, func(cause error) reading[fieldTags] {
 		return notRead[fieldTags](index.refused(field.variable.Pos(), StructTagMalformed{Field: field.variable.Name(), Tag: field.tag, Cause: cause}))
 	})

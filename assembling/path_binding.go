@@ -72,6 +72,6 @@ func boundPath(declared DeclaredEndpoint) pathBinding {
 	return pathBound{segments: segments}
 }
 
-func parameterNotReadable(field description.Field, part string) URLParameterUnsupported {
-	return URLParameterUnsupported{Part: part, Field: field.Name.Text(), Schema: fmt.Sprintf("%T", field.Schema)}
+func parameterNotReadable(field description.Field, part string) ParameterUnsupported {
+	return ParameterUnsupported{Part: part, Field: field.Name.Text(), Schema: fmt.Sprintf("%T", field.Schema)}
 }

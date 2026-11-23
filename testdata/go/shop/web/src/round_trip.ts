@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert"
 import { Config, DateTime, Effect } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
-import { MethodNotDeclared, NotSignedIn, ShopApi, ShopperCredentialRejected, ShopperNotFound } from "./shop_api.generated.js"
+import { MethodNotDeclared, NotSignedIn, RequestRefused, ShopApi, ShopperCredentialRejected, ShopperNotFound } from "./shop_api.generated.js"
 
 const program = Effect.gen(function*() {
   const baseUrl = yield* Config.NonEmptyString("SHOP_URL")
@@ -15,6 +15,30 @@ const program = Effect.gen(function*() {
   assert.equal(read.balance.cents, 1250n)
   assert.equal(read.balance.currency, "CAD")
   assert.equal(DateTime.formatIso(changed), "2026-11-14T12:00:00.000Z")
+
+  const count = yield* shopper.orders.readOrderCount({ headers: { "x-order-count": 9007199254740993n } })
+  const orderCount: bigint = count.order_count
+  assert.equal(count._tag, "OrderCountRead")
+  assert.equal(orderCount, 9007199254740993n)
+
+  const headerRefusals: RequestRefused[] = []
+  for (const header of [
+    { request: HttpClientRequest.get(`${baseUrl}/headers/order-count`), reason: "the header is missing" },
+    {
+      request: HttpClientRequest.get(`${baseUrl}/headers/order-count`).pipe(HttpClientRequest.setHeader("X-Order-Count", "007")),
+      reason: '"007" is not a whole number written as canonical decimal text: an optional -, then 0 or a digit from 1 to 9 followed by any digits, and never -0.'
+    }
+  ]) {
+    const response = yield* HttpClient.execute(header.request)
+    assert.equal(response.status, 400)
+    const refusal: RequestRefused = yield* HttpClientResponse.schemaBodyJson(RequestRefused)(response)
+    assert.equal(refusal._tag, "RequestRefused")
+    assert.equal(refusal.code, "NC-1001")
+    assert.equal(refusal.part, "header")
+    assert.equal(refusal.name, "x-order-count")
+    assert.equal(refusal.reason, header.reason)
+    headerRefusals.push(refusal)
+  }
 
   const missing: ShopperNotFound = yield* shopper.balance.readBalance({ params: { shopper_id: 9007199254740993n }, query: { currency: "CAD" } }).pipe(
     Effect.map((answer) => assert.fail(`The missing shopper answered ${answer._tag}`)),
@@ -57,7 +81,7 @@ const program = Effect.gen(function*() {
   assert.equal(method.method, "DELETE")
   assert.deepEqual(method.allowed, ["GET"])
 
-  return { read, missing, queued, refused, rejected, method }
+  return { read, count, headerRefusals, missing, queued, refused, rejected, method }
 }).pipe(Effect.provide(FetchHttpClient.layer))
 
 // JSON.stringify refuses a bigint, so each one is printed as its decimal text followed by n.

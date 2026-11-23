@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
 	ergo "github.com/CheckPickerUpper/ErGo"
 	"github.com/CheckPickerUpper/outcome"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/CheckPickerUpper/nocontract/assembling"
 	"github.com/CheckPickerUpper/nocontract/description"
+	"github.com/CheckPickerUpper/nocontract/internal/keyed"
 	"github.com/CheckPickerUpper/nocontract/internal/native"
 	"github.com/CheckPickerUpper/nocontract/internal/sequence"
 	"github.com/CheckPickerUpper/nocontract/odin/compiler"
@@ -49,6 +51,7 @@ type routeBinding struct {
 	input       int
 	output      compiler.Union
 	guard       outcome.Option[guardBinding]
+	headers     []headerDirective
 }
 
 type guardBinding struct {
@@ -88,7 +91,6 @@ func readProject(context context.Context, request native.Request, scratch string
 func (index *readIndex) project() outcome.Result[native.Project] {
 	return outcome.Fold(sequence.Traverse(index.documentation.routes, index.route), func(bindings []routeBinding) outcome.Result[native.Project] {
 		groups := []assembling.DeclaredGroup{}
-		guarded := []native.GuardedRoute{}
 		return outcome.Fold(sequence.Traverse(bindings, index.endpoint), func(endpoints []assembling.DeclaredEndpoint) outcome.Result[native.Project] {
 			for position, binding := range bindings {
 				groupName := binding.declaration.Entity.Package
@@ -98,15 +100,10 @@ func (index *readIndex) project() outcome.Result[native.Project] {
 					group = len(groups) - 1
 				}
 				groups[group].Endpoints = append(groups[group].Endpoints, endpoints[position])
-				outcome.ForEachOption(binding.guard, func(guard guardBinding) {
-					guarded = append(guarded, native.GuardedRoute{Group: groupName, Endpoint: binding.endpoint, Scope: guard.scope, Refusals: guard.refusals})
-				})
 			}
 			declared := assembling.Declared{API: index.request.API, Groups: groups, Members: index.members, Structs: index.structs}
-			arguments := append([]string{"run", index.request.Server}, compiler.Flags([]string{"nocontract_server"}, index.request.OdinCollections...)...)
-			arguments = append(arguments, "-out:"+filepath.Join(index.request.Directory, ".scratch", "nocontract-odin-server"))
-			return outcome.Ok(native.Project{Declared: declared, Execution: native.OdinDispatcher{Guards: guarded, Command: native.Command{Directory: index.request.Directory, Executable: "odin", Arguments: arguments}}, Generate: func(assembling.APIAssembled) outcome.Result[[]native.File] {
-				return outcome.Fold(generateBindings(index.request, index.graph, bindings), func(files []native.File) outcome.Result[[]native.File] {
+			return outcome.Ok(native.Project{Declared: declared, Generate: func(checked assembling.APIAssembled) outcome.Result[[]native.File] {
+				return outcome.Fold(generateBindings(index.request, index.graph, bindings, checked), func(files []native.File) outcome.Result[[]native.File] {
 					return outcome.Fold(generateFilesTest(index.request), func(test native.File) outcome.Result[[]native.File] {
 						return outcome.Ok(append(files, test))
 					}, outcome.Err[[]native.File])
@@ -149,7 +146,7 @@ func (index *readIndex) route(source routeSource) outcome.Result[routeBinding] {
 			return outcome.Fold(requireType[compiler.Named](index.graph.Types[output], refused("outcome must be named")), func(compiler.Named) outcome.Result[routeBinding] {
 				return outcome.Fold(requireType[compiler.Union](index.base(output), refused("outcome must be a union")), func(union compiler.Union) outcome.Result[routeBinding] {
 					return outcome.Fold(index.readGuard(source), func(guard outcome.Option[guardBinding]) outcome.Result[routeBinding] {
-						return outcome.Ok(routeBinding{declaration: declaration, endpoint: description.EndpointName(declaration.Entity.Name), method: source.method, path: source.path, input: input, output: union, guard: guard})
+						return outcome.Ok(routeBinding{declaration: declaration, endpoint: description.EndpointName(declaration.Entity.Name), method: source.method, path: source.path, input: input, output: union, guard: guard, headers: source.headers})
 					}, outcome.Err[routeBinding])
 				}, outcome.Err[routeBinding])
 			}, outcome.Err[routeBinding])
@@ -168,54 +165,111 @@ func requireType[T compiler.Type](checked compiler.Type, refused DeclarationRefu
 func (index *readIndex) endpoint(binding routeBinding) outcome.Result[assembling.DeclaredEndpoint] {
 	path := binding.path
 	return outcome.Fold(requireType[compiler.Struct](index.base(binding.input), DeclarationRefused{Position: placed(binding.declaration), Declaration: binding.declaration.Entity.Name, Rule: "input must be a struct"}), func(input compiler.Struct) outcome.Result[assembling.DeclaredEndpoint] {
-		return outcome.Fold(index.outcomeMembers(binding.output), func(members []description.Member) outcome.Result[assembling.DeclaredEndpoint] {
-			successes, failures := []description.Member{}, []description.Member{}
-			for _, member := range members {
-				switch member.Answer.(type) {
-				case description.Succeeds:
-					successes = append(successes, member)
-				case description.Fails:
-					failures = append(failures, member)
-				case nil:
+		return outcome.Fold(index.readHeaders(binding, input), func(headers []assembling.DeclaredHeader) outcome.Result[assembling.DeclaredEndpoint] {
+			return outcome.Fold(index.outcomeMembers(binding.output), func(members []description.Member) outcome.Result[assembling.DeclaredEndpoint] {
+				successes, failures := []description.Member{}, []description.Member{}
+				for _, member := range members {
+					switch member.Answer.(type) {
+					case description.Succeeds:
+						successes = append(successes, member)
+					case description.Fails:
+						failures = append(failures, member)
+					case nil:
+					}
 				}
-			}
-			if len(successes) == 0 {
-				return outcome.Err[assembling.DeclaredEndpoint](DeclarationRefused{Position: placed(binding.declaration), Declaration: binding.declaration.Entity.Name, Rule: "route outcome has no success"})
-			}
-			outcome.ForEachOption(binding.guard, func(guard guardBinding) { failures = append(failures, guard.refusals...) })
-			endpoint := assembling.DeclaredEndpoint{Name: binding.endpoint, Method: binding.method, Path: path, Params: []description.Field{}, Query: []description.Field{}, Body: description.NoBody{}, Successes: description.Successes{First: successes[0], Rest: successes[1:]}, Failures: failures, Position: placed(binding.declaration)}
-			read := outcome.Ok(endpoint)
-			for _, field := range input.Fields {
-				read = outcome.Fold(read, func(endpoint assembling.DeclaredEndpoint) outcome.Result[assembling.DeclaredEndpoint] {
-					return outcome.Fold(index.schema(field.Type, []int{}, placed(binding.declaration)), func(schema description.Schema) outcome.Result[assembling.DeclaredEndpoint] {
-						if field.Name == "body" {
-							endpoint.Body = description.JSONBody{Schema: schema}
-							return outcome.Ok(endpoint)
-						}
-						return outcome.Fold(namedField(field.Name, schema, placed(binding.declaration)), func(described description.Field) outcome.Result[assembling.DeclaredEndpoint] {
-							bound := false
-							for _, segment := range path.Segments() {
-								switch segment := segment.(type) {
-								case description.RouteParameter:
-									if segment.Name() == field.Name {
-										bound = true
+				if len(successes) == 0 {
+					return outcome.Err[assembling.DeclaredEndpoint](DeclarationRefused{Position: placed(binding.declaration), Declaration: binding.declaration.Entity.Name, Rule: "route outcome has no success"})
+				}
+				outcome.ForEachOption(binding.guard, func(guard guardBinding) { failures = append(failures, guard.refusals...) })
+				endpoint := assembling.DeclaredEndpoint{Name: binding.endpoint, Method: binding.method, Path: path, Params: []description.Field{}, Query: []description.Field{}, Headers: headers, Body: description.NoBody{}, Successes: description.Successes{First: successes[0], Rest: successes[1:]}, Failures: failures, Position: placed(binding.declaration)}
+				headerFields := map[string]struct{}{}
+				for _, header := range headers {
+					headerFields[header.Field.Name.Text()] = struct{}{}
+				}
+				read := outcome.Ok(endpoint)
+				for _, field := range input.Fields {
+					if _, header := headerFields[field.Name]; header {
+						continue
+					}
+					read = outcome.Fold(read, func(endpoint assembling.DeclaredEndpoint) outcome.Result[assembling.DeclaredEndpoint] {
+						return outcome.Fold(index.schema(field.Type, []int{}, placed(binding.declaration)), func(schema description.Schema) outcome.Result[assembling.DeclaredEndpoint] {
+							if field.Name == "body" {
+								endpoint.Body = description.JSONBody{Schema: schema}
+								return outcome.Ok(endpoint)
+							}
+							return outcome.Fold(namedField(field.Name, schema, placed(binding.declaration)), func(described description.Field) outcome.Result[assembling.DeclaredEndpoint] {
+								bound := false
+								for _, segment := range path.Segments() {
+									switch segment := segment.(type) {
+									case description.RouteParameter:
+										if segment.Name() == field.Name {
+											bound = true
+										}
+									case description.RouteText, nil:
 									}
-								case description.RouteText, nil:
 								}
-							}
-							if bound {
-								endpoint.Params = append(endpoint.Params, described)
-							} else {
-								endpoint.Query = append(endpoint.Query, described)
-							}
-							return outcome.Ok(endpoint)
+								if bound {
+									endpoint.Params = append(endpoint.Params, described)
+								} else {
+									endpoint.Query = append(endpoint.Query, described)
+								}
+								return outcome.Ok(endpoint)
+							}, outcome.Err[assembling.DeclaredEndpoint])
 						}, outcome.Err[assembling.DeclaredEndpoint])
 					}, outcome.Err[assembling.DeclaredEndpoint])
-				}, outcome.Err[assembling.DeclaredEndpoint])
-			}
-			return read
+				}
+				return read
+			}, outcome.Err[assembling.DeclaredEndpoint])
 		}, outcome.Err[assembling.DeclaredEndpoint])
 	}, outcome.Err[assembling.DeclaredEndpoint])
+}
+
+// HeaderDeclarationRefused keeps a header binding, its source and its precise declaration cause.
+type HeaderDeclarationRefused struct {
+	Position assembling.Position
+	Field    string
+	Name     string
+	Problem  assembling.Problem
+}
+
+// Error reports the shared permanent code and the declaration's original location.
+func (failure HeaderDeclarationRefused) Error() string {
+	return fmt.Sprintf("%s: %s: %s", failure.Position, failure.Problem.ErrorCode(), failure.Problem.Report(indexLanguage()).Message)
+}
+
+func (index *readIndex) readHeaders(binding routeBinding, input compiler.Struct) outcome.Result[[]assembling.DeclaredHeader] {
+	fields, available := map[string]compiler.Field{}, []string{}
+	for _, field := range input.Fields {
+		fields[field.Name] = field
+		available = append(available, field.Name)
+	}
+	position := placed(binding.declaration)
+	return sequence.Traverse(binding.headers, func(header headerDirective) outcome.Result[assembling.DeclaredHeader] {
+		refuse := func(problem assembling.Problem) outcome.Result[assembling.DeclaredHeader] {
+			return outcome.Err[assembling.DeclaredHeader](HeaderDeclarationRefused{Position: position, Field: header.field, Name: header.name, Problem: problem})
+		}
+		return outcome.FoldOption(keyed.Entry(fields, header.field), func(field compiler.Field) outcome.Result[assembling.DeclaredHeader] {
+			if field.Name == "body" {
+				return refuse(assembling.HeaderBindingConflict{Name: header.name, Field: header.field, Part: "body", Binding: "body"})
+			}
+			for _, segment := range binding.path.Segments() {
+				switch segment := segment.(type) {
+				case description.RouteParameter:
+					if segment.Name() == field.Name {
+						return refuse(assembling.HeaderBindingConflict{Name: header.name, Field: header.field, Part: "path", Binding: segment.Name()})
+					}
+				case description.RouteText, nil:
+				}
+			}
+			return outcome.Fold(index.schema(field.Type, []int{}, position), func(schema description.Schema) outcome.Result[assembling.DeclaredHeader] {
+				return outcome.Fold(namedField(field.Name, schema, position), func(described description.Field) outcome.Result[assembling.DeclaredHeader] {
+					return outcome.Ok(assembling.DeclaredHeader{Name: header.name, Field: described, Position: position})
+				}, outcome.Err[assembling.DeclaredHeader])
+			}, outcome.Err[assembling.DeclaredHeader])
+		}, func() outcome.Result[assembling.DeclaredHeader] {
+			return refuse(assembling.HeaderFieldUndeclared{Name: header.name, Field: header.field, Available: strings.Join(available, ", ")})
+		})
+	})
 }
 
 func namedField(name string, schema description.Schema, position assembling.Position) outcome.Result[description.Field] {

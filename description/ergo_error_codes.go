@@ -293,3 +293,86 @@ func (failure FieldNameUnwritable) Report(language messages.Language) ergo.Repor
 func (failure FieldNameUnwritable) Causes() []error {
 	return nil
 }
+
+func (HeaderNameEmpty) ErrorCode() ergo.Code { return "NC-1153" }
+
+// HeaderNameEmptyArguments holds the arguments HeaderNameEmpty's message names, in the order the message first names them.
+type HeaderNameEmptyArguments struct {
+	Name string `json:"Name"`
+}
+
+// ReportArguments marks HeaderNameEmptyArguments as the arguments of a report.
+func (HeaderNameEmptyArguments) ReportArguments() {}
+
+// Report is HeaderNameEmpty's code, its message in language and the arguments the message names.
+func (failure HeaderNameEmpty) Report(language messages.Language) ergo.Report {
+	arguments := HeaderNameEmptyArguments{Name: string(failure.Name)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The header name "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is empty."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1153", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Name}}}), Arguments: arguments}
+}
+
+// Causes is every error HeaderNameEmpty holds, then the causes of every failure it holds.
+func (failure HeaderNameEmpty) Causes() []error {
+	return nil
+}
+
+func (HeaderNameInvalid) ErrorCode() ergo.Code { return "NC-1154" }
+
+// HeaderNameInvalidArguments holds the arguments HeaderNameInvalid's message names, in the order the message first names them.
+type HeaderNameInvalidArguments struct {
+	Name      string `json:"Name"`
+	Character string `json:"Character"`
+	Offset    int    `json:"Offset"`
+}
+
+// ReportArguments marks HeaderNameInvalidArguments as the arguments of a report.
+func (HeaderNameInvalidArguments) ReportArguments() {}
+
+// Report is HeaderNameInvalid's code, its message in language and the arguments the message names.
+func (failure HeaderNameInvalid) Report(language messages.Language) ergo.Report {
+	arguments := HeaderNameInvalidArguments{Name: string(failure.Name), Character: string(failure.Character), Offset: int(failure.Offset)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The header name "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " holds "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " at byte "}, messageformat.Argument{Index: 2}, messageformat.Literal{Text: ", which is not an ASCII field-name token character."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1154", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Name}, messageformat.TextValue{Text: arguments.Character}, messageformat.SignedWhole{Value: int64(arguments.Offset)}}}), Arguments: arguments}
+}
+
+// Causes is every error HeaderNameInvalid holds, then the causes of every failure it holds.
+func (failure HeaderNameInvalid) Causes() []error {
+	return nil
+}
+
+func (HeaderNameReserved) ErrorCode() ergo.Code { return "NC-1155" }
+
+// HeaderNameReservedArguments holds the arguments HeaderNameReserved's message names, in the order the message first names them.
+type HeaderNameReservedArguments struct {
+	Name string `json:"Name"`
+}
+
+// ReportArguments marks HeaderNameReservedArguments as the arguments of a report.
+func (HeaderNameReservedArguments) ReportArguments() {}
+
+// Report is HeaderNameReserved's code, its message in language and the arguments the message names.
+func (failure HeaderNameReserved) Report(language messages.Language) ergo.Report {
+	arguments := HeaderNameReservedArguments{Name: string(failure.Name)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The header "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is reserved for its dedicated HTTP feature and cannot be a generic header parameter."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1155", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.TextValue{Text: arguments.Name}}}), Arguments: arguments}
+}
+
+// Causes is every error HeaderNameReserved holds, then the causes of every failure it holds.
+func (failure HeaderNameReserved) Causes() []error {
+	return nil
+}

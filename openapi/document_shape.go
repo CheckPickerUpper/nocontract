@@ -58,7 +58,7 @@ type bodyOperation struct {
 func (bodylessOperation) isOperation() {}
 func (bodyOperation) isOperation()     {}
 
-// parameter is one path segment or query parameter a route reads, which every request carries.
+// parameter is one path segment, query parameter or header every request to the route carries.
 type parameter struct {
 	Name     string `json:"name"`
 	In       string `json:"in"`

@@ -1,0 +1,4 @@
+# Return this pin to laytan/odin-http once the release fixes merge upstream.
+[submodule "odin/dependencies/odin-http"]
+	path = odin/dependencies/odin-http
+	url = https://github.com/CheckPickerUpper/odin-http.git

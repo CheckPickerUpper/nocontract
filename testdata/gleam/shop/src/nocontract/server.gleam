@@ -15,6 +15,7 @@ import gleam/string
 import mist
 import nocontract_runtime/bind_address
 import nocontract_runtime/parameter_reading as parameter
+import nocontract_runtime/request_layers
 import nocontract_runtime/request_logging
 import nocontract_runtime/request_reading as request_input
 import nocontract_runtime/target_matching as target
@@ -33,15 +34,36 @@ type Operation {
   Route0
   Route1
   Route2
+  Route3
 }
 
 type Answer {
   Answer(response: wisp.Response, code: option.Option(String))
 }
 
-fn handle_request(request: wisp.Request) -> wisp.Response {
+fn handle_request(
+  request: wisp.Request,
+  layers: List(request_layers.Layer),
+) -> wisp.Response {
   let #(duration_us, #(route, answer)) =
-    request_logging.measure_request(fn() { answer_request(request) })
+    request_logging.measure_request(fn() {
+      let #(route, selected_answer) = select_request(request)
+      let finish =
+        request_layers.enter(
+          layers,
+          request_layers.Visit(
+            method: http.method_to_string(request.method),
+            path: request.path,
+            route:,
+          ),
+        )
+      let answer = selected_answer()
+      finish(request_layers.Answered(
+        status: answer.response.status,
+        code: answer.code,
+      ))
+      #(route, answer)
+    })
   request_logging.log_request(request_logging.RequestLog(
     route:,
     method: http.method_to_string(request.method),
@@ -52,7 +74,7 @@ fn handle_request(request: wisp.Request) -> wisp.Response {
   answer.response
 }
 
-fn answer_request(request: wisp.Request) -> #(String, Answer) {
+fn select_request(request: wisp.Request) -> #(String, fn() -> Answer) {
   case
     target.match_target(
       [
@@ -71,6 +93,10 @@ fn answer_request(request: wisp.Request) -> #(String, Answer) {
           target.PathParameter(name: "shopper_id"),
           target.PathText(text: "orders"),
         ]),
+        target.Route(operation: Route3, method: "GET", path: [
+          target.PathText(text: "headers"),
+          target.PathText(text: "order-count"),
+        ]),
       ],
       method: http.method_to_string(request.method),
       path: request.path,
@@ -78,38 +104,37 @@ fn answer_request(request: wisp.Request) -> #(String, Answer) {
   {
     target.Selected(operation: Route0, parameters:) -> #(
       "/shoppers/{shopper_id}/balance",
-      serve_route_0(request, parameters),
+      fn() { serve_route_0(request, parameters) },
     )
     target.Selected(operation: Route1, parameters:) -> #(
       "/shoppers/{shopper_id}/top-ups",
-      serve_route_1(request, parameters),
+      fn() { serve_route_1(request, parameters) },
     )
     target.Selected(operation: Route2, parameters:) -> #(
       "/shoppers/{shopper_id}/orders",
-      serve_route_2(request, parameters),
+      fn() { serve_route_2(request, parameters) },
     )
-    target.UnknownPath(path:) -> #(
-      request.path,
+    target.Selected(operation: Route3, parameters:) -> #(
+      "/headers/order-count",
+      fn() { serve_route_3(request, parameters) },
+    )
+    target.UnknownPath(path:) -> #(request.path, fn() {
       shared_route_not_found(
         method: http.method_to_string(request.method),
         path:,
-      ),
-    )
-    target.UndeclaredMethod(allowed:) -> #(
-      request.path,
-      refuse_method(method: request.method, allowed:),
-    )
-    target.UnreadablePath(segment:) -> {
-      let written = segment |> json.string |> json.to_string
-      #(
-        request.path,
-        shared_request_refused(
-          part: "path",
-          name: segment,
-          reason: "invalid URL escape " <> written,
-        ),
       )
-    }
+    })
+    target.UndeclaredMethod(allowed:) -> #(request.path, fn() {
+      refuse_method(method: request.method, allowed:)
+    })
+    target.UnreadablePath(segment:) -> #(request.path, fn() {
+      let written = segment |> json.string |> json.to_string
+      shared_request_refused(
+        part: "path",
+        name: segment,
+        reason: "invalid URL escape " <> written,
+      )
+    })
   }
 }
 
@@ -224,6 +249,33 @@ fn serve_route_2(
 ) -> Answer {
   case read_route_2(request, parameters) {
     Ok(input) -> input |> native_12.place |> answer_6fb7787a3145644b
+    Error(cause) -> request_refused(cause)
+  }
+}
+
+fn read_route_3(
+  request: wisp.Request,
+  _parameters: dict.Dict(String, String),
+) -> Result(native_12.OrderCountInput, request_input.RequestRefusal) {
+  use field_0 <- result.try(request_input.read_header(
+    request.headers,
+    "x-order-count",
+    parameter.IntegerParameter(
+      least: -9_223_372_036_854_775_808,
+      most: 9_223_372_036_854_775_807,
+      parser: "ParseInt",
+    ),
+    decode_0b5f608070c6ce3b(),
+  ))
+  Ok(native_12.OrderCountInput(order_count: field_0))
+}
+
+fn serve_route_3(
+  request: wisp.Request,
+  parameters: dict.Dict(String, String),
+) -> Answer {
+  case read_route_3(request, parameters) {
+    Ok(input) -> input |> native_12.read_order_count |> answer_dd8bf8c137db7b72
     Error(cause) -> request_refused(cause)
   }
 }
@@ -425,7 +477,11 @@ fn write_answer(
 
 /// A listening address and port, accepted only by options.
 pub opaque type StartOptions {
-  StartOptions(address: bind_address.BindAddress, port: Int)
+  StartOptions(
+    address: bind_address.BindAddress,
+    port: Int,
+    layers: List(request_layers.Layer),
+  )
 }
 
 /// Why an address or port cannot start a listener.
@@ -446,11 +502,19 @@ pub fn options(
       Error(PortOutside(port:, least: 0, most: 65_535))
     _, _ -> {
       case bind_address.parse(address) {
-        Ok(address) -> Ok(StartOptions(address:, port:))
+        Ok(address) -> Ok(StartOptions(address:, port:, layers: []))
         Error(cause) -> Error(AddressRefused(cause:))
       }
     }
   }
+}
+
+/// Selects ordered request and answer observers without exposing the HTTP response.
+pub fn with_layers(
+  options: StartOptions,
+  layers: List(request_layers.Layer),
+) -> StartOptions {
+  StartOptions(..options, layers:)
 }
 
 /// A listener that Mist could not start, with its attempted options and OTP error.
@@ -463,7 +527,7 @@ pub fn start(
   options: StartOptions,
 ) -> Result(actor.Started(static_supervisor.Supervisor), StartRefusal) {
   case
-    handle_request
+    handle_request(_, options.layers)
     |> wisp_mist.handler(wisp.random_string(64))
     |> mist.new
     |> mist.bind(bind_address.to_string(options.address))
@@ -892,4 +956,28 @@ fn answer_c7953ea1770cddb2(value: native_8.Refusal) -> Answer {
         ]),
       )
   }
+}
+
+fn answer_dd8bf8c137db7b72(value: native_12.OrderCountOutcome) -> Answer {
+  let native_12.OrderCountRead(order_count: field_0) = value
+  write_answer(
+    tag: "OrderCountRead",
+    status: 200,
+    code: option.None,
+    fields: json.object([
+      #("_tag", json.string("OrderCountRead")),
+      #("order_count", encode_797290862a6670da(field_0)),
+    ]),
+    schema: wire.RecordSchema(fields: [
+      #("_tag", wire.LiteralsSchema(values: ["OrderCountRead"])),
+      #(
+        "order_count",
+        wire.IntegerSchema(
+          least: -9_223_372_036_854_775_808,
+          most: 9_223_372_036_854_775_807,
+          encoding: wire.DecimalString,
+        ),
+      ),
+    ]),
+  )
 }

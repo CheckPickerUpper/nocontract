@@ -460,7 +460,7 @@ func (InputFieldUnreadArguments) ReportArguments() {}
 // Report is InputFieldUnread's code, its message in language and the arguments the message names.
 func (failure InputFieldUnread) Report(language messages.Language) ergo.Report {
 	arguments := InputFieldUnreadArguments{Field: string(failure.Field)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The input field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " has no path or query tag and is not named Body."}}}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The input field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " has no path, query or header tag and is not named Body."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:
@@ -569,7 +569,7 @@ func (ParameterTypeUnsupportedArguments) ReportArguments() {}
 // Report is ParameterTypeUnsupported's code, its message in language and the arguments the message names.
 func (failure ParameterTypeUnsupported) Report(language messages.Language) ergo.Report {
 	arguments := ParameterTypeUnsupportedArguments{Field: string(failure.Field), Type: string(failure.Type)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The path or query field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is a "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", not text, a whole number, a boolean or a set of string constants."}}}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The path, query or header field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is a "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: ", not text, a whole number, a boolean or a set of string constants."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:

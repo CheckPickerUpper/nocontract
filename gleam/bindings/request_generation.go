@@ -22,6 +22,9 @@ func (generated generator) inputReader(name string, input Record, endpoint descr
 		generated.module("gleam/option")
 		inputs[field.Name.Text()] = "request_input.read_query(target.read_query(query_text(request)), " + quoted(field.Name.Text()) + ", " + generated.parameterSchema(field.Schema) + ", "
 	}
+	for _, header := range endpoint.Headers {
+		inputs[header.Field.Text()] = "request_input.read_header(request.headers, " + quoted(header.Name.Text()) + ", " + generated.parameterSchema(header.Schema) + ", "
+	}
 	switch body := endpoint.Body.(type) {
 	case description.JSONBody:
 		inputs["body"] = "request_input.read_body(request, " + generated.schema(body.Schema) + ", record_schemas(), "
@@ -34,7 +37,7 @@ func (generated generator) inputReader(name string, input Record, endpoint descr
 		arguments = append(arguments, local)
 	}
 	request, parameters := "_request", "_parameters"
-	if len(endpoint.Query) > 0 {
+	if len(endpoint.Query) > 0 || len(endpoint.Headers) > 0 {
 		request = "request"
 	}
 	switch endpoint.Body.(type) {

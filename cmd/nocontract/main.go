@@ -1,5 +1,5 @@
 // Command nocontract writes the code that serves a backend's routes and the Effect HttpApi its
-// TypeScript clients call, checks the generated files, and serves Odin and Gleam projects.
+// TypeScript clients call, checks the generated files, and starts their application commands.
 package main
 
 import (
