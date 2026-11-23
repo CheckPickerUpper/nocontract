@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"slices"
@@ -13,16 +14,17 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// ListenOptions names the TCP address a generated server listens on. Its fields belong to the
-// runtime, so adding another server option preserves the generated Listen signature.
+// ListenOptions names the TCP address and request logger a generated server uses. Its fields
+// belong to the runtime, so another server option preserves the generated Listen signature.
 type ListenOptions struct {
-	address string
+	address       string
+	requestLogger outcome.Option[*slog.Logger]
 }
 
 // ListenOn chooses a TCP address, such as "127.0.0.1:8080". Port zero asks the operating system
 // for a free port; ListeningServer.Address reports the address it assigned.
 func ListenOn(address string) ListenOptions {
-	return ListenOptions{address: address}
+	return ListenOptions{address: address, requestLogger: outcome.None[*slog.Logger]()}
 }
 
 // RouteBinding is the declared endpoints and layers a generated API owns. It accepts typed
@@ -112,7 +114,7 @@ func Listen(serverContext context.Context, options ListenOptions, binding RouteB
 		KeepAliveConfig: net.KeepAliveConfig{Enable: false, Idle: 0, Interval: 0, Count: 0},
 	}
 	return outcome.Fold(outcome.TupleToResult(configuration.Listen(serverContext, "tcp", options.address)), func(listener net.Listener) outcome.Result[ListeningServer] {
-		server := newHTTPServer(serverContext, binding, listener.Addr().String())
+		server := newHTTPServer(serverContext, options, binding, listener.Addr().String())
 		tasks := &errgroup.Group{}
 		tasks.Go(func() error { return serveListener(server, listener) })
 		return outcome.Ok(ListeningServer{server: server, tasks: tasks})
@@ -121,9 +123,9 @@ func Listen(serverContext context.Context, options ListenOptions, binding RouteB
 	})
 }
 
-func newHTTPServer(serverContext context.Context, binding RouteBinding, address string) *http.Server {
+func newHTTPServer(serverContext context.Context, options ListenOptions, binding RouteBinding, address string) *http.Server {
 	return &http.Server{
-		Addr: address, Handler: boundRoutes{binding: binding}, DisableGeneralOptionsHandler: true,
+		Addr: address, Handler: boundRoutes{binding: binding, requestLogger: options.requestLogger, clock: time.Now}, DisableGeneralOptionsHandler: true,
 		TLSConfig: nil, ReadTimeout: 0, ReadHeaderTimeout: 10 * time.Second, WriteTimeout: 0, IdleTimeout: 0,
 		MaxHeaderBytes: 0, MaxHeaderValueCount: 0, TLSNextProto: nil, ConnState: nil, ErrorLog: nil,
 		BaseContext: func(net.Listener) context.Context { return serverContext }, ConnContext: nil,
@@ -160,9 +162,11 @@ func (listening ListeningServer) Stop(context context.Context) outcome.Result[Se
 }
 
 type boundRoutes struct {
-	binding RouteBinding
+	binding       RouteBinding
+	requestLogger outcome.Option[*slog.Logger]
+	clock         func() time.Time
 }
 
 func (bound boundRoutes) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	Respond(writer, request, bound.binding.endpoints, bound.binding.layers)
+	respond(writer, request, bound.binding.endpoints, bound.binding.layers, bound.requestLogger, bound.clock)
 }

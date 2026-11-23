@@ -3,12 +3,15 @@ package nocontract
 import (
 	"cmp"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 )
 
@@ -216,13 +219,23 @@ func (optionsResponse) isResponse() {}
 // Respond answers one request to a generated server through its layers: the route its method and
 // path match; 204 with Allow to an OPTIONS request for a declared path; MethodNotDeclared to
 // another method on a declared path; RouteNotFound to a path no route declares; and RequestRefused
-// to a path holding a segment that is not valid escaping. The runtime's private HTTP handler
-// calls it with the generated API's binding.
+// to a path holding a segment that is not valid escaping. It uses the same dispatcher as the
+// runtime's private HTTP handler.
 func Respond(writer http.ResponseWriter, request *http.Request, endpoints []Endpoint, layers []Layer) {
+	respond(writer, request, endpoints, layers, outcome.None[*slog.Logger](), time.Now)
+}
+
+func respond(writer http.ResponseWriter, request *http.Request, endpoints []Endpoint, layers []Layer, logger outcome.Option[*slog.Logger], clock func() time.Time) {
+	started := clock()
 	matched := matchRequest(endpoints, request)
 	answer := sync.OnceValue(func() Answered { return answerMatched(matched, request) })
-	throughLayers(layers, Visit{request: request, route: visitedRoute(matched), header: writer.Header()}, answer)
-	answer().write(writer)
+	visit := Visit{request: request, route: visitedRoute(matched), header: writer.Header()}
+	throughLayers(layers, visit, answer)
+	answered := answer()
+	outcome.ForEachOption(logger, func(logger *slog.Logger) {
+		logRequest(logger, visit, answered, clock().Sub(started))
+	})
+	answered.write(writer)
 }
 
 // throughLayers runs each layer around the next, the first outermost, each next running what is

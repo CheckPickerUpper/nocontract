@@ -25,7 +25,7 @@ func TestStopWaitsForTheBoundListenerBeforeReportingSuccess(t *testing.T) {
 		}()
 		synctest.Test(t, func(t *testing.T) {
 			beginServing, shutdownStarted := make(chan struct{}), make(chan struct{})
-			server := newHTTPServer(t.Context(), BindRoutes([]Endpoint{}, []Layer{}), listener.Addr().String())
+			server := newHTTPServer(t.Context(), ListenOn(listener.Addr().String()), BindRoutes([]Endpoint{}, []Layer{}), listener.Addr().String())
 			server.RegisterOnShutdown(func() { close(shutdownStarted) })
 			serving := &errgroup.Group{}
 			serving.Go(func() error {
