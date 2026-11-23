@@ -179,7 +179,7 @@ type RequestSelection {
   ImmediateAnswer(run: fn() -> Answer)
 }
 
-fn handle_request(request: wisp.Request, layers: List(request_layers.Layer), deadline: option.Option(request_deadline.RequestDeadline)) -> wisp.Response {
+fn handle_request(request request: wisp.Request, layers layers: List(request_layers.Layer), deadline deadline: option.Option(request_deadline.RequestDeadline)) -> wisp.Response {
   let #(duration_us, #(route, answer)) = request_logging.measure_request(fn() {
     let #(route, selected) = select_request(request)
     let visit = request_layers.Visit(method: http.method_to_string(request.method), path: request.path, route:)
@@ -234,7 +234,7 @@ pub type StartRefusal { ListenerNotStarted(options: server_options.StartOptions,
 /// Starts only the declared routes inside the application's BEAM.
 pub fn start(options: server_options.StartOptions) -> Result(actor.Started(static_supervisor.Supervisor), StartRefusal) {
   let configuration = server_options.read_configuration(options)
-  case handle_request(_, configuration.layers, configuration.deadline)
+  case handle_request(request: _, layers: configuration.layers, deadline: configuration.deadline)
     |> wisp_mist.handler(wisp.random_string(64))
     |> mist.new
     |> mist.bind(bind_address.to_string(configuration.address))

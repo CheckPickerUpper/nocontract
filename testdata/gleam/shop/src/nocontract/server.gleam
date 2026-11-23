@@ -50,9 +50,9 @@ type RequestSelection {
 }
 
 fn handle_request(
-  request: wisp.Request,
-  layers: List(request_layers.Layer),
-  deadline: option.Option(request_deadline.RequestDeadline),
+  request request: wisp.Request,
+  layers layers: List(request_layers.Layer),
+  deadline deadline: option.Option(request_deadline.RequestDeadline),
 ) -> wisp.Response {
   let #(duration_us, #(route, answer)) =
     request_logging.measure_request(fn() {
@@ -623,7 +623,11 @@ pub fn start(
 ) -> Result(actor.Started(static_supervisor.Supervisor), StartRefusal) {
   let configuration = server_options.read_configuration(options)
   case
-    handle_request(_, configuration.layers, configuration.deadline)
+    handle_request(
+      request: _,
+      layers: configuration.layers,
+      deadline: configuration.deadline,
+    )
     |> wisp_mist.handler(wisp.random_string(64))
     |> mist.new
     |> mist.bind(bind_address.to_string(configuration.address))
