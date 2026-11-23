@@ -10,9 +10,9 @@ require (
 
 require (
 	github.com/CheckPickerUpper/ErGo v0.0.0-20261118210535-5e49b5eba7bc // indirect
-	github.com/creachadair/atomicfile v0.4.2 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/go-json-experiment/json v1.27.2 // indirect
+	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
