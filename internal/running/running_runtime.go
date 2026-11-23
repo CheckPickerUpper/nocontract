@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 	"golang.org/x/tools/go/packages"
 
@@ -64,7 +65,7 @@ func runtimeDirectory(ctx context.Context) mo.Result[string] {
 // runtime is read, so a runtime whose generated file is missing or stale is written again.
 func generatedRuntime(directory string, finish finisher) Outcome {
 	path := filepath.Join(directory, serverplan.RoutesFileName)
-	return mo.Fold(writing.RenderRuntime(description.SharedFailures()), func(content []byte) Outcome {
+	return outcome.Fold(writing.RenderRuntime(description.SharedFailures()), func(content []byte) Outcome {
 		return onDisk([]generatedFile{goFileAt(path, content)}, finish)
 	}, func(cause error) Outcome { return FileNotWritten{Path: path, Cause: cause} })
 }

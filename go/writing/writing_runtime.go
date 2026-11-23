@@ -3,11 +3,12 @@ package writing
 import (
 	"fmt"
 	"go/format"
+	"go/types"
 	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/samber/mo"
+	"github.com/CheckPickerUpper/outcome"
 
 	"github.com/CheckPickerUpper/nocontract/description"
 	"github.com/CheckPickerUpper/nocontract/go/serverplan"
@@ -15,10 +16,10 @@ import (
 )
 
 // SharedFieldUnsupported is a field of one of nocontract's own failures whose schema the Go runtime
-// declares no type for: only text, a set of string constants and a list of text have one.
+// declares no type for: only text, whole numbers, a set of string constants and a list of text have one.
 //
 //ergo:code NC-1063
-//ergo:message The field {Field} of {Failure} has no Go runtime type: only text, a set of string constants and a list of text have one.
+//ergo:message The field {Field} of {Failure} has no Go runtime type: only text, whole numbers, a set of string constants and a list of text have one.
 type SharedFieldUnsupported struct {
 	Failure string
 	Field   string
@@ -32,24 +33,22 @@ func (refused SharedFieldUnsupported) Error() string {
 // RenderRuntime is the Go runtime's own generated file: each of nocontract's own failures as a type
 // carrying the code and message ErGo reads, the sealed type holding them, and the function that
 // answers each with its status, tag and code.
-func RenderRuntime(failures []description.SharedFailure) mo.Result[[]byte] {
-	declared := mo.Ok([]string{})
+func RenderRuntime(failures []description.SharedFailure) outcome.Result[[]byte] {
+	declared := outcome.Ok([]sharedFailureDeclaration{})
 	for _, failure := range failures {
-		declared = mo.Fold(declared, func(texts []string) mo.Result[[]string] {
-			return mo.Fold(sharedFailureText(failure), func(text string) mo.Result[[]string] {
-				return mo.Ok(append(slices.Clone(texts), text))
-			}, mo.Err[[]string])
-		}, mo.Err[[]string])
+		declared = outcome.Fold(declared, func(declarations []sharedFailureDeclaration) outcome.Result[[]sharedFailureDeclaration] {
+			return outcome.Fold(declareSharedFailure(failure), func(declaration sharedFailureDeclaration) outcome.Result[[]sharedFailureDeclaration] {
+				return outcome.Ok(append(declarations, declaration))
+			}, outcome.Err[[]sharedFailureDeclaration])
+		}, outcome.Err[[]sharedFailureDeclaration])
 	}
-	return mo.Fold(declared, func(texts []string) mo.Result[[]byte] {
+	return outcome.Fold(declared, func(declarations []sharedFailureDeclaration) outcome.Result[[]byte] {
 		names := newImports(serverplan.NoContractPath, routeFileImports(serverplan.ServesNoRoutes{}), []string{})
+		texts := []string{}
 		members := []serverplan.Member{}
-		for _, failure := range failures {
-			// sharedFailureText refuses every field but text, so a shared failure writes no whole number.
-			members = append(members, serverplan.Member{
-				Go: serverplan.GoName{Package: serverplan.NoContractPath, Name: failure.Name}, Answer: failure.Member().Answer,
-				Written: []serverplan.WrittenType{},
-			})
+		for _, declaration := range declarations {
+			texts = append(texts, declaration.text)
+			members = append(members, declaration.member)
 		}
 		name := serverplan.AnswerPrefix + serverplan.SharedFailureType
 		body := taggedTypesText() +
@@ -59,8 +58,8 @@ func RenderRuntime(failures []description.SharedFailure) mo.Result[[]byte] {
 			fmt.Sprintf("\n// %s answers each failure nocontract answers itself\n// with its status, tag and code.", name) +
 			answerText(answerFunction{name: name, sealed: serverplan.SharedFailureType, members: members}, names)
 		file := description.GeneratedHeader + "\npackage " + serverplan.NoContractPackage + "\n\n" + names.declaration() + "\n" + body
-		return mo.TupleToResult(format.Source([]byte(file)))
-	}, mo.Err[[]byte])
+		return outcome.TupleToResult(format.Source([]byte(file)))
+	}, outcome.Err[[]byte])
 }
 
 // taggedTypesText is the JSON object each member is answered as: its tag, a failure's code, then the
@@ -74,17 +73,33 @@ func taggedTypesText() string {
 		"type taggedFailure[M any] struct {\n\tTag string `%s`\n\tCode string `%s`\n\tFields M `json:\",embed\"`\n}\n", tag, tag, code)
 }
 
-// sharedFailureText is one shared failure's type, carrying the code and message ErGo reads, the type
-// of each of its fields that holds one of a set of string constants, with the constants, and its
-// place in the sealed type.
-func sharedFailureText(failure description.SharedFailure) mo.Result[string] {
+type sharedFailureDeclaration struct {
+	text   string
+	member serverplan.Member
+}
+
+// declareSharedFailure declares the native fields and answer marshalers together, so a whole
+// number's Go type and its decimal-text wire representation come from the same field schema.
+func declareSharedFailure(failure description.SharedFailure) outcome.Result[sharedFailureDeclaration] {
 	fields, literals := []string{}, &strings.Builder{}
+	written := []serverplan.WrittenType{}
 	for _, field := range failure.Fields {
 		name := field.Name.Text()
 		goField := goFieldName(name)
 		switch schema := field.Schema.(type) {
 		case description.Text:
 			fields = append(fields, fmt.Sprintf("\t%s string `json:%q`\n", goField, name))
+		case description.Integer:
+			goType := integerType(schema.Width)
+			if goType.Kind() == types.Invalid {
+				return outcome.Err[sharedFailureDeclaration](SharedFieldUnsupported{Failure: failure.Name, Field: name})
+			}
+			fields = append(fields, fmt.Sprintf("\t%s %s `json:%q`\n", goField, goType.Name(), name))
+			for _, each := range serverplan.WrittenTypes(serverplan.BodyValue{GoType: goType, Shape: serverplan.WholeShape{Width: schema.Width}}) {
+				if !slices.Contains(written, each) {
+					written = append(written, each)
+				}
+			}
 		case description.Literals:
 			literalType := failure.Name + goField
 			fields = append(fields, fmt.Sprintf("\t%s %s `json:%q`\n", goField, literalType, name))
@@ -100,15 +115,43 @@ func sharedFailureText(failure description.SharedFailure) mo.Result[string] {
 				fields = append(fields, fmt.Sprintf("\t%s []string `json:%q`\n", goField, name))
 			case description.Integer, description.Finite, description.Truth, description.Instant, description.Literals, description.List,
 				description.FixedList, description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
-				return mo.Err[string](SharedFieldUnsupported{Failure: failure.Name, Field: name})
+				return outcome.Err[sharedFailureDeclaration](SharedFieldUnsupported{Failure: failure.Name, Field: name})
 			}
-		case description.Integer, description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary,
+		case description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary,
 			description.Nullable, description.StructRef, description.InlineStruct, nil:
-			return mo.Err[string](SharedFieldUnsupported{Failure: failure.Name, Field: name})
+			return outcome.Err[sharedFailureDeclaration](SharedFieldUnsupported{Failure: failure.Name, Field: name})
 		}
 	}
-	return mo.Ok(fmt.Sprintf("\n// %s\n//\n//ergo:code %s\n//ergo:message %s\ntype %s struct {\n%s}\n%s\nfunc (%s) is%s() {}\n",
-		failure.Doc, failure.Code, messageText(failure.Message), failure.Name, strings.Join(fields, ""), literals.String(), failure.Name, serverplan.SharedFailureType))
+	return outcome.Ok(sharedFailureDeclaration{
+		text: fmt.Sprintf("\n// %s\n//\n//ergo:code %s\n//ergo:message %s\ntype %s struct {\n%s}\n%s\nfunc (%s) is%s() {}\n",
+			failure.Doc, failure.Code, messageText(failure.Message), failure.Name, strings.Join(fields, ""), literals.String(), failure.Name, serverplan.SharedFailureType),
+		member: serverplan.Member{
+			Go: serverplan.GoName{Package: serverplan.NoContractPath, Name: failure.Name}, Answer: failure.Member().Answer, Written: written,
+		},
+	})
+}
+
+func integerType(width description.IntegerWidth) *types.Basic {
+	switch width.(type) {
+	case description.Signed8:
+		return types.Typ[types.Int8]
+	case description.Signed16:
+		return types.Typ[types.Int16]
+	case description.Signed32:
+		return types.Typ[types.Int32]
+	case description.Signed64:
+		return types.Typ[types.Int64]
+	case description.Unsigned8:
+		return types.Typ[types.Uint8]
+	case description.Unsigned16:
+		return types.Typ[types.Uint16]
+	case description.Unsigned32:
+		return types.Typ[types.Uint32]
+	case description.Unsigned64:
+		return types.Typ[types.Uint64]
+	case nil:
+	}
+	return types.Typ[types.Invalid]
 }
 
 // messageText is a shared failure's message as ErGo reads it: each field named as the Go runtime

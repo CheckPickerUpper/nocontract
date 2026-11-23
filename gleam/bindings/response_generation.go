@@ -7,13 +7,13 @@ import (
 	"github.com/CheckPickerUpper/nocontract/description"
 )
 
-func sharedResponses() string {
+func sharedResponses(generated generator, failures []description.SharedFailure) string {
 	written := ""
-	for _, failure := range description.SharedFailures() {
+	for _, failure := range failures {
 		arguments, fields := []string{}, []string{"#(\"_tag\", json.string(" + quoted(failure.Name) + "))", "#(\"code\", json.string(" + quoted(failure.Code.String()) + "))"}
 		for _, field := range failure.Fields {
 			name := field.Name.Text()
-			typeName, encoder := sharedField(field.Schema, name)
+			typeName, encoder := sharedField(generated, field.Schema, name)
 			arguments = append(arguments, name+" "+name+": "+typeName)
 			fields = append(fields, "#("+quoted(name)+", "+encoder+")")
 		}
@@ -22,13 +22,15 @@ func sharedResponses() string {
 	return written + responseFunctions
 }
 
-func sharedField(schema description.Schema, name string) (string, string) {
-	switch schema.(type) {
+func sharedField(generated generator, schema description.Schema, name string) (string, string) {
+	switch typed := schema.(type) {
 	case description.Text, description.Literals:
 		return "String", "json.string(" + name + ")"
+	case description.Integer:
+		return "Int", generated.encoder(Whole{Width: typed.Width}) + "(" + name + ")"
 	case description.List:
 		return "List(String)", "json.array(" + name + ", of: json.string)"
-	case description.Integer, description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
+	case description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
 	}
 	return "", ""
 }

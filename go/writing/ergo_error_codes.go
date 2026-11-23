@@ -22,7 +22,7 @@ func (SharedFieldUnsupportedArguments) ReportArguments() {}
 // Report is SharedFieldUnsupported's code, its message in language and the arguments the message names.
 func (failure SharedFieldUnsupported) Report(language messages.Language) ergo.Report {
 	arguments := SharedFieldUnsupportedArguments{Field: string(failure.Field), Failure: string(failure.Failure)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " of "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " has no Go runtime type: only text, a set of string constants and a list of text have one."}}}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " of "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " has no Go runtime type: only text, whole numbers, a set of string constants and a list of text have one."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:

@@ -93,13 +93,13 @@ func Generate(project Project, checked assembling.APIAssembled) outcome.Result[[
 				}
 			}
 		}
-		return generateServer(project, checked.API)
+		return generateServer(project, checked.API, description.SharedFailures())
 	}, func(cause error) outcome.Result[[]native.File] {
 		return outcome.Err[[]native.File](ServerFolderRefused{Source: source, Server: project.Server, Cause: cause})
 	})
 }
 
-func generateServer(project Project, api description.API) outcome.Result[[]native.File] {
+func generateServer(project Project, api description.API, failures []description.SharedFailure) outcome.Result[[]native.File] {
 	generated := generator{records: project.Records, members: map[string]description.Member{}, imports: map[string]string{}, decoders: map[string]string{}, encoders: map[string]string{}, outcomes: map[string]string{}, problems: map[string]error{}}
 	for _, member := range api.Members {
 		generated.members[member.Name] = member
@@ -136,7 +136,7 @@ func generateServer(project Project, api description.API) outcome.Result[[]nativ
 		"target.UndeclaredMethod(allowed:) -> #(request.path, refuse_method(method: request.method, allowed:))\n" +
 		"target.UnreadablePath(segment:) -> { let written = segment |> json.string |> json.to_string #(request.path, shared_request_refused(part: \"path\", name: segment, reason: \"invalid URL escape \" <> written)) }\n}\n}\n\n" + strings.Join(readers, "\n")
 	main += queryTextFunction(api)
-	main += generated.recordSchemas(api.Structs) + sharedResponses() + serverStart
+	main += generated.recordSchemas(api.Structs) + sharedResponses(generated, failures) + serverStart
 	for _, definitions := range []map[string]string{generated.decoders, generated.encoders, generated.outcomes} {
 		for _, name := range slices.Sorted(maps.Keys(definitions)) {
 			main += "\n" + definitions[name]

@@ -637,11 +637,11 @@ Message: `The API's declarations were refused.`
 ## NC-1063 SharedFieldUnsupported
 
 SharedFieldUnsupported is a field of one of nocontract's own failures whose schema the Go runtime
-declares no type for: only text, a set of string constants and a list of text have one.
+declares no type for: only text, whole numbers, a set of string constants and a list of text have one.
 
 Declared in `go/writing/writing_runtime.go`.
 
-Message: `The field {Field} of {Failure} has no Go runtime type: only text, a set of string constants and a list of text have one.`
+Message: `The field {Field} of {Failure} has no Go runtime type: only text, whole numbers, a set of string constants and a list of text have one.`
 
 | Field | Type |
 | --- | --- |
