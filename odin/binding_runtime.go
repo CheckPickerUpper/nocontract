@@ -22,8 +22,18 @@ nc_encode_answer :: proc(value: $T, metadata: nc_Answer_Metadata) -> nocontract.
 
 @(private, require_results)
 nc_request_refused :: proc(refusal: nocontract.Request_Refusal) -> nocontract.Answer {
-	fields := nocontract.refusal_fields(refusal)
-	return nc_shared_RequestRefused(nc_fields_RequestRefused{part = fields.part, name = fields.name, reason = fields.reason}, {})
+	switch fields in nocontract.refusal_fields(refusal) {
+	case nocontract.Request_Refused_Fields:
+		return nc_shared_RequestRefused(nc_fields_RequestRefused{part = fields.part, name = fields.name, reason = fields.reason}, {})
+	case nocontract.Body_Too_Large_Fields:
+		switch fields.size_source {
+		case .Content_Length:
+			return nc_shared_RequestBodyTooLarge(nc_fields_RequestBodyTooLarge{limit_bytes = fields.limit_bytes, size_bytes = fields.size_bytes, size_source = "content-length"}, {})
+		case .Stream:
+			return nc_shared_RequestBodyTooLarge(nc_fields_RequestBodyTooLarge{limit_bytes = fields.limit_bytes, size_bytes = fields.size_bytes, size_source = "stream"}, {})
+		}
+	}
+	unreachable()
 }
 
 @(private, require_results)

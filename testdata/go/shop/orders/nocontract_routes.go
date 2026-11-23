@@ -10,10 +10,10 @@ import (
 )
 
 // NocontractRoutePlace answers one request to POST /shoppers/{shopper_id}/orders. Only the generated server calls it.
-func NocontractRoutePlace(request *http.Request) nocontract.Answer {
+func NocontractRoutePlace(request *http.Request, limit nocontract.RequestBodyLimit) nocontract.Answer {
 	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(readShopperID int) nocontract.Answer {
 		return nocontract.Then(nocontract.Unsigned[uint16](nocontract.Query(request, "store")), func(readStore uint16) nocontract.Answer {
-			return nocontract.Then(nocontract.Body(request, nocontractBodyOrder), func(readBody Order) nocontract.Answer {
+			return nocontract.Then(nocontract.Body(request, limit, nocontractBodyOrder), func(readBody Order) nocontract.Answer {
 				return nocontractAnswerPlaceOutcome(Place(request.Context(), PlaceInput{ShopperID: readShopperID, Store: readStore, Body: readBody}))
 			})
 		})
@@ -30,7 +30,7 @@ func nocontractAnswerPlaceOutcome(outcome PlaceOutcome) nocontract.Answer {
 }
 
 // NocontractRouteReadOrderCount answers one request to GET /headers/order-count. Only the generated server calls it.
-func NocontractRouteReadOrderCount(request *http.Request) nocontract.Answer {
+func NocontractRouteReadOrderCount(request *http.Request, limit nocontract.RequestBodyLimit) nocontract.Answer {
 	return nocontract.Then(nocontract.Signed[int64](nocontract.Header(request, "x-order-count")), func(readOrderCount int64) nocontract.Answer {
 		return nocontractAnswerOrderCountOutcome(ReadOrderCount(request.Context(), OrderCountInput{OrderCount: readOrderCount}))
 	})

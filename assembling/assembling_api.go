@@ -268,6 +268,12 @@ func sharedFailureMembers(declared DeclaredEndpoint, shared []description.Shared
 				members = append(members, failure.Member())
 			case requestUnread, nil:
 			}
+		case description.AnsweredWhenBodyRead:
+			switch declared.Body.(type) {
+			case description.JSONBody:
+				members = append(members, failure.Member())
+			case description.NoBody, nil:
+			}
 		case description.AnsweredWithoutRoute:
 		case nil:
 		}

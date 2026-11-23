@@ -66,6 +66,55 @@ TCP_Listen_Options :: struct #all_or_none {
 	ready:    Listener_Notice,
 	layers:   []requestlayers.Layer,
 	deadline: Request_Deadline,
+	body_limit: Request_Body_Limit,
+}
+
+@(private)
+Checked_Body_Limit :: struct #all_or_none {
+	max_length: int,
+}
+
+// Request_Body_Limit contains only a nonnegative native cap constructed by this package.
+Request_Body_Limit :: union #no_nil {
+	Empty_Body_Only,
+	Checked_Body_Limit,
+}
+
+// Empty_Body_Only accepts no payload bytes.
+Empty_Body_Only :: struct #all_or_none {}
+
+// Invalid_Request_Body_Limit retains the configured cap that is below zero.
+Invalid_Request_Body_Limit :: struct #all_or_none {
+	bytes: i64,
+}
+
+// Body_Limit_Parsing is a usable native limit or its invalid configuration.
+Body_Limit_Parsing :: union #no_nil {
+	Request_Body_Limit,
+	Invalid_Request_Body_Limit,
+}
+
+// parse_body_limit accepts zero through the signed 64-bit maximum.
+@(require_results)
+parse_body_limit :: proc(bytes: i64) -> Body_Limit_Parsing {
+	if bytes < 0 {
+		return Invalid_Request_Body_Limit{bytes = bytes}
+	}
+	if bytes == 0 {
+		return Request_Body_Limit(Empty_Body_Only{})
+	}
+	return Request_Body_Limit(Checked_Body_Limit{max_length = int(bytes)})
+}
+
+@(private, require_results)
+body_max_length :: proc(limit: Request_Body_Limit) -> int {
+	switch checked in limit {
+	case Empty_Body_Only:
+		return 0
+	case Checked_Body_Limit:
+		return checked.max_length
+	}
+	unreachable()
 }
 
 // Listen_Options is the closed listener configuration, built through listen_on.
@@ -76,19 +125,25 @@ Listen_Options :: struct #all_or_none {
 // listen_on selects the TCP endpoint a generated server listens on.
 @(require_results)
 listen_on :: proc(endpoint: net.Endpoint) -> Listen_Options {
-	return Listen_Options{tcp = TCP_Listen_Options{endpoint = endpoint, ready = No_Ready_Notice{}, layers = {}, deadline = No_Deadline{}}}
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = endpoint, ready = No_Ready_Notice{}, layers = {}, deadline = No_Deadline{}, body_limit = Request_Body_Limit(Checked_Body_Limit{max_length = 8_000_000})}}
 }
 
 // notify_when_ready observes the actual bound endpoint without exposing the socket or handler.
 @(require_results)
 notify_when_ready :: proc(options: Listen_Options, notify: proc(endpoint: net.Endpoint)) -> Listen_Options {
-	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = Ready_Notice{notify = notify}, layers = options.tcp.layers, deadline = options.tcp.deadline}}
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = Ready_Notice{notify = notify}, layers = options.tcp.layers, deadline = options.tcp.deadline, body_limit = options.tcp.body_limit}}
 }
 
 // with_layers selects ordered request and answer observers for the listener.
 @(require_results)
 with_layers :: proc(options: Listen_Options, layers: []requestlayers.Layer) -> Listen_Options {
-	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = slice.clone(layers), deadline = options.tcp.deadline}}
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = slice.clone(layers), deadline = options.tcp.deadline, body_limit = options.tcp.body_limit}}
+}
+
+// with_body_limit chooses the checked cap passed to odin-http before body decoding.
+@(require_results)
+with_body_limit :: proc(options: Listen_Options, limit: Request_Body_Limit) -> Listen_Options {
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = options.tcp.layers, deadline = options.tcp.deadline, body_limit = limit}}
 }
 
 // Bound_Endpoint is the address assigned to a listener the runtime successfully opened.
@@ -208,7 +263,7 @@ serve_on_event_loop :: proc(options: TCP_Listen_Options, binding: Binding) -> Se
 	case Ready_Notice:
 		notice.notify(endpoint)
 	}
-	bound := Serving_API{binding = binding, layers = options.layers, deadline = options.deadline, allocator = context.allocator}
+	bound := Serving_API{binding = binding, layers = options.layers, deadline = options.deadline, allocator = context.allocator, body_limit = options.body_limit}
 	handler := http.Handler{
 		user_data = &bound,
 		next = {},
@@ -221,7 +276,7 @@ serve_on_event_loop :: proc(options: TCP_Listen_Options, binding: Binding) -> Se
 					Pending_Request{binding = binding, method = http.method_string(line.method), request = request, response = response, started = started},
 					context.temp_allocator,
 				)
-				httpbinding.receive_body(request, pending, answer_received_request)
+				httpbinding.receive_body(request, body_max_length(binding.body_limit), pending, answer_received_request)
 			case nil:
 				respond(response, binding, Request{path = request.url.path, query = request.url.query, headers = request.headers._kv, content = Request_Line_Not_Received{}, lifetime = requestlifetime.No_Request_Deadline{}}, started)
 			}
@@ -245,6 +300,7 @@ Serving_API :: struct #all_or_none {
 	layers:  []requestlayers.Layer,
 	deadline: Request_Deadline,
 	allocator: mem.Allocator,
+	body_limit: Request_Body_Limit,
 }
 
 @(private)

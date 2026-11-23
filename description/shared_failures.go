@@ -36,8 +36,14 @@ type EveryRuntime struct{}
 //ergo:not-an-error
 type OdinRuntime struct{}
 
-func (EveryRuntime) isSharedFailureRuntime() {}
-func (OdinRuntime) isSharedFailureRuntime()  {}
+// GoAndOdinRuntimes is a refusal implemented by Go and Odin while Gleam awaits bounded reads.
+//
+//ergo:not-an-error
+type GoAndOdinRuntimes struct{}
+
+func (EveryRuntime) isSharedFailureRuntime()      {}
+func (OdinRuntime) isSharedFailureRuntime()       {}
+func (GoAndOdinRuntimes) isSharedFailureRuntime() {}
 
 // CommonRuntimeFailures is the response implementation supplied by every server runtime.
 func CommonRuntimeFailures() []SharedFailure {
@@ -46,7 +52,7 @@ func CommonRuntimeFailures() []SharedFailure {
 		switch failure.Runtime.(type) {
 		case EveryRuntime:
 			failures = append(failures, failure)
-		case OdinRuntime, nil:
+		case OdinRuntime, GoAndOdinRuntimes, nil:
 		}
 	}
 	return failures
@@ -68,6 +74,11 @@ type SharedAnswer interface{ isSharedAnswer() }
 //ergo:not-an-error
 type AnsweredWhenRequestRead struct{}
 
+// AnsweredWhenBodyRead is a failure every route that decodes a JSON body can answer.
+//
+//ergo:not-an-error
+type AnsweredWhenBodyRead struct{}
+
 // AnsweredByEveryRoute is a failure every route can answer.
 //
 //ergo:not-an-error
@@ -80,6 +91,7 @@ type AnsweredByEveryRoute struct{}
 type AnsweredWithoutRoute struct{}
 
 func (AnsweredWhenRequestRead) isSharedAnswer() {}
+func (AnsweredWhenBodyRead) isSharedAnswer()    {}
 func (AnsweredByEveryRoute) isSharedAnswer()    {}
 func (AnsweredWithoutRoute) isSharedAnswer()    {}
 
@@ -148,6 +160,22 @@ func SharedFailures() []SharedFailure {
 				MessageField{Field: "name"},
 				MessageText{Text: " could not be read: "},
 				MessageField{Field: "reason"},
+			},
+		},
+		{
+			Name: "RequestBodyTooLarge", Status: FailureStatus{code: http.StatusRequestEntityTooLarge}, Code: "NC-1168",
+			Runtime: GoAndOdinRuntimes{},
+			Fields: []Field{
+				{Name: FieldName{text: "limit_bytes"}, Schema: Integer{Width: Unsigned64{}}},
+				{Name: FieldName{text: "size_bytes"}, Schema: Integer{Width: Unsigned64{}}},
+				{Name: FieldName{text: "size_source"}, Schema: Literals{Values: []string{"content-length", "stream"}}},
+			},
+			Answers: AnsweredWhenBodyRead{},
+			Doc:     "RequestBodyTooLarge is a request body beyond the configured byte limit. Content-Length reports the declared size; stream reports the first byte beyond the limit.",
+			Message: []MessagePart{
+				MessageText{Text: "The request body size "}, MessageField{Field: "size_bytes"},
+				MessageText{Text: " from "}, MessageField{Field: "size_source"},
+				MessageText{Text: " exceeds the byte limit "}, MessageField{Field: "limit_bytes"},
 			},
 		},
 		{

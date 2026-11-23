@@ -1765,6 +1765,32 @@ Message: `The application did not finish successfully.`
 | `Duration` | `time.Duration` |
 | `Cause` | `error` |
 
+## NC-1167 InvalidRequestBodyLimit
+
+InvalidRequestBodyLimit is a configured byte limit below zero.
+
+Declared in `go/request_body_limit.go`.
+
+Message: `The request body limit {Bytes} is below zero.`
+
+| Field | Type |
+| --- | --- |
+| `Bytes` | `int64` |
+
+## NC-1168 RequestBodyTooLarge
+
+RequestBodyTooLarge is a request body beyond the configured byte limit. Content-Length reports the declared size; stream reports the first byte beyond the limit.
+
+Declared in `go/nocontract_routes.go`.
+
+Message: `The request body size {SizeBytes} from {SizeSource} exceeds the byte limit {LimitBytes}`
+
+| Field | Type |
+| --- | --- |
+| `LimitBytes` | `uint64` |
+| `SizeBytes` | `uint64` |
+| `SizeSource` | `nocontract.RequestBodyTooLargeSizeSource` |
+
 ## NC-1170 RequestDeadlineExceeded
 
 RequestDeadlineExceeded is a request that exceeded its configured deadline, with its declared route and duration in whole milliseconds.

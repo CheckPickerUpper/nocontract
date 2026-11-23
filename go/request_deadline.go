@@ -31,7 +31,7 @@ func WithRequestDeadline(options ListenOptions, milliseconds uint32) outcome.Res
 	if milliseconds == 0 {
 		return outcome.Err[ListenOptions](RequestDeadlineOutside{TimeoutMilliseconds: milliseconds, Least: 1, Most: 4_294_967_295})
 	}
-	return outcome.Ok(ListenOptions{address: options.address, requestLogger: options.requestLogger, deadline: outcome.Some(milliseconds)})
+	return outcome.Ok(ListenOptions{address: options.address, requestLogger: options.requestLogger, deadline: outcome.Some(milliseconds), bodyLimit: options.bodyLimit})
 }
 
 // requestCompletion is the terminal result of one request's lifetime.

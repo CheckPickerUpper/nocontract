@@ -1068,6 +1068,20 @@ nc_shared_RequestRefused :: proc(fields: nc_fields_RequestRefused, allowed: []st
 }
 
 @(private)
+nc_fields_RequestBodyTooLarge :: struct #all_or_none {limit_bytes: u64, size_bytes: u64, size_source: string,}
+@(private, require_results)
+nc_shared_RequestBodyTooLarge :: proc(fields: nc_fields_RequestBodyTooLarge, allowed: []string) -> nocontract.Answer {
+ value := struct #all_or_none {_tag: string, code: string, limit_bytes: string, size_bytes: string, size_source: string,}{_tag = "RequestBodyTooLarge", code = "NC-1168", limit_bytes = fmt.tprintf("%d", fields.limit_bytes), size_bytes = fmt.tprintf("%d", fields.size_bytes), size_source = fields.size_source,}
+ switch encoded in nocontract.encode_json(value) {
+ case nocontract.Encoded_JSON: return nocontract.Answer{body = nocontract.JSON_Answer{status = 413, code = "NC-1168", encoded = encoded}, allowed = allowed}
+ case nocontract.JSON_Not_Encoded(type_of(value)):
+ log.errorf("NoContract could not encode its shared failure: %v", encoded)
+ return nocontract.Answer{body = nocontract.JSON_Answer{status = 500, code = "NC-1002", encoded = nocontract.Encoded_JSON{bytes = transmute([]u8)string("{\"_tag\":\"AnswerNotWritten\",\"answer\":\"RequestBodyTooLarge\",\"code\":\"NC-1002\",\"reason\":\"NoContract could not encode its shared failure.\"}")}}, allowed = allowed}
+ }
+ unreachable()
+}
+
+@(private)
 nc_fields_AnswerNotWritten :: struct #all_or_none {answer: string, reason: string,}
 @(private, require_results)
 nc_shared_AnswerNotWritten :: proc(fields: nc_fields_AnswerNotWritten, allowed: []string) -> nocontract.Answer {
@@ -1130,8 +1144,18 @@ nc_encode_answer :: proc(value: $T, metadata: nc_Answer_Metadata) -> nocontract.
 
 @(private, require_results)
 nc_request_refused :: proc(refusal: nocontract.Request_Refusal) -> nocontract.Answer {
-	fields := nocontract.refusal_fields(refusal)
-	return nc_shared_RequestRefused(nc_fields_RequestRefused{part = fields.part, name = fields.name, reason = fields.reason}, {})
+	switch fields in nocontract.refusal_fields(refusal) {
+	case nocontract.Request_Refused_Fields:
+		return nc_shared_RequestRefused(nc_fields_RequestRefused{part = fields.part, name = fields.name, reason = fields.reason}, {})
+	case nocontract.Body_Too_Large_Fields:
+		switch fields.size_source {
+		case .Content_Length:
+			return nc_shared_RequestBodyTooLarge(nc_fields_RequestBodyTooLarge{limit_bytes = fields.limit_bytes, size_bytes = fields.size_bytes, size_source = "content-length"}, {})
+		case .Stream:
+			return nc_shared_RequestBodyTooLarge(nc_fields_RequestBodyTooLarge{limit_bytes = fields.limit_bytes, size_bytes = fields.size_bytes, size_source = "stream"}, {})
+		}
+	}
+	unreachable()
 }
 
 @(private, require_results)

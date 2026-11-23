@@ -21,12 +21,13 @@ type ListenOptions struct {
 	address       string
 	requestLogger outcome.Option[*slog.Logger]
 	deadline      outcome.Option[uint32]
+	bodyLimit     RequestBodyLimit
 }
 
 // ListenOn chooses a TCP address, such as "127.0.0.1:8080". Port zero asks the operating system
 // for a free port; ListeningServer.Address reports the address it assigned.
 func ListenOn(address string) ListenOptions {
-	return ListenOptions{address: address, requestLogger: outcome.None[*slog.Logger](), deadline: outcome.None[uint32]()}
+	return ListenOptions{address: address, requestLogger: outcome.None[*slog.Logger](), deadline: outcome.None[uint32](), bodyLimit: DefaultRequestBodyLimit()}
 }
 
 // RouteBinding is the declared endpoints and layers a generated API owns. It accepts typed
@@ -143,7 +144,7 @@ func newListeningServer(server *http.Server, tasks *errgroup.Group, workers *err
 
 func newHTTPServer(serverContext context.Context, options ListenOptions, binding RouteBinding, address string, workers *errgroup.Group) *http.Server {
 	return &http.Server{
-		Addr: address, Handler: boundRoutes{binding: binding, requestLogger: options.requestLogger, clock: time.Now, deadline: options.deadline, workers: workers}, DisableGeneralOptionsHandler: true,
+		Addr: address, Handler: boundRoutes{binding: binding, requestLogger: options.requestLogger, clock: time.Now, deadline: options.deadline, workers: workers, bodyLimit: options.bodyLimit}, DisableGeneralOptionsHandler: true,
 		TLSConfig: nil, ReadTimeout: 0, ReadHeaderTimeout: 10 * time.Second, WriteTimeout: 0, IdleTimeout: 0,
 		MaxHeaderBytes: 0, MaxHeaderValueCount: 0, TLSNextProto: nil, ConnState: nil, ErrorLog: nil,
 		BaseContext: func(net.Listener) context.Context { return serverContext }, ConnContext: nil,
@@ -190,8 +191,9 @@ type boundRoutes struct {
 	clock         func() time.Time
 	deadline      outcome.Option[uint32]
 	workers       *errgroup.Group
+	bodyLimit     RequestBodyLimit
 }
 
 func (bound boundRoutes) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	respond(writer, request, bound.binding.endpoints, bound.binding.layers, bound.requestLogger, bound.clock, bound.deadline, bound.workers)
+	respond(writer, request, bound.binding.endpoints, bound.binding.layers, bound.requestLogger, bound.clock, bound.deadline, bound.workers, bound.bodyLimit)
 }

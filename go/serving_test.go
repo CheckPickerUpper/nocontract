@@ -11,8 +11,8 @@ import (
 )
 
 // answeredWith is a route answering every request with tag, so a test can tell which route ran.
-func answeredWith(tag string) func(*http.Request) nocontract.Answer {
-	return func(*http.Request) nocontract.Answer {
+func answeredWith(tag string) func(*http.Request, nocontract.RequestBodyLimit) nocontract.Answer {
+	return func(*http.Request, nocontract.RequestBodyLimit) nocontract.Answer {
 		return nocontract.Succeeded(nocontract.Success{Status: http.StatusOK, Tag: tag}, struct{}{}, nocontract.AnswerMarshalers{})
 	}
 }

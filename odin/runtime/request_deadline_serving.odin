@@ -161,6 +161,8 @@ copy_selected_request :: proc(selected: Selected_Route, allocator: mem.Allocator
 	case httpbinding.Received_Body:
 	case httpbinding.Body_Not_Received:
 		reading = httpbinding.Body_Not_Received{path = strings.clone(source.path), cause = source.cause}
+	case httpbinding.Body_Size_Exceeded:
+		reading = source
 	}
 	return Selected_Route{
 		template = strings.clone(selected.template),

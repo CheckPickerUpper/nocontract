@@ -22,7 +22,7 @@ import (
 type Endpoint struct {
 	Method string
 	Path   []PathSegment
-	Answer func(request *http.Request) Answer
+	Answer func(request *http.Request, limit RequestBodyLimit) Answer
 }
 
 // PathSegment is one part of a declared path between two slashes: text a request's path must hold
@@ -222,7 +222,7 @@ func (optionsResponse) isResponse() {}
 // another method on a declared path; RouteNotFound to a path no route declares; and RequestRefused
 // to a path holding a segment that is not valid escaping. The runtime's private HTTP handler
 // calls it with the generated API's binding and request logger.
-func respond(writer http.ResponseWriter, request *http.Request, endpoints []Endpoint, layers []Layer, logger outcome.Option[*slog.Logger], clock func() time.Time, deadline outcome.Option[uint32], workers *errgroup.Group) {
+func respond(writer http.ResponseWriter, request *http.Request, endpoints []Endpoint, layers []Layer, logger outcome.Option[*slog.Logger], clock func() time.Time, deadline outcome.Option[uint32], workers *errgroup.Group, limit RequestBodyLimit) {
 	started := clock()
 	matched := matchRequest(endpoints, request)
 	// Worker headers are values, separate from the listener's live response header.
@@ -231,7 +231,7 @@ func respond(writer http.ResponseWriter, request *http.Request, endpoints []Endp
 	completion := completeRequest(matched, request.Context(), deadline, workers, func(requestContext context.Context) Answered {
 		workerRequest := request.WithContext(requestContext)
 		workerVisit := Visit{request: workerRequest, route: visit.route, header: headers}
-		answer := sync.OnceValue(func() Answered { return answerMatched(matched, workerRequest) })
+		answer := sync.OnceValue(func() Answered { return answerMatched(matched, workerRequest, limit) })
 		throughLayers(layers, workerVisit, answer)
 		return answer()
 	})
@@ -316,13 +316,13 @@ func visitedRoute(matched requestMatch) VisitedRoute {
 
 // answerMatched is the answer to a request: its route's, with the path's values set on the request,
 // or the server's own.
-func answerMatched(matched requestMatch, request *http.Request) Answered {
+func answerMatched(matched requestMatch, request *http.Request, limit RequestBodyLimit) Answered {
 	switch match := matched.(type) {
 	case endpointMatched:
 		for _, value := range match.candidate.values {
 			request.SetPathValue(value.name, value.value)
 		}
-		return Answered{response: answerResponse{answer: sent(match.candidate.endpoint.Answer(request))}}
+		return Answered{response: answerResponse{answer: sent(match.candidate.endpoint.Answer(request, limit))}}
 	case pathMatched:
 		if request.Method == http.MethodOptions {
 			return Answered{response: optionsResponse(match)}

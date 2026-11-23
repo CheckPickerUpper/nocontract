@@ -38,6 +38,8 @@ start_request_body :: proc(receipt: httpbinding.Body_Receipt) -> Body_Start {
 		return start_body(receipt.text)
 	case httpbinding.Body_Not_Received:
 		return Request_Refusal(Body_Transport_Refusal{partial = receipt.text, failure = received})
+	case httpbinding.Body_Size_Exceeded:
+		return Request_Refusal(Body_Size_Refusal{partial = receipt.text, failure = received})
 	}
 	unreachable()
 }

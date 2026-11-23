@@ -1,8 +1,8 @@
 import { strict as assert } from "node:assert"
-import { Config, DateTime, Effect } from "effect"
+import { Config, DateTime, Effect, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
-import { MethodNotDeclared, NotSignedIn, RequestRefused, ShopApi, ShopperCredentialRejected, ShopperNotFound } from "./shop_api.generated.js"
+import { MethodNotDeclared, NotSignedIn, RequestBodyTooLarge, RequestRefused, ShopApi, ShopperCredentialRejected, ShopperNotFound } from "./shop_api.generated.js"
 
 const program = Effect.gen(function*() {
   const baseUrl = yield* Config.NonEmptyString("SHOP_URL")
@@ -51,6 +51,40 @@ const program = Effect.gen(function*() {
   const queued = yield* shopper.balance.topUp({ params: { shopper_id: 7n }, payload: { amount: { cents: 500n, currency: "USD" } } })
   assert.equal(queued.reference, "USD")
 
+  const oversizedBody = "{}" + " ".repeat(1534)
+  const sizeRefusals: RequestBodyTooLarge[] = []
+  const bodyLimitSupport = yield* Config.Literals(["enforced", "awaiting-mist"], "SHOP_BODY_LIMIT_SUPPORT")
+  switch (bodyLimitSupport) {
+    case "enforced": {
+      for (const oversized of [
+        { source: "content-length", size: 1536n, write: HttpClientRequest.bodyText(oversizedBody, "application/json") },
+        { source: "stream", size: 1025n, write: HttpClientRequest.bodyStream(Stream.make(new TextEncoder().encode(oversizedBody)), { contentType: "application/json" }) }
+      ]) {
+        const limited = yield* HttpApiClient.make(ShopApi, {
+          baseUrl,
+          transformClient: HttpClient.mapRequest(oversized.write)
+        })
+        const size: RequestBodyTooLarge = yield* limited.balance.topUp({ params: { shopper_id: 7n }, payload: { amount: { cents: 500n, currency: "CAD" } } }).pipe(
+          Effect.map((answer) => assert.fail(`The oversized request answered ${answer._tag}`)),
+          Effect.catchTag("RequestBodyTooLarge", Effect.succeed)
+        )
+        assert.equal(size._tag, "RequestBodyTooLarge")
+        assert.equal(size.code, "NC-1168")
+        assert.equal(size.limit_bytes, 1024n)
+        assert.equal(size.size_bytes, oversized.size)
+        assert.equal(size.size_source, oversized.source)
+        sizeRefusals.push(size)
+      }
+      break
+    }
+    case "awaiting-mist":
+      break
+    default: {
+      const unsupported: never = bodyLimitSupport
+      assert.fail(`The backend declared unsupported body limits: ${unsupported}`)
+    }
+  }
+
   const stranger = yield* HttpApiClient.make(ShopApi, { baseUrl })
   const refused: NotSignedIn = yield* stranger.balance.readBalance({ params: { shopper_id: 7n }, query: { currency: "CAD" } }).pipe(
     Effect.map((answer) => assert.fail(`The unsigned request answered ${answer._tag}`)),
@@ -81,7 +115,7 @@ const program = Effect.gen(function*() {
   assert.equal(method.method, "DELETE")
   assert.deepEqual(method.allowed, ["GET"])
 
-  return { read, count, headerRefusals, missing, queued, refused, rejected, method }
+  return { read, count, headerRefusals, missing, queued, sizeRefusals, refused, rejected, method }
 }).pipe(Effect.provide(FetchHttpClient.layer))
 
 // JSON.stringify refuses a bigint, so each one is printed as its decimal text followed by n.

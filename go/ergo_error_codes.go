@@ -683,6 +683,62 @@ func (failure ListenerNotStopped) Causes() []error {
 	return causes
 }
 
+func (InvalidRequestBodyLimit) ErrorCode() ergo.Code { return "NC-1167" }
+
+// InvalidRequestBodyLimitArguments holds the arguments InvalidRequestBodyLimit's message names, in the order the message first names them.
+type InvalidRequestBodyLimitArguments struct {
+	Bytes int64 `json:"Bytes"`
+}
+
+// ReportArguments marks InvalidRequestBodyLimitArguments as the arguments of a report.
+func (InvalidRequestBodyLimitArguments) ReportArguments() {}
+
+// Report is InvalidRequestBodyLimit's code, its message in language and the arguments the message names.
+func (failure InvalidRequestBodyLimit) Report(language messages.Language) ergo.Report {
+	arguments := InvalidRequestBodyLimitArguments{Bytes: int64(failure.Bytes)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The request body limit "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " is below zero."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1167", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.SignedWhole{Value: arguments.Bytes}}}), Arguments: arguments}
+}
+
+// Causes is every error InvalidRequestBodyLimit holds, then the causes of every failure it holds.
+func (failure InvalidRequestBodyLimit) Causes() []error {
+	return nil
+}
+
+func (RequestBodyTooLarge) ErrorCode() ergo.Code { return "NC-1168" }
+
+// RequestBodyTooLargeArguments holds the arguments RequestBodyTooLarge's message names, in the order the message first names them.
+type RequestBodyTooLargeArguments struct {
+	SizeBytes  uint64 `json:"SizeBytes"`
+	SizeSource string `json:"SizeSource"`
+	LimitBytes uint64 `json:"LimitBytes"`
+}
+
+// ReportArguments marks RequestBodyTooLargeArguments as the arguments of a report.
+func (RequestBodyTooLargeArguments) ReportArguments() {}
+
+// Report is RequestBodyTooLarge's code, its message in language and the arguments the message names.
+func (failure RequestBodyTooLarge) Report(language messages.Language) ergo.Report {
+	arguments := RequestBodyTooLargeArguments{SizeBytes: uint64(failure.SizeBytes), SizeSource: string(failure.SizeSource), LimitBytes: uint64(failure.LimitBytes)}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The request body size "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " from "}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: " exceeds the byte limit "}, messageformat.Argument{Index: 2}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1168", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{messageformat.UnsignedWhole{Value: arguments.SizeBytes}, messageformat.TextValue{Text: arguments.SizeSource}, messageformat.UnsignedWhole{Value: arguments.LimitBytes}}}), Arguments: arguments}
+}
+
+// Causes is every error RequestBodyTooLarge holds, then the causes of every failure it holds.
+func (failure RequestBodyTooLarge) Causes() []error {
+	return nil
+}
+
 func (RequestDeadlineExceeded) ErrorCode() ergo.Code { return "NC-1170" }
 
 // RequestDeadlineExceededArguments holds the arguments RequestDeadlineExceeded's message names, in the order the message first names them.

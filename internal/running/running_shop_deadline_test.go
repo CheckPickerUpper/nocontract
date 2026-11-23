@@ -30,7 +30,13 @@ func TestShopBackendsReturnDeclaredDeadlines(t *testing.T) {
 		t.Run(backend.language, func(t *testing.T) {
 			served := openCheckedShop(t, checkout, backend, expectedFiles)
 			observed := []shopAnsweredRequest{}
-			for _, request := range shopDeadlineRequests() {
+			requests := shopDeadlineRequests()
+			switch backend.bodyLimitSupport.(type) {
+			case shopBodyLimitEnforced:
+				requests = append(requests, oversizedShopBodyRequest())
+			case shopBodyLimitAwaitingMist, nil:
+			}
+			for _, request := range requests {
 				t.Run(request.name, func(t *testing.T) {
 					started := time.Now()
 					answer := sendShopRequest(t, served, request)
@@ -41,7 +47,7 @@ func TestShopBackendsReturnDeclaredDeadlines(t *testing.T) {
 						t.Errorf("the answer arrived after %s, after the fixture's outstanding work could finish", elapsed)
 					}
 					observed = append(observed, shopAnsweredRequest{request: request, answer: answer})
-					t.Logf("GET %s = %d %s after %s", request.path, answer.status, answer.body, elapsed)
+					t.Logf("%s %s = %d %s after %s", request.method, request.path, answer.status, answer.body, elapsed)
 				})
 			}
 			command := exec.CommandContext(t.Context(), "bun", "run", "--no-install", "src/request_deadline.ts")

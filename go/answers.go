@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 )
 
@@ -18,10 +19,11 @@ import (
 // Effect client tells members apart by, a failure's permanent code, and one JSON object holding
 // the tag, the code and the member's own fields. Generated code builds it with Succeeded or Failed.
 type Answer struct {
-	status int
-	tag    string
-	code   mo.Option[string]
-	body   mo.Result[[]byte]
+	status      int
+	tag         string
+	code        mo.Option[string]
+	body        mo.Result[[]byte]
+	bodyRefusal outcome.Option[RequestBodyTooLarge]
 }
 
 // Success is a success member as it is answered: its status and its tag.
@@ -47,7 +49,8 @@ type AnswerMarshalers []*jsonv2.Marshalers
 func Succeeded[M any](success Success, member M, written AnswerMarshalers) Answer {
 	return Answer{
 		status: success.Status, tag: success.Tag, code: mo.None[string](),
-		body: encoded(taggedSuccess[M]{Tag: success.Tag, Fields: member}, written),
+		body:        encoded(taggedSuccess[M]{Tag: success.Tag, Fields: member}, written),
+		bodyRefusal: outcome.None[RequestBodyTooLarge](),
 	}
 }
 
@@ -56,7 +59,8 @@ func Succeeded[M any](success Success, member M, written AnswerMarshalers) Answe
 func Failed[M any](failure Failure, member M, written AnswerMarshalers) Answer {
 	return Answer{
 		status: failure.Status, tag: failure.Tag, code: mo.Some(failure.Code),
-		body: encoded(taggedFailure[M]{Tag: failure.Tag, Code: failure.Code, Fields: member}, written),
+		body:        encoded(taggedFailure[M]{Tag: failure.Tag, Code: failure.Code, Fields: member}, written),
+		bodyRefusal: outcome.None[RequestBodyTooLarge](),
 	}
 }
 
@@ -100,26 +104,28 @@ func NoOutcome() Answer {
 // sentAnswer is an answer as it is sent: its status, its tag, a failure's code, and one JSON object
 // holding its tag, its code and its fields.
 type sentAnswer struct {
-	status int
-	tag    string
-	code   mo.Option[string]
-	body   []byte
+	status      int
+	tag         string
+	code        mo.Option[string]
+	body        []byte
+	bodyRefusal outcome.Option[RequestBodyTooLarge]
 }
 
 // sent is the answer as it is sent, or AnswerNotWritten when its member cannot be encoded.
 func sent(answer Answer) sentAnswer {
 	return mo.Fold(answer.body, func(body []byte) sentAnswer {
-		return sentAnswer{status: answer.status, tag: answer.tag, code: answer.code, body: body}
+		return sentAnswer{status: answer.status, tag: answer.tag, code: answer.code, body: body, bodyRefusal: answer.bodyRefusal}
 	}, func(cause error) sentAnswer {
 		failed := NocontractAnswerSharedFailure(AnswerNotWritten{Answer: answer.tag, Reason: cause.Error()})
 		// AnswerNotWritten holds only text, which is always encoded, so an empty body is never sent.
 		body := mo.Fold(failed.body, func(body []byte) []byte { return body }, func(error) []byte { return []byte{} })
-		return sentAnswer{status: failed.status, tag: failed.tag, code: failed.code, body: body}
+		return sentAnswer{status: failed.status, tag: failed.tag, code: failed.code, body: body, bodyRefusal: answer.bodyRefusal}
 	})
 }
 
 // write writes the answer's status and its JSON body.
 func (answer sentAnswer) write(writer http.ResponseWriter) {
+	outcome.ForEachOption(answer.bodyRefusal, func(RequestBodyTooLarge) { writer.Header().Set("Connection", "close") })
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(answer.status)
 	// The status is already sent, so a body the client stopped reading has no one left to tell.

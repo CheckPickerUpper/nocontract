@@ -16,7 +16,7 @@ func TestParentCancellationClosesTheRequestWithoutPublishingAnImplicitAnswer(t *
 	defer cancel(context.Canceled)
 	release, observed := make(chan struct{}), make(chan error, 1)
 	options := outcome.Fold(nocontract.WithRequestDeadline(nocontract.ListenOn("127.0.0.1:0"), 1000), func(options nocontract.ListenOptions) nocontract.ListenOptions { return options }, func(cause error) nocontract.ListenOptions { t.Fatal(cause); return nocontract.ListenOn("") })
-	bound := nocontract.BindRoutes([]nocontract.Endpoint{{Method: http.MethodGet, Path: []nocontract.PathSegment{nocontract.PathText{Text: "cancel"}}, Answer: func(request *http.Request) nocontract.Answer {
+	bound := nocontract.BindRoutes([]nocontract.Endpoint{{Method: http.MethodGet, Path: []nocontract.PathSegment{nocontract.PathText{Text: "cancel"}}, Answer: func(request *http.Request, _ nocontract.RequestBodyLimit) nocontract.Answer {
 		cancel(context.Canceled)
 		<-request.Context().Done()
 		observed <- context.Cause(request.Context())

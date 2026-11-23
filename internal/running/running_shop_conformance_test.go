@@ -25,10 +25,19 @@ type shopServerAddress struct {
 }
 
 type shopBackend struct {
-	language string
-	prepare  func(*testing.T, shopFixture) string
-	open     func(*testing.T, string) shopServerAddress
+	language         string
+	prepare          func(*testing.T, shopFixture) string
+	open             func(*testing.T, string) shopServerAddress
+	bodyLimitSupport shopBodyLimitSupport
 }
+
+//sumtype:decl
+type shopBodyLimitSupport interface{ isShopBodyLimitSupport() }
+type shopBodyLimitEnforced struct{}
+type shopBodyLimitAwaitingMist struct{}
+
+func (shopBodyLimitEnforced) isShopBodyLimitSupport()     {}
+func (shopBodyLimitAwaitingMist) isShopBodyLimitSupport() {}
 
 // Every backend serves the same routes, exact decimal values and body shapes, and publishes the
 // same operations and schemas. Builds happen once per backend; every request uses a real listener.
@@ -54,7 +63,12 @@ func TestShopBackendsConformToTheSameHTTPContract(t *testing.T) {
 					observed = append(observed, shopAnsweredRequest{request: request, answer: answer})
 				})
 			}
-			assertShopClientAnswers(t, client, served)
+			switch backend.bodyLimitSupport.(type) {
+			case shopBodyLimitEnforced:
+				observed = append(observed, checkShopBodyLimits(t, served, contract)...)
+			case shopBodyLimitAwaitingMist, nil:
+			}
+			assertShopClientAnswers(t, client, served, backend.bodyLimitSupport)
 			assertShopObservations(t, contract, observed, served.finish())
 		})
 	}
@@ -62,9 +76,9 @@ func TestShopBackendsConformToTheSameHTTPContract(t *testing.T) {
 
 func shopBackends() []shopBackend {
 	return []shopBackend{
-		{language: "go", prepare: copyGoShop, open: openGoShop},
-		{language: "odin", prepare: copyShop, open: openOdinShop},
-		{language: "gleam", prepare: copyGleamShop, open: openGleamShop},
+		{language: "go", prepare: copyGoShop, open: openGoShop, bodyLimitSupport: shopBodyLimitEnforced{}},
+		{language: "odin", prepare: copyShop, open: openOdinShop, bodyLimitSupport: shopBodyLimitEnforced{}},
+		{language: "gleam", prepare: copyGleamShop, open: openGleamShop, bodyLimitSupport: shopBodyLimitAwaitingMist{}},
 	}
 }
 
@@ -136,13 +150,18 @@ func openGleamShop(t *testing.T, project string) shopServerAddress {
 
 func sendShopRequest(t *testing.T, served shopServerAddress, request shopRequestCase) shopAnswer {
 	t.Helper()
+	return sendShopRequestBody(t, served, request, strings.NewReader(request.body))
+}
+
+func sendShopRequestBody(t *testing.T, served shopServerAddress, request shopRequestCase, body io.Reader) shopAnswer {
+	t.Helper()
 	failed := func(step string) func(error) shopAnswer {
 		return func(cause error) shopAnswer {
 			t.Fatalf("%s %s %s: %v", step, request.method, request.path, cause)
 			return shopAnswer{status: 0, allow: "", body: cause.Error()}
 		}
 	}
-	return outcome.Fold(outcome.TupleToResult(http.NewRequestWithContext(t.Context(), request.method, served.url+request.path, strings.NewReader(request.body))),
+	return outcome.Fold(outcome.TupleToResult(http.NewRequestWithContext(t.Context(), request.method, served.url+request.path, body)),
 		func(built *http.Request) shopAnswer {
 			built.Header.Set("X-Shopper", request.shopper)
 			built.Header.Set("Content-Type", "application/json")

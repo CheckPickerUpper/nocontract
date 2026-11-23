@@ -21,7 +21,7 @@ func TestAListenerAnswersAtItsDeadlineWhileItsCancelledHandlerIsStillRunning(t *
 	endpoints := []nocontract.Endpoint{{
 		Method: http.MethodGet,
 		Path:   []nocontract.PathSegment{nocontract.PathText{Text: "work"}, nocontract.PathParameter{Name: "kind"}},
-		Answer: func(request *http.Request) nocontract.Answer {
+		Answer: func(request *http.Request, _ nocontract.RequestBodyLimit) nocontract.Answer {
 			if request.PathValue("kind") == "slow" {
 				<-request.Context().Done()
 				close(cancelled)

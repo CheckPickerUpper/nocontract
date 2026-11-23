@@ -66,6 +66,27 @@ const (
 
 func (RequestRefused) isSharedFailure() {}
 
+// RequestBodyTooLarge is a request body beyond the configured byte limit. Content-Length reports the declared size; stream reports the first byte beyond the limit.
+//
+//ergo:code NC-1168
+//ergo:message The request body size {SizeBytes} from {SizeSource} exceeds the byte limit {LimitBytes}
+type RequestBodyTooLarge struct {
+	LimitBytes uint64                        `json:"limit_bytes"`
+	SizeBytes  uint64                        `json:"size_bytes"`
+	SizeSource RequestBodyTooLargeSizeSource `json:"size_source"`
+}
+
+// RequestBodyTooLargeSizeSource is which of its values a RequestBodyTooLarge's size_source field holds.
+type RequestBodyTooLargeSizeSource string
+
+// The values a RequestBodyTooLarge's size_source field holds.
+const (
+	RequestBodyTooLargeSizeSourceContentLength RequestBodyTooLargeSizeSource = "content-length"
+	RequestBodyTooLargeSizeSourceStream        RequestBodyTooLargeSizeSource = "stream"
+)
+
+func (RequestBodyTooLarge) isSharedFailure() {}
+
 // AnswerNotWritten is a route whose outcome could not be written as JSON, or that answered no outcome at all. Every route can answer it.
 //
 //ergo:code NC-1002
@@ -109,6 +130,8 @@ func NocontractAnswerSharedFailure(outcome SharedFailure) Answer {
 		return Failed(Failure{Status: 503, Tag: "RequestDeadlineExceeded", Code: "NC-1170"}, member, AnswerMarshalers{})
 	case RequestRefused:
 		return Failed(Failure{Status: 400, Tag: "RequestRefused", Code: "NC-1001"}, member, AnswerMarshalers{})
+	case RequestBodyTooLarge:
+		return Failed(Failure{Status: 413, Tag: "RequestBodyTooLarge", Code: "NC-1168"}, member, AnswerMarshalers{UnsignedText[uint64]()})
 	case AnswerNotWritten:
 		return Failed(Failure{Status: 500, Tag: "AnswerNotWritten", Code: "NC-1002"}, member, AnswerMarshalers{})
 	case RouteNotFound:

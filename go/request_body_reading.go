@@ -1,6 +1,7 @@
 package nocontract
 
 import (
+	"bytes"
 	"encoding/json/jsontext"
 	"errors"
 	"io"
@@ -336,8 +337,12 @@ func Next[V, W any](reading BodyReading[V], next func(V) BodyReading[W]) BodyRea
 
 // Body is the request's JSON body read by read, refused when it holds more than the one value read
 // reads.
-func Body[V any](request *http.Request, read func(BodyValue) BodyReading[V]) Reading[V] {
-	switch reading := ReadJSONBody(request.Body, read).(type) {
+func Body[V any](request *http.Request, limit RequestBodyLimit, read func(BodyValue) BodyReading[V]) Reading[V] {
+	return readRequestBody(request, limit, func(content []byte) Reading[V] { return decodedBody(content, read) })
+}
+
+func decodedBody[V any](content []byte, read func(BodyValue) BodyReading[V]) Reading[V] {
+	switch reading := ReadJSONBody(bytes.NewReader(content), read).(type) {
 	case Read[V]:
 		return reading
 	case BodyRefused:

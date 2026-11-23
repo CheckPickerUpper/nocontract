@@ -19,6 +19,13 @@ main :: proc() {
 			fmt.printf("Listening on http://%s\n", net.endpoint_to_string(endpoint))
 		},
 	)
+	switch parsed in nocontract.parse_body_limit(1024) {
+	case nocontract.Request_Body_Limit:
+		options = nocontract.with_body_limit(options, parsed)
+	case nocontract.Invalid_Request_Body_Limit:
+		fmt.eprintln("NoContract body limit refused:", parsed)
+		os.exit(1)
+	}
 	options = nocontract.with_layers(options, []requestlayers.Layer{
 		{user_data = &outer, before = observe_request_entry, after = observe_request_answer},
 		{user_data = &inner, before = observe_request_entry, after = observe_request_answer},

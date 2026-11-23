@@ -116,13 +116,13 @@ func readNames(serves serverplan.Routing) []string {
 
 // routeParameters is what a route's function takes: the receiver of its method handler, if it has
 // one, and the request.
-func routeParameters(handler serverplan.Handler) string {
+func routeParameters(handler serverplan.Handler, names *imports) string {
 	switch called := handler.(type) {
 	case serverplan.MethodHandler:
-		return "receiver " + called.Receiver + ", request *http.Request"
+		return "receiver " + called.Receiver + ", request *http.Request, limit " + names.runtime("RequestBodyLimit")
 	case serverplan.FunctionHandler, nil:
 	}
-	return "request *http.Request"
+	return "request *http.Request, limit " + names.runtime("RequestBodyLimit")
 }
 
 // routeText is a route's function, which reads each part of the request its input holds, then
@@ -131,7 +131,7 @@ func routeText(route serverplan.Route, names *imports, readers *bodyReaders) str
 	name := serverplan.RouteFunction(route.Name)
 	text := &strings.Builder{}
 	fmt.Fprintf(text, "\n// %s answers one request to %s %s. Only the generated server calls it.\nfunc %s(%s) %s {\n",
-		name, route.Method.Name(), route.Path.Text(), name, routeParameters(route.Handler), names.runtime("Answer"))
+		name, route.Method.Name(), route.Path.Text(), name, routeParameters(route.Handler, names), names.runtime("Answer"))
 	steps, fields := []string{}, []string{}
 	for _, param := range route.Params {
 		steps = append(steps, paramStep(param.Field, names.runtime("Path")+"(request, "+strconv.Quote(param.Name)+")", names))
@@ -147,7 +147,7 @@ func routeText(route serverplan.Route, names *imports, readers *bodyReaders) str
 	}
 	switch body := route.Body.(type) {
 	case serverplan.BodyFieldRead:
-		steps = append(steps, fmt.Sprintf("return %s(%s(request, %s), func(%s %s) %s {\n", names.runtime("Then"), names.runtime("Body"),
+		steps = append(steps, fmt.Sprintf("return %s(%s(request, limit, %s), func(%s %s) %s {\n", names.runtime("Then"), names.runtime("Body"),
 			readers.reader(body.Value, exported(route.Name), names), readName(serverplan.BodyFieldName), readers.written(body.Value, exported(route.Name), names),
 			names.runtime("Answer")))
 		fields = append(fields, serverplan.BodyFieldName+": "+readName(serverplan.BodyFieldName))
@@ -367,7 +367,7 @@ func (qualifiedBy) isReference() {}
 // localNames are the names the generated functions give their parameters and variables, which no
 // package alias may take.
 func localNames() []string {
-	return []string{"read", "request", "writer", "outcome", "member", "members", "value", "items", "receiver", "api", "layers"}
+	return []string{"read", "request", "writer", "outcome", "member", "members", "value", "items", "receiver", "api", "layers", "limit"}
 }
 
 // runtime is a declaration of nocontract's runtime as the generated file writes it.

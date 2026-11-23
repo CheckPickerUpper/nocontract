@@ -86,11 +86,19 @@ func assertShopGeneratedFile(t *testing.T, compared shopFileComparison) {
 	t.Errorf("%s differs after line %d (-%s +%s): want %d bytes, got %d", compared.artifact, min(len(expected), len(actual)), compared.expected.path, compared.actual.path, len(compared.expected.content), len(compared.actual.content))
 }
 
-func assertShopClientAnswers(t *testing.T, directory string, served shopServerAddress) {
+func assertShopClientAnswers(t *testing.T, directory string, served shopServerAddress, bodyLimitSupport shopBodyLimitSupport) {
 	t.Helper()
 	command := exec.CommandContext(t.Context(), "bun", "run", "--no-install", "src/round_trip.ts")
 	command.Dir = directory
 	command.Env = append(os.Environ(), "SHOP_URL="+served.url)
+	switch bodyLimitSupport.(type) {
+	case shopBodyLimitEnforced:
+		command.Env = append(command.Env, "SHOP_BODY_LIMIT_SUPPORT=enforced")
+	case shopBodyLimitAwaitingMist:
+		command.Env = append(command.Env, "SHOP_BODY_LIMIT_SUPPORT=awaiting-mist")
+	case nil:
+		t.Fatal("the backend has no declared body-limit support")
+	}
 	decoded := runShopCommand(t, command)
 	t.Logf("Decoded shop answers: %s", bytes.TrimSpace(decoded))
 }

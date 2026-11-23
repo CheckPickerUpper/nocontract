@@ -208,6 +208,12 @@ Body_Transport_Refusal :: struct #all_or_none {
 	failure: httpbinding.Body_Not_Received,
 }
 
+// Body_Size_Refusal retains the native size receipt and the payload received before refusal.
+Body_Size_Refusal :: struct #all_or_none {
+	partial: string,
+	failure: httpbinding.Body_Size_Exceeded,
+}
+
 // Request_Refusal preserves each cause a generated request reader can return.
 Request_Refusal :: union #no_nil {
 	Missing_Query,
@@ -216,13 +222,33 @@ Request_Refusal :: union #no_nil {
 	Path_Not_Decoded,
 	Body_Problem,
 	Body_Transport_Refusal,
+	Body_Size_Refusal,
 }
 
-// Refusal_Fields is the projection the generated shared RequestRefused wire type accepts.
-Refusal_Fields :: struct #all_or_none {
+// Request_Refused_Fields is the projection the shared RequestRefused wire type accepts.
+Request_Refused_Fields :: struct #all_or_none {
 	part:   string,
 	name:   string,
 	reason: string,
+}
+
+// Body_Size_Source identifies the source of the size published in the refusal.
+Body_Size_Source :: enum {
+	Content_Length,
+	Stream,
+}
+
+// Body_Too_Large_Fields is the common size refusal's projection from the native receipt.
+Body_Too_Large_Fields :: struct #all_or_none {
+	limit_bytes: u64,
+	size_bytes: u64,
+	size_source: Body_Size_Source,
+}
+
+// Refusal_Fields keeps size refusal fields separate from unreadable request fields.
+Refusal_Fields :: union #no_nil {
+	Request_Refused_Fields,
+	Body_Too_Large_Fields,
 }
 
 // refusal_fields describes a refusal while its original typed evidence remains on the refusal.
@@ -230,22 +256,30 @@ Refusal_Fields :: struct #all_or_none {
 refusal_fields :: proc(refusal: Request_Refusal) -> Refusal_Fields {
 	switch refused in refusal {
 	case Missing_Query:
-		return Refusal_Fields{part = "query", name = refused.name, reason = "the query parameter is missing"}
+		return Request_Refused_Fields{part = "query", name = refused.name, reason = "the query parameter is missing"}
 	case Missing_Header:
-		return Refusal_Fields{part = "header", name = refused.name, reason = "the header is missing"}
+		return Request_Refused_Fields{part = "header", name = refused.name, reason = "the header is missing"}
 	case Parameter_Refusal:
-		return Refusal_Fields{part = strings.to_lower(fmt.tprintf("%v", refused.source.part)), name = refused.source.name, reason = parameter_reason(refused)}
+		return Request_Refused_Fields{part = strings.to_lower(fmt.tprintf("%v", refused.source.part)), name = refused.source.name, reason = parameter_reason(refused)}
 	case Path_Not_Decoded:
 		switch cause in refused.failure.cause {
 		case Percent_Triplet_Invalid:
-			return Refusal_Fields{part = "path", name = refused.segment, reason = fmt.tprintf("invalid URL escape %q", cause.escape)}
+			return Request_Refused_Fields{part = "path", name = refused.segment, reason = fmt.tprintf("invalid URL escape %q", cause.escape)}
 		case Percent_Decoder_Refused:
-			return Refusal_Fields{part = "path", name = refused.segment, reason = fmt.tprintf("the URL decoder refused %q", refused.failure.input)}
+			return Request_Refused_Fields{part = "path", name = refused.segment, reason = fmt.tprintf("the URL decoder refused %q", refused.failure.input)}
 		}
 	case Body_Problem:
-		return Refusal_Fields{part = "body", name = refused.path, reason = body_reason(refused)}
+		return Request_Refused_Fields{part = "body", name = refused.path, reason = body_reason(refused)}
 	case Body_Transport_Refusal:
-		return Refusal_Fields{part = "body", name = "body", reason = fmt.tprintf("The body could not be read: %v.", refused.failure.cause)}
+		return Request_Refused_Fields{part = "body", name = "body", reason = fmt.tprintf("The body could not be read: %v.", refused.failure.cause)}
+	case Body_Size_Refusal:
+		cause := refused.failure.cause
+		switch cause.framing {
+		case .Content_Length:
+			return Body_Too_Large_Fields{limit_bytes = u64(cause.max_length), size_bytes = u64(cause.next_length), size_source = .Content_Length}
+		case .Chunked:
+			return Body_Too_Large_Fields{limit_bytes = u64(cause.max_length), size_bytes = u64(cause.max_length) + 1, size_source = .Stream}
+		}
 	}
 	unreachable()
 }

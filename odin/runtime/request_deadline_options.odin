@@ -39,5 +39,5 @@ with_request_deadline :: proc(options: Listen_Options, milliseconds: u32) -> Dea
 	if milliseconds == 0 {
 		return Request_Deadline_Outside{timeout_milliseconds = milliseconds, least = 1, most = 4_294_967_295}
 	}
-	return Deadline_Configured{options = Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = options.tcp.layers, deadline = Configured_Deadline{milliseconds = milliseconds}}}}
+	return Deadline_Configured{options = Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = options.tcp.layers, deadline = Configured_Deadline{milliseconds = milliseconds}, body_limit = options.tcp.body_limit}}}
 }

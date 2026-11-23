@@ -202,8 +202,8 @@ func newFunctionText(routed []routedPackage, parameters map[packageNeed]serverPa
 				call = fmt.Sprintf("return %s(%s(request), %s, func() %s { %s })", names.runtime("Decided"), check.name, refused, names.runtime("Answer"), call)
 			case serverplan.Unguarded, nil:
 			}
-			endpoints = append(endpoints, fmt.Sprintf("{Method: %s, Path: %s, Answer: func(request *http.Request) %s { %s }},",
-				strconv.Quote(route.Method.Name()), segmentsText(route.Path, names), names.runtime("Answer"), call))
+			endpoints = append(endpoints, fmt.Sprintf("{Method: %s, Path: %s, Answer: func(request *http.Request, limit %s) %s { %s }},",
+				strconv.Quote(route.Method.Name()), segmentsText(route.Path, names), names.runtime("RequestBodyLimit"), names.runtime("Answer"), call))
 		}
 	}
 	for _, check := range checks {
@@ -223,8 +223,8 @@ func routeCall(path string, route serverplan.Route, parameters map[packageNeed]s
 	switch handler := route.Handler.(type) {
 	case serverplan.MethodHandler:
 		receiver := parameters[packageNeed{path: path, need: serverplan.NeedsReceiver{Type: serverplan.GoName{Package: path, Name: handler.Receiver}}}]
-		return "return " + function + "(" + receiver.name + ", request)"
+		return "return " + function + "(" + receiver.name + ", request, limit)"
 	case serverplan.FunctionHandler, nil:
 	}
-	return "return " + function + "(request)"
+	return "return " + function + "(request, limit)"
 }

@@ -24,10 +24,11 @@ type Read[V any] struct {
 	Value V
 }
 
-func (Read[V]) isReading()            {}
-func (RequestRefused) isReading()     {}
-func (RequestRefused) isTextReading() {}
-func (textPresent) isTextReading()    {}
+func (Read[V]) isReading()             {}
+func (RequestRefused) isReading()      {}
+func (RequestBodyTooLarge) isReading() {}
+func (RequestRefused) isTextReading()  {}
+func (textPresent) isTextReading()     {}
 
 // Then is next's answer for the value reading read, or the refusal when reading failed. Generated
 // code chains one Then for each part of the request a route reads.
@@ -37,6 +38,10 @@ func Then[V any](reading Reading[V], next func(V) Answer) Answer {
 		return next(read.Value)
 	case RequestRefused:
 		return NocontractAnswerSharedFailure(read)
+	case RequestBodyTooLarge:
+		return answerBodyTooLarge(read)
+	case RequestBodyReceiveFailed:
+		return NocontractAnswerSharedFailure(RequestRefused{Part: RequestRefusedPartBody, Name: bodyRoot, Reason: read.Cause.Error()})
 	case nil:
 	}
 	return NoOutcome()

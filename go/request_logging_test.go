@@ -34,10 +34,10 @@ func TestTheListenerLogsTheAnswerEachRequestReceives(t *testing.T) {
 	binding := nocontract.BindRoutes([]nocontract.Endpoint{{
 		Method: http.MethodGet,
 		Path:   []nocontract.PathSegment{nocontract.PathText{Text: "shoppers"}, nocontract.PathParameter{Name: "shopper_id"}},
-		Answer: func(request *http.Request) nocontract.Answer {
+		Answer: func(request *http.Request, limit nocontract.RequestBodyLimit) nocontract.Answer {
 			return nocontract.Decided(check(request), func(struct{}) nocontract.Answer {
 				return nocontract.Failed(nocontract.Failure{Status: http.StatusUnauthorized, Tag: "ShopperRequired", Code: "SH-1101"}, struct{}{}, nocontract.AnswerMarshalers{})
-			}, func() nocontract.Answer { return answeredWith("Shopper")(request) })
+			}, func() nocontract.Answer { return answeredWith("Shopper")(request, limit) })
 		},
 	}}, []nocontract.Layer{})
 	options := nocontract.WithRequestLogger(nocontract.ListenOn("127.0.0.1:0"), logger)
