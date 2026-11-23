@@ -1,6 +1,11 @@
 package running_test
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -10,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/CheckPickerUpper/outcome"
+	"github.com/creachadair/atomicfile"
 
 	"github.com/CheckPickerUpper/nocontract/internal/scratchproject"
 )
@@ -87,29 +93,55 @@ func copyShopSources(t *testing.T, fixture shopFixture, directory string) {
 
 func copyGleamShop(t *testing.T, fixture shopFixture) string {
 	t.Helper()
-	// Gleam checks its path dependency fingerprint separately from the locked versions
-	// and global tarballs. Reuse its prepared metadata so a new test directory keeps
-	// the existing resolution.
-	dependencies := exec.CommandContext(t.Context(), "gleam", "deps", "download")
-	dependencies.Dir = fixture.directory
-	if output, cause := dependencies.CombinedOutput(); cause != nil {
-		t.Fatalf("preparing the Gleam dependencies in %s: %v\n%s", fixture.directory, cause, output)
-	}
-
 	project := copyShop(t, fixture)
 	directory := filepath.Dir(project)
 	runtimeDirectory := filepath.Clean(filepath.Join(fixture.directory, "..", "..", "..", "gleam", "runtime"))
 	runtime := readShopFixture(t, runtimeDirectory).directory
-	for _, name := range []string{"gleam.toml", "manifest.toml"} {
-		manifest := strings.ReplaceAll(heldOrStop(t, filepath.Join(fixture.directory, name)), `"../../../gleam/runtime"`, strconv.Quote(runtime))
-		scratchproject.WriteFile(t, directory, name, []byte(manifest))
+	configuration := heldOrStop(t, filepath.Join(fixture.directory, "gleam.toml"))
+	manifest := heldOrStop(t, filepath.Join(fixture.directory, "manifest.toml"))
+	compiler := exec.CommandContext(t.Context(), "gleam", "--version")
+	compiler.Dir = directory
+	version := scratchproject.BytesOrStop(t, "reading the Gleam version", outcome.TupleToResult(compiler.Output()))
+	inputs := [][]byte{
+		version,
+		[]byte(configuration),
+		[]byte(manifest),
+		[]byte(heldOrStop(t, filepath.Join(runtime, "gleam.toml"))),
+	}
+	key := sha256.Sum256(scratchproject.BytesOrStop(t, "encoding the Gleam dependency inputs", outcome.TupleToResult(json.Marshal(inputs))))
+	cacheDirectory := scratchproject.PathOrStop(t, "locating the dependency cache", outcome.TupleToResult(os.UserCacheDir()))
+	cachedFingerprint := filepath.Join(cacheDirectory, "nocontract", "gleam-shop-dependencies", fmt.Sprintf("%x.config_fingerprint", key))
+	for _, file := range []shopSourceFile{
+		{path: "gleam.toml", content: []byte(configuration)},
+		{path: "manifest.toml", content: []byte(manifest)},
+	} {
+		content := strings.ReplaceAll(string(file.content), `"../../../gleam/runtime"`, strconv.Quote(runtime))
+		scratchproject.WriteFile(t, directory, file.path, []byte(content))
 	}
 	fingerprint := filepath.Join("build", "packages", "nocontract_runtime.config_fingerprint")
-	cachedFingerprint := filepath.Join(fixture.directory, fingerprint)
-	info, cause := os.Stat(cachedFingerprint)
-	scratchproject.StopOn(t, "reading the Gleam dependency fingerprint's modification time", cause)
-	scratchproject.WriteFile(t, directory, fingerprint, []byte(heldOrStop(t, cachedFingerprint)))
-	scratchproject.StopOn(t, "preserving the Gleam dependency fingerprint's modification time",
-		os.Chtimes(filepath.Join(directory, fingerprint), info.ModTime(), info.ModTime()))
-	return project
+	return outcome.Fold(outcome.TupleToResult(os.ReadFile(cachedFingerprint)), func(content []byte) string {
+		scratchproject.WriteFile(t, directory, fingerprint, content)
+		return project
+	}, func(readError error) string {
+		if !errors.Is(readError, os.ErrNotExist) {
+			t.Fatalf("reading the Gleam dependency fingerprint %s: %v", cachedFingerprint, readError)
+		}
+		declaredManifest := heldOrStop(t, filepath.Join(directory, "manifest.toml"))
+		dependencies := exec.CommandContext(t.Context(), "gleam", "deps", "download")
+		dependencies.Dir = directory
+		output := &bytes.Buffer{}
+		dependencies.Stdout, dependencies.Stderr = output, output
+		outcome.ForEachOption(outcome.EmptyableToOption(dependencies.Run()), func(cause error) {
+			t.Fatalf("preparing the Gleam dependencies in %s: %v\n%s", directory, cause, output)
+		})
+		// Gleam writes the fingerprint before resolving. Publish only a successful
+		// resolution that preserves the lock whose bytes identify this cache entry.
+		if heldOrStop(t, filepath.Join(directory, "manifest.toml")) != declaredManifest {
+			return project
+		}
+		content := scratchproject.BytesOrStop(t, "reading the resolved Gleam dependency fingerprint", outcome.TupleToResult(os.ReadFile(filepath.Join(directory, fingerprint))))
+		scratchproject.StopOn(t, "making the Gleam dependency cache", os.MkdirAll(filepath.Dir(cachedFingerprint), 0o700))
+		scratchproject.StopOn(t, "publishing the Gleam dependency fingerprint", atomicfile.WriteData(cachedFingerprint, content, 0o600))
+		return project
+	})
 }

@@ -5,6 +5,7 @@ go 1.27.4
 require (
 	github.com/CheckPickerUpper/ErGo v0.0.0-20261118210535-5e49b5eba7bc
 	github.com/CheckPickerUpper/outcome v0.0.0-20261116220618-27755f6ba168
+	github.com/creachadair/atomicfile v0.4.2
 	github.com/fatih/structtag v1.2.0
 	github.com/google/go-cmp v0.7.0
 	github.com/pelletier/go-toml/v2 v2.4.3
@@ -16,7 +17,6 @@ require (
 )
 
 require (
-	github.com/creachadair/atomicfile v0.4.2 // indirect
 	github.com/creachadair/mds v0.32.0 // indirect
 	github.com/go-json-experiment/json v1.27.2 // indirect
 	golang.org/x/text v0.14.0 // indirect
