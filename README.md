@@ -1,58 +1,39 @@
 # NoContract
 
-Your frontend's API client, generated from your backend's handlers, with every error each route
-can return. Nobody writes an OpenAPI file or a list of responses by hand: NoContract writes the
-OpenAPI file from the same handlers, for every other language's client and for documentation tools.
+NoContract generates your frontend API client and OpenAPI specification directly from your backend route handlers. You don't write OpenAPI files by hand or maintain separate response lists; your backend types are the single source of truth.
 
 ## The problem it solves
 
-In most setups the errors a route can return are written down twice: once in the handler, and
-once in a contract beside it. Nothing checks the two against each other. A handler that starts
-answering 409 still compiles, the client still believes the route can only fail with 404, and the
-first person to find out is a user.
+In most setups, a route's possible errors are defined twice: once in the handler logic, and once in an external specification or annotation. Nothing keeps them in sync. If a handler starts returning a `409`, the backend compiles, the client still assumes only `404` is possible, and users hit unhandled edge cases in production.
 
-| Approach | Where a route's errors are listed | What keeps that list true |
+| Approach | Where errors are defined | What enforces accuracy |
 | --- | --- | --- |
-| OpenAPI file with generators (ogen, openapi-typescript) | the contract file, edited by hand | generating both sides from the file |
-| [utoipa](https://github.com/juhaku/utoipa) (Rust), [huma](https://github.com/danielgtaylor/huma) (Go) | an annotation or registration beside the handler | nothing; the list is not checked against what the handler returns |
-| NoContract | the handler's return type | the compiler |
+| **OpenAPI generators** (`ogen`, `openapi-typescript`) | A hand-edited contract file | Generating both client and server from the file |
+| **Annotations** (`utoipa` in Rust, `huma` in Go) | Macros or registration calls next to the handler | Nothing; the compiler doesn't check them against return values |
+| **NoContract** | The handler's return type | The compiler |
 
-With NoContract a handler returns a closed type, and each member of that type is one answer the
-route can give. NoContract reads that type and writes both the code that serves the route and an
-[Effect](https://effect.website) `HttpApi` client for it. Add a failure to the type and it appears
-in the route's error type in TypeScript on the next `generate`; `check` fails in CI until you run
-it.
+With NoContract, a handler returns a closed sum type where each member represents a specific HTTP response. NoContract reads that type and generates both the server routing code and a typed Effect `HttpApi` client. If you add a new error to a handler's return type, it immediately shows up in the TypeScript client on the next generation, and CI will fail until the generated files are updated.
 
 ## What you get
 
-- Each failure is its own tagged error in the Effect client, with its fields.
-  `Effect.catchTag("ShopperNotFound", ...)` on a route that cannot return `ShopperNotFound` is a
-  type error.
-- Every failure carries a permanent code such as `SH-1001`, declared once with
-  [ErGo](https://github.com/CheckPickerUpper/ErGo) and sent in every response. A log line or a
-  user's screenshot names the exact failure after its wording has changed.
-- The generated route code writes only the members of the handler's type, each with its declared
-  HTTP status. The server answers only the routes the client and the OpenAPI file list, and a
-  route behind a guard cannot be served without that guard.
-- Go, Odin and Gleam backends are read into the same description and checked by the same rules,
-  so they produce the same client and the same JSON.
+* **Type-safe client errors:** Every failure becomes a distinct tagged error in Effect with its exact payload fields. Calling `Effect.catchTag("ShopperNotFound", ...)` on a route that doesn't return that error causes a TypeScript compile error.
+* **Permanent error codes:** Every failure carries a static code (like `SH-1001`) declared via ErGo and included in every JSON response. Logs and user screenshots will always identify the exact error, even if you change the human-readable message later.
+* **Strict server guarantees:** Generated routing code only serializes members of the handler's return type with their declared HTTP statuses. The server won't expose undocumented routes, and guarded routes cannot run without their guards.
+* **Cross-backend consistency:** Go, Odin, and Gleam backends parse into the same intermediate representation and follow the exact same validation rules, producing identical clients and JSON wire formats.
 
-## Install
+## Installation
 
-In the Go module that serves the routes:
+In the Go module serving your routes:
 
-```sh
+```bash
 go get -tool github.com/CheckPickerUpper/nocontract/cmd/nocontract
 ```
 
-The frontend needs `effect` 4.
+Your frontend requires only the released `effect` v4 package to use the generated client.
 
 ## Declaring a route in Go
 
-A route is a function taking a `context.Context` and an input, returning a sealed outcome. Its
-`//nocontract:route` line names the method (GET, POST, PUT, PATCH or DELETE) and the path. The
-path starts with `/`, and each segment between slashes is text holding no brace or one `{name}`
-parameter:
+A route is a function accepting a `context.Context` and an input struct, returning a sealed outcome interface. The `//nocontract:route` directive specifies the HTTP method (`GET`, `POST`, `PUT`, `PATCH`, or `DELETE`) and path. Paths must start with `/`, and segments can be static text or a single `{name}` parameter.
 
 ```go
 // ReadBalance reads one shopper's balance.
@@ -63,9 +44,7 @@ func ReadBalance(ctx context.Context, input ReadInput) ReadOutcome {
 }
 ```
 
-The input is a struct. A field tagged `path:"name"` reads that path segment, a field tagged
-`query:"name"` reads that query parameter, and a field named `Body` reads the JSON body. A route
-that reads nothing takes `nocontract.NoInput`.
+Input structs use tags to bind request data: `path:"name"` for path segments, `query:"name"` for query parameters, and a field named `Body` for the JSON request body. Routes that take no inputs use `nocontract.NoInput`.
 
 ```go
 // ReadInput names the shopper and the currency to read the balance in.
@@ -75,10 +54,7 @@ type ReadInput struct {
 }
 ```
 
-The outcome is an interface sealed by an unexported method and marked `//sumtype:decl`. Every
-type in its package that implements it is one of its members. Each member declares its status
-with `//nocontract:status`, and its [ErGo](https://github.com/CheckPickerUpper/ErGo) decision:
-a failure carries a permanent `//ergo:code`, a success is `//ergo:not-an-error`.
+The return type must be an interface sealed by an unexported method and annotated with `//sumtype:decl`. Every type in the same package implementing this interface is treated as a valid response. Each response type requires a `//nocontract:status` directive and an ErGo directive (`//ergo:code` for failures, `//ergo:not-an-error` for successes).
 
 ```go
 // ReadOutcome is what reading a balance ended as.
@@ -109,8 +85,7 @@ func (BalanceRead) isReadOutcome()     {}
 func (ShopperNotFound) isReadOutcome() {}
 ```
 
-A handler may be a method of a type its package declares, so it can hold what the route needs,
-such as a database:
+Handlers can also be methods on a struct, allowing you to inject dependencies like database connections:
 
 ```go
 // Ledger reads balances from its store.
@@ -128,8 +103,7 @@ func (ledger Ledger) ReadBalance(ctx context.Context, input ReadInput) ReadOutco
 
 ## Guards
 
-A guard is a check in front of the routes that name it, such as a sign-in check. Its refusal is a
-sealed type marked `//nocontract:guard` with the guard's name, whose members are failures:
+Guards run authentication or validation checks before a route executes. A guard's failure mode is defined as a sealed interface annotated with `//nocontract:guard <Name>`:
 
 ```go
 // Refusal is how the shopper check refuses a request before its route runs.
@@ -151,7 +125,7 @@ type NotSignedIn struct {
 func (NotSignedIn) isRefusal() {}
 ```
 
-A route names its guard and the one argument the guard is handed:
+Attach a guard to a route by specifying the guard's name and a single string argument:
 
 ```go
 //nocontract:route GET /shoppers/{shopper_id}/balance
@@ -159,13 +133,7 @@ A route names its guard and the one argument the guard is handed:
 func (ledger Ledger) ReadBalance(ctx context.Context, input ReadInput) ReadOutcome {
 ```
 
-The guard implements `nocontract.Guard[refusal.Refusal]`, typed by its own refusal. It decides
-and never answers: `CheckRoute` is asked once for each route when the server is built, and
-returns how the guard decides each request to that route, or why it cannot check the route at all.
-Each request's decision is `nocontract.Admitted` or `nocontract.Refused` holding one member of
-the guard's refusal. The generated code writes the refusal with its status and code, or runs the
-route. A decision typed by one guard's refusal cannot hold another guard's refusal or a route's
-failure.
+The guard implementation satisfies `nocontract.Guard[refusal.Refusal]`. When the server initializes, `CheckRoute` is called once per guarded route to validate the configuration and return a request checker function. For each incoming request, that function returns either `nocontract.Admitted` or `nocontract.Refused` containing one of the guard's refusal types. Because the return type is generic over the guard's specific refusal interface, a guard cannot accidentally return another guard's errors or a route outcome.
 
 ```go
 func (Check) CheckRoute(route nocontract.GuardedRoute) mo.Result[nocontract.RequestCheck[refusal.Refusal]] {
@@ -178,19 +146,13 @@ func (Check) CheckRoute(route nocontract.GuardedRoute) mo.Result[nocontract.Requ
 }
 ```
 
-Every route behind a guard lists the guard's refusals among its failures in the TypeScript client.
+In the generated TypeScript client, any route using a guard automatically includes that guard's refusal types in its union of possible errors.
 
-## Generating
+## Code generation
 
-A `nocontract.json` names the backend language, the packages holding routes, the API name, the
-OpenAPI output and version, and the server output folder. Paths are relative to
-`nocontract.json`. Include `typescript` to generate an Effect client from the same route
-description as the OpenAPI document. The API name must be a TypeScript identifier. Configuration errors name their
-line and column.
+Create a `nocontract.json` file next to your `go.mod`. All paths are relative to this config file. Specify the backend language, route packages, API name, OpenAPI output and version, and server output directory. Use `typescript` to generate an Effect client from the same route description as the OpenAPI specification. You can omit it if you publish only OpenAPI. Unknown keys or syntax errors are rejected with exact line and column numbers. The `api` field must be a valid, non-reserved TypeScript identifier.
 
-Odin projects can set `collections` to an object mapping import collection names to directories.
-For example, `"collections": {"credentials": "./packages"}` lets a route import
-`"credentials:verification"` from the `verification` package under that directory.
+Odin projects can set `collections` to map import collection names to directories. For example, `"collections": {"credentials": "./packages"}` lets you import `"credentials:verification"` from the `verification` package in that directory.
 
 ```json
 {
@@ -203,51 +165,39 @@ For example, `"collections": {"credentials": "./packages"}` lets a route import
 }
 ```
 
-```sh
-go tool nocontract generate   # writes the files
-go tool nocontract check      # exits 1 when a file differs from what generate writes
+Run the CLI via Go's tool runner:
+
+```bash
+go tool nocontract generate   # Writes all generated files
+go tool nocontract check      # Exits with status 1 if any generated file is out of date
 ```
 
-`generate` writes `nocontract_routes.go` into each package that declares a route or a guard's
-refusal, `nocontract_server.go` into the server folder, the TypeScript file and the OpenAPI file.
-It also writes `nocontract_files_test.go` into the first package that declares a route or a
-guard's refusal, in folder order, so `go test ./...` fails while any generated file differs from
-what `generate` writes, listing each one. `check` runs the same comparison on its own.
+Running `generate` creates:
 
-With `typescript` set, NoContract writes the client directly from the route description.
-The frontend needs only the released `effect` package to use it; generation does not read
-frontend dependencies. The [shop's package manifest](testdata/go/shop/web/package.json) and
-Bun lockfile show a complete frontend. A project that publishes only OpenAPI can omit `typescript`.
+1. `nocontract_routes.go` in every package containing routes or guard refusals.
+2. `nocontract_server.go` in your configured server directory.
+3. The TypeScript client file and the OpenAPI 3.1 JSON spec.
+4. `nocontract_files_test.go` in the first package, in folder order, that declares a route or a guard refusal. It names stale files and fails `go test ./...` if the generated files drift from your Go code. `check` runs the same comparison directly.
 
-Source outputs carry a generated header. OpenAPI documents carry an ownership marker in
-`info`. Generation refuses files without the appropriate marker. To regenerate an older,
-unmarked NoContract document, move the old document aside before running `generate`.
+NoContract generates the client without reading frontend dependencies. The [shop's package manifest](testdata/go/shop/web/package.json) and [Bun lockfile](testdata/go/shop/web/bun.lock) show a complete frontend.
 
-The OpenAPI file lists each route's path and query parameters, its body, and every member it
-answers with under that member's status. Each member is its own schema, whose `_tag` and, for a
-failure, `code` each allow one value. A whole number of 32 bits or fewer is an `integer` from its
-least to its most value. A 64-bit whole number, a plain `int` included, is a string of format
-`int64` or `uint64` whose `pattern` takes exactly the canonical decimal text of its range, and a
-`time.Time` is a string of format `date-time`.
-A named record can contain itself, for example through a list of child records. The OpenAPI
-document refers to the named schema again for each child.
+Generated source files have a `// Code generated ... DO NOT EDIT.` header or its equivalent. OpenAPI documents have an ownership marker in `info`. Generation refuses to overwrite a file without its marker. If you have an older unmarked OpenAPI document, move it aside before running `generate`.
 
-## Serving
+The generated OpenAPI 3.1 specification lists request parameters and bodies and maps each response member to its HTTP status code, pinning exact literal values for `_tag` and `code`. Integers up to 32 bits map to bounded JSON integers, 64-bit integers (including `int`) map to `int64` or `uint64` decimal strings with a pattern for the exact range, and `time.Time` maps to `date-time` strings.
 
-The generated server package declares `API`, which owns the checked route binding, `New`, which
-builds it, and `Listen`, which starts its listener. `New` takes the layers, then one parameter
-for each handler's receiver type and each guard, by route package folder and then in the order
-the package's routes first need them, each named for its package and its type or guard. A route
-cannot be served without its guard or its receiver.
+Named records can contain themselves through fields such as a list of child records. The OpenAPI specification refers to the same named schema for each child.
+
+## Serving the API
+
+The generated server package exports `API`, which owns the checked route binding, `New`, which constructs it, and `Listen`, which starts its listener. `New` accepts your middleware layers, followed by instances of every handler receiver struct and guard required by your routes, ordered by package path and declaration order. If a guard cannot check one of its routes, `New` returns the cause.
 
 ```go
-built := server.New([]nocontract.Layer{logRequest}, balance.Ledger{Store: store}, shopperauth.Check{})
-```
+built := server.New(
+	[]nocontract.Layer{logRequest},
+	balance.Ledger{Store: store},
+	shopperauth.Check{},
+)
 
-`New` answers the API, or why a guard could not check one of its routes. Start it with
-`server.Listen`, passing the application's context and an opaque `nocontract.ListenOptions`:
-
-```go
 started := mo.Fold(built, func(api server.API) outcome.Result[nocontract.ListeningServer] {
 	return server.Listen(ctx, nocontract.ListenOn("127.0.0.1:8080"), api)
 }, outcome.Err[nocontract.ListeningServer])
@@ -258,34 +208,22 @@ stopped := outcome.Fold(started, func(listening nocontract.ListeningServer) outc
 }, outcome.Err[nocontract.ServerStopped])
 ```
 
-`Address()` reports the actual bound address. `ListenOn("127.0.0.1:0")` chooses an available
-port. `Wait()` waits for the serving task and returns its typed terminal result. From the
-application's shutdown path, call `Stop(shutdownContext)` on the same listener. It stops
-accepting requests, waits for active requests to finish within that context, and reports
-`ServerStopped` or the original shutdown failure. Concurrent `Wait` and `Stop` calls share the
-same listener lifetime.
+`Listen` takes your application's context and a `nocontract.ListenOptions` value. Use `ListenOn("127.0.0.1:0")` for an ephemeral port and `Address()` to read the bound address. `Wait()` returns the serving task's typed result. Call `Stop(shutdownContext)` from your shutdown path to stop accepting requests and wait for active requests to finish within the context. It returns `ServerStopped` or the original shutdown failure. Concurrent `Wait` and `Stop` calls share the same listener lifetime.
 
-The generated listener supplies these responses when no declared route takes a request.
+The generated listener automatically handles standard routing edge cases:
 
-- a path no route declares: 404 with `RouteNotFound` (`NC-1069`), naming the method and path;
-- an `OPTIONS` request to a declared path: 204 with `Allow` listing the path's declared methods;
-- any other method on a declared path: 405 with `MethodNotDeclared` (`NC-1070`), naming the
-  method and the allowed methods, and `Allow` listing them.
+* **Unmatched paths:** Responds with `404` and `RouteNotFound` (`NC-1069`), including the requested method and path.
+* **`OPTIONS` requests on valid paths:** Responds with `204` and sets the `Allow` header.
+* **Unregistered methods on valid paths:** Responds with `405`, sets the `Allow` header, and returns `MethodNotDeclared` (`NC-1070`).
+* **Path precedence:** Static path segments always take priority over `{parameter}` segments.
 
-A path segment written as text in one route is preferred over a `{name}` segment in another.
-
-A [layer](#layers) runs logging, metrics or CORS code around every request.
+Use NoContract [layers](#layers) for cross-cutting concerns like logging and CORS. The generated listener owns the route table and HTTP request handling.
 
 ## Layers
 
-A `nocontract.Layer` runs around every request the API answers, matched or not, for logging,
-metrics, request ids or CORS headers. It is handed the request as a `nocontract.Visit`, which reads
-the method, URL, header and the route matched (`nocontract.RouteMatched` with the declared method
-and path, or `nocontract.NoRouteMatched`), and sets headers on the response. Its `next` runs the
-route, once however often it is called, and returns the `nocontract.Answered`: the status, the
-`_tag` and the code of what the route answered. Only the API builds an `Answered`, and it sends the
-route's own answer whatever a layer returns, so a layer cannot change the status or body or answer
-in the route's place. Layers run in the order given, the first outermost.
+A `nocontract.Layer` wraps every incoming request, whether it matches a route or not. Layers receive a `nocontract.Visit` (providing read access to the method, URL, headers, and matched route metadata, plus write access to response headers) and a `next()` function.
+
+Calling `next()` executes the route once and returns a `nocontract.Answered` struct containing the response status, `_tag`, and error `code`. Layers cannot alter the response status or body; the server always writes the route's actual return value. Layers execute in the order provided, with the first layer on the outside.
 
 ```go
 func logRequest(visit nocontract.Visit, next func() nocontract.Answered) nocontract.Answered {
@@ -297,24 +235,9 @@ func logRequest(visit nocontract.Visit, next func() nocontract.Answered) nocontr
 
 ## Gleam server
 
-The Gleam application starts its generated Wisp/Mist server on its own BEAM. Declare
-`nocontract_runtime` as a Git dependency from this repository's `gleam/runtime` subdirectory,
-pinned to the NoContract revision used by the Go tool. The
-[Gleam shop manifest](testdata/gleam/shop/gleam.toml) lists the released Wisp, Mist and Gleam
-libraries the generated module imports.
+The Gleam application starts its generated Wisp/Mist server on its own BEAM. Add `nocontract_runtime` as a Git dependency from this repository's `gleam/runtime` subdirectory and pin it to the same NoContract revision as the Go tool. The [Gleam shop manifest](testdata/gleam/shop/gleam.toml) lists the released libraries it uses.
 
-Gleam request body limits wait for Mist to release bounded reads of chunked requests. The fix
-is on the [Mist `chunked-request-stream` branch](https://github.com/CheckPickerUpper/mist/commit/c67e45e06554da5d21db7c0ad34809aff3bd6e2d).
-
-Gleam graceful shutdown waits for Mist and Glisten to release a listener stop operation that lets
-active requests finish. The fixes are on the [Mist `graceful-listener` branch](https://github.com/CheckPickerUpper/mist/commit/40b25eaa3f2f4c85d54e72e2f453a4cb834e4236)
-and the [Glisten `stop-accepting` branch](https://github.com/CheckPickerUpper/glisten/commit/705d4b68797feb2785b89767fbe28680139446bf).
-[Glisten PR #56](https://github.com/rawhat/glisten/pull/56) tracks the upstream change.
-
-Set `language` to `gleam`, name the modules holding routes in `packages`, and set `server` to
-`src/nocontract`. `generate` writes the module `nocontract/server` there. It reads only the
-selected route modules and their source dependencies, so both `generate` and `check` work when
-an outcome change makes an older generated server stale.
+Set `language` to `gleam`, list your route modules in `packages`, and set `server` to `src/nocontract`. `generate` writes `nocontract/server` there. Both `generate` and `check` read the selected route modules and their source dependencies, even if a change to an outcome makes the generated server stale.
 
 ```gleam
 import gleam/erlang/process
@@ -327,11 +250,13 @@ pub fn main() {
 }
 ```
 
-`start` takes only the validated address and port options. The generated module owns routing,
-request decoding and JSON replies; it accepts no HTTP handler or response callback. A Go
-process does not serve a Gleam project's HTTP requests.
+`start` takes validated address and port options. The generated module handles routing, request decoding, and typed JSON replies in the Gleam process.
 
-## Calling
+Gleam request body limits wait for Mist to release bounded reads of chunked requests. The fix is on the [Mist `chunked-request-stream` branch](https://github.com/CheckPickerUpper/mist/commit/c67e45e06554da5d21db7c0ad34809aff3bd6e2d).
+
+Gleam graceful shutdown waits for Mist and Glisten to release a listener stop operation that lets active requests finish. The fixes are on the [Mist `graceful-listener` branch](https://github.com/CheckPickerUpper/mist/commit/40b25eaa3f2f4c85d54e72e2f453a4cb834e4236) and the [Glisten `stop-accepting` branch](https://github.com/CheckPickerUpper/glisten/commit/705d4b68797feb2785b89767fbe28680139446bf). [Glisten PR #56](https://github.com/rawhat/glisten/pull/56) tracks the upstream change.
+
+## Calling from TypeScript
 
 ```ts
 import { Effect } from "effect"
@@ -340,68 +265,63 @@ import { ShopApi } from "./shop_api.generated.js"
 
 const cents = Effect.gen(function*() {
   const client = yield* HttpApiClient.make(ShopApi, { baseUrl: "https://shop.example" })
-  const read = yield* client.balance.readBalance({ params: { shopper_id: 7n }, query: { currency: "CAD" } })
+  const read = yield* client.balance.readBalance({
+    params: { shopper_id: 7n },
+    query: { currency: "CAD" },
+  })
   return read.balance.cents
-}).pipe(Effect.catchTag("ShopperNotFound", () => Effect.succeed(0n)))
+}).pipe(
+  Effect.catchTag("ShopperNotFound", () => Effect.succeed(0n))
+)
 ```
 
-The client's methods are grouped by Go package and named for each handler. A failure the route
-cannot give is a type error in `catchTag`, and so is a query value outside the Go constants.
+Client methods are grouped by Go package name and camelCased from the Go handler name. Passing an invalid constant for a query parameter or catching an error tag that the route cannot emit results in a compile-time type error.
 
-## On the wire
+## Wire format
 
-Every answer is one JSON object: `_tag`, the member's Go type name; `code`, a failure's
-permanent code; then the member's fields, named as `encoding/json` names them. Its status is the
-member's `//nocontract:status`.
+Every response is a JSON object containing `_tag` (the Go struct name), `code` (for errors), and the struct's JSON-serialized fields. The HTTP status code matches the struct's `//nocontract:status` annotation.
 
 ```json
 {"_tag":"ShopperNotFound","code":"SH-1001","shopper_id":"8"}
 ```
 
-Two failures can answer any route. `RequestRefused` (400, `NC-1001`) is a path segment, query
-parameter or body the input could not read, before the handler runs, or a path segment that is
-not valid escaping. `AnswerNotWritten`
-(500, `NC-1002`) is an outcome that could not be written as JSON. `RouteNotFound` and
-`MethodNotDeclared` answer requests no declared route takes, as [Serving](#serving) lists.
+In addition to `RouteNotFound` and `MethodNotDeclared`, any route can return two built-in framework errors:
 
-## Go field types
+* `RequestRefused` (`400`, `NC-1001`): Returned before the handler runs if path parameters, query parameters, or the JSON body fail validation or URL unescaping.
+* `AnswerNotWritten` (`500`, `NC-1002`): Returned if the handler's outcome fails to marshal to JSON.
 
-| Go | TypeScript schema |
+## Type mapping
+
+| Go type | TypeScript Effect Schema |
 | --- | --- |
 | `string` | `Schema.String` |
-| a string type with constants | `Schema.Literals` of its constants |
-| whole numbers of 32 bits or fewer | `Schema.Int` within the type's range |
-| 64-bit whole numbers, `int` and `uint` included | a `bigint` within the type's range, read from canonical decimal text |
+| Defined `string` type with constants | `Schema.Literals` of those constants |
+| Signed/unsigned integers $\le$ 32 bits | `Schema.Int` bounded to the type's min/max |
+| 64-bit integers (`int64`, `uint64`, `int`, `uint`) | `Schema.BigIntFromString` bounded to min/max, parsed from canonical decimal strings |
 | `float32`, `float64` | `Schema.Finite` |
 | `bool` | `Schema.Boolean` |
 | `time.Time` | `Schema.DateTimeUtcFromString` |
 | `mo.Option[T]` | `Schema.NullOr` of `T` |
-| slices and arrays | `Schema.Array` |
+| Slices and arrays | `Schema.Array` |
 | `map[string]T` | `Schema.Record(Schema.String, T)` |
-| named and unnamed structs | `Schema.Struct` |
+| Structs (named or inline) | `Schema.Struct` |
 
-A path or query field is text, a whole number, a boolean or a string type with constants. A whole
-number in a path or query is read only as canonical decimal text, whatever its width: `7` is taken,
-and `007`, `+7` and `-0` are refused.
+Path and query fields must be strings, integers, booleans, or string constant types. Integers in paths and queries must be formatted as canonical decimal text (`7` is valid; `007`, `+7`, and `-0` are rejected).
 
-A 64-bit whole number travels in JSON as a string of its canonical decimal text, such as
-`"9007199254740993"`, as protobuf's JSON mapping carries `int64` and `uint64`: a JavaScript
-number holds no whole number past 2^53 exactly. The text is an optional `-`, then `0` or a digit
-from 1 to 9 followed by any digits, and never `-0`. A body holding `"007"`, `"+7"`, `"-0"` or the
-number `7` for such a field is refused.
+In JSON bodies, 64-bit integers are transmitted as canonical decimal strings (e.g., `"9007199254740993"`), matching protobuf's JSON mapping to prevent precision loss past JavaScript's `Number.MAX_SAFE_INTEGER` ($2^{53} - 1$). Passing raw JSON numbers or non-canonical strings like `"007"`, `"+7"`, or `"-0"` for 64-bit integer fields will be rejected with `RequestRefused`.
 
-## What is refused
+## Validation rules
 
-`generate` and `check` refuse a declaration they cannot serve or describe, each with its file,
-line and code: a pointer field, a JSON tag option such as `omitempty`, an embedded field, an
-unsealed outcome, a member without a status, a failure without a code, a guard no refusal declares,
-a path segment no input field reads, and the rest listed in [ERROR_CODES.md](ERROR_CODES.md).
+`generate` and `check` reject unsupported Go constructs with exact file, line, and error codes. Common rejections include:
 
-## Versions
+* Pointer fields or embedded struct fields
+* JSON struct tag options like `omitempty`
+* Unsealed outcome interfaces, members missing `//nocontract:status`, or errors missing `//ergo:code`
+* Referencing an undefined guard
+* Path parameters like `{id}` that have no matching `path:"id"` field in the input struct
 
-NoContract follows semantic versioning. Before 1.0, any minor release may change the generated
-files, the wire format or the declarations NoContract reads.
+See [ERROR_CODES.md](ERROR_CODES.md) for the complete list of validation rules.
 
-## Licence
+## Versioning
 
-MIT. See [LICENSE](LICENSE).
+NoContract follows Semantic Versioning. Prior to `v1.0.0`, minor releases may introduce breaking changes to generated code, wire formats, or directive syntax.
