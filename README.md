@@ -303,6 +303,14 @@ pinned to the NoContract revision used by the Go tool. The
 [Gleam shop manifest](testdata/gleam/shop/gleam.toml) lists the released Wisp, Mist and Gleam
 libraries the generated module imports.
 
+Gleam request body limits wait for Mist to release bounded reads of chunked requests. The fix
+is on the [Mist `chunked-request-stream` branch](https://github.com/CheckPickerUpper/mist/commit/c67e45e06554da5d21db7c0ad34809aff3bd6e2d).
+
+Gleam graceful shutdown waits for Mist and Glisten to release a listener stop operation that lets
+active requests finish. The fixes are on the [Mist `graceful-listener` branch](https://github.com/CheckPickerUpper/mist/commit/40b25eaa3f2f4c85d54e72e2f453a4cb834e4236)
+and the [Glisten `stop-accepting` branch](https://github.com/CheckPickerUpper/glisten/commit/705d4b68797feb2785b89767fbe28680139446bf).
+[Glisten PR #56](https://github.com/rawhat/glisten/pull/56) tracks the upstream change.
+
 Set `language` to `gleam`, name the modules holding routes in `packages`, and set `server` to
 `src/nocontract`. `generate` writes the module `nocontract/server` there. It reads only the
 selected route modules and their source dependencies, so both `generate` and `check` work when
