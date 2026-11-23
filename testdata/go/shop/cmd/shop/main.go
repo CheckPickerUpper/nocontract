@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
+	"golang.org/x/sync/errgroup"
 
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
 
@@ -27,26 +31,39 @@ func main() {
 	}))
 }
 
-// serve serves the API until the server stops, and is the exit code the stop gives.
+// serve registers shutdown signals before publishing readiness and drains requests before returning.
 func serve(serverContext context.Context, api server.API, logger *slog.Logger) int {
+	shutdownRequested, requestShutdown := signal.NotifyContext(serverContext, os.Interrupt, syscall.SIGTERM)
+	defer requestShutdown()
 	options := nocontract.WithRequestLogger(nocontract.ListenOn(os.Getenv("SHOP_ADDRESS")), logger)
-	return outcome.Fold(nocontract.WithRequestDeadline(options, 50), func(options nocontract.ListenOptions) int {
-		return outcome.Fold(server.Listen(serverContext, options, api), func(listening nocontract.ListeningServer) int {
-			defer func() {
-				outcome.Fold(listening.Stop(serverContext), func(nocontract.ServerStopped) struct{} { return struct{}{} }, func(cause error) struct{} {
-					fmt.Fprintln(os.Stderr, cause)
-					return struct{}{}
-				})
-			}()
-			return outcome.Fold(outcome.TupleToResult(fmt.Fprintf(os.Stdout, "Listening on http://%s\n", listening.Address())), func(int) int {
-				return outcome.Fold(listening.Wait(), func(nocontract.ServerStopped) int { return 0 }, func(cause error) int {
-					fmt.Fprintln(os.Stderr, cause)
-					return 1
-				})
-			}, func(cause error) int {
+	configured := outcome.Ok(options)
+	if os.Getenv("SHOP_TEST_REQUEST_DEADLINE") == "1" {
+		configured = nocontract.WithRequestDeadline(options, 50)
+	}
+	started := outcome.Fold(configured, func(options nocontract.ListenOptions) outcome.Result[nocontract.ListeningServer] {
+		return server.Listen(serverContext, options, api)
+	}, outcome.Err[nocontract.ListeningServer])
+	return outcome.Fold(started, func(listening nocontract.ListeningServer) int {
+		stopping := &errgroup.Group{}
+		stopping.Go(func() error {
+			<-shutdownRequested.Done()
+			// Request contexts stay live while Stop closes the listener and drains them.
+			shutdownContext, cancel := context.WithTimeout(context.WithoutCancel(serverContext), 5*time.Second)
+			defer cancel()
+			return outcome.Fold(listening.Stop(shutdownContext), func(nocontract.ServerStopped) error { return nil }, func(cause error) error {
+				return cause
+			})
+		})
+		served := outcome.Fold(outcome.TupleToResult(fmt.Fprintf(os.Stdout, "Listening on http://%s\n", listening.Address())), func(int) outcome.Result[nocontract.ServerStopped] {
+			return listening.Wait()
+		}, outcome.Err[nocontract.ServerStopped])
+		requestShutdown()
+		shutdownFailure := stopping.Wait()
+		return outcome.Fold(served, func(nocontract.ServerStopped) int {
+			return outcome.FoldOption(outcome.EmptyableToOption(shutdownFailure), func(cause error) int {
 				fmt.Fprintln(os.Stderr, cause)
 				return 1
-			})
+			}, func() int { return 0 })
 		}, func(cause error) int {
 			fmt.Fprintln(os.Stderr, cause)
 			return 1

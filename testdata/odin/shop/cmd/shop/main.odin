@@ -23,18 +23,21 @@ main :: proc() {
 		{user_data = &outer, before = observe_request_entry, after = observe_request_answer},
 		{user_data = &inner, before = observe_request_entry, after = observe_request_answer},
 	})
-	switch configured in nocontract.with_request_deadline(options, 50) {
-	case nocontract.Request_Deadline_Outside:
-		fmt.eprintln("NoContract deadline refused:", configured)
-		os.exit(1)
-	case nocontract.Deadline_Configured:
-	switch terminal in server.serve(configured.options) {
+	if os.get_env("SHOP_TEST_REQUEST_DEADLINE", context.temp_allocator) == "1" {
+		switch configured in nocontract.with_request_deadline(options, 50) {
+		case nocontract.Request_Deadline_Outside:
+			fmt.eprintln("NoContract deadline refused:", configured)
+			os.exit(1)
+		case nocontract.Deadline_Configured:
+			options = configured.options
+		}
+	}
+	switch terminal in server.serve(options) {
 	case nocontract.Server_Stopped:
 		return
 	case nocontract.Listener_Event_Loop_Not_Available, nocontract.Listener_Not_Opened,
 		nocontract.Listener_Endpoint_Not_Read, nocontract.Listener_Not_Served:
 		fmt.eprintln("NoContract server failed:", terminal)
 		os.exit(1)
-	}
 	}
 }

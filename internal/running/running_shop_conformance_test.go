@@ -99,17 +99,15 @@ func openGoShop(t *testing.T, project string) shopServerAddress {
 	command := exec.CommandContext(processContext, binary)
 	command.Dir = directory
 	command.Env = append(os.Environ(), "SHOP_ADDRESS=127.0.0.1:0")
-	command.Cancel = func() error { return command.Process.Signal(os.Interrupt) }
 	return openShopProcess(t, command, shopProcessShutdown{
-		stop: cancel,
-		verify: func(cause error) {
-			outcome.ForEachOption(outcome.EmptyableToOption(cause), func(cause error) {
-				exited := &exec.ExitError{ProcessState: command.ProcessState, Stderr: []byte{}}
-				if !errors.As(cause, &exited) {
-					t.Errorf("stopping the Go shop: %v", cause)
+		stop: func() {
+			outcome.ForEachOption(outcome.EmptyableToOption(command.Process.Signal(os.Interrupt)), func(cause error) {
+				if !errors.Is(cause, os.ErrProcessDone) {
+					t.Errorf("interrupting the Go shop: %v", cause)
 				}
 			})
 		},
+		verify: func(cause error) { t.Errorf("waiting for the Go shop's interrupt shutdown: %v", cause) },
 	})
 }
 

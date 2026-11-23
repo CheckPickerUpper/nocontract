@@ -14,6 +14,7 @@ import (
 )
 
 func TestShopBackendsReturnDeclaredDeadlines(t *testing.T) {
+	t.Setenv("SHOP_TEST_REQUEST_DEADLINE", "1")
 	checkout := scratchproject.PathOrStop(t, "locating the checkout", outcome.TupleToResult(filepath.Abs(filepath.Join("..", ".."))))
 	expectedFiles := readShopGeneratedFiles(t, filepath.Join(checkout, "testdata", "go", "shop", "nocontract.json"))
 	contract := readShopContract(t, expectedFiles.document)

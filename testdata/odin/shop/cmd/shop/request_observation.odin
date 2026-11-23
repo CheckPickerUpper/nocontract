@@ -16,6 +16,13 @@ observe_request_entry :: proc(user_data: rawptr, visit: requestlayers.Visit) {
 		route: string,
 	}{layer = name^, phase = "before", method = visit.method, path = visit.path, route = visit.route}
 	emit_request_observation(value)
+	if name^ == "outer" && visit.method == "POST" && visit.path == "/shoppers/7/top-ups" {
+		switch held in hold_shop_request() {
+		case No_Request_Hold, Request_Released:
+		case Request_Hold_Address_Invalid, Request_Hold_Failed, Request_Hold_Exchange_Incomplete, Request_Hold_Signals_Not_Blocked:
+			log.errorf("holding the shop request: %v", held)
+		}
+	}
 }
 
 @(private)
