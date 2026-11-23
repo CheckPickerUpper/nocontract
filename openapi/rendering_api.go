@@ -61,7 +61,7 @@ func paths(api description.API) map[string]map[string]operation {
 	written := map[string]map[string]operation{}
 	for _, group := range api.Groups {
 		for _, endpoint := range group.Endpoints {
-			path := writtenPath(endpoint.Path)
+			path := description.PathTemplate(endpoint.Path)
 			methods := outcome.FoldOption(keyed.Entry(written, path), func(found map[string]operation) map[string]operation { return found },
 				func() map[string]operation { return map[string]operation{} })
 			methods[strings.ToLower(endpoint.Method.Name())] = routeOperation(group.Name, endpoint)
@@ -69,21 +69,6 @@ func paths(api description.API) map[string]map[string]operation {
 		}
 	}
 	return written
-}
-
-// writtenPath is a route's path as OpenAPI writes it, each parameter as {name}.
-func writtenPath(segments []description.PathSegment) string {
-	parts := []string{}
-	for _, segment := range segments {
-		switch written := segment.(type) {
-		case description.PathText:
-			parts = append(parts, written.Text)
-		case description.PathParameter:
-			parts = append(parts, "{"+written.Field.Name.Text()+"}")
-		case nil:
-		}
-	}
-	return "/" + strings.Join(parts, "/")
 }
 
 // routeOperation is one route of the group named groupName: its group as its tag, an id no other

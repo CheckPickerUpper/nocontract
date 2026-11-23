@@ -15,6 +15,7 @@ import gleam/string
 import mist
 import nocontract_runtime/bind_address
 import nocontract_runtime/parameter_reading as parameter
+import nocontract_runtime/request_logging
 import nocontract_runtime/request_reading as request_input
 import nocontract_runtime/target_matching as target
 import nocontract_runtime/value_reading as wire
@@ -34,7 +35,24 @@ type Operation {
   Route2
 }
 
+type Answer {
+  Answer(response: wisp.Response, code: option.Option(String))
+}
+
 fn handle_request(request: wisp.Request) -> wisp.Response {
+  let #(duration_us, #(route, answer)) =
+    request_logging.measure_request(fn() { answer_request(request) })
+  request_logging.log_request(request_logging.RequestLog(
+    route:,
+    method: http.method_to_string(request.method),
+    status: answer.response.status,
+    code: answer.code,
+    duration_us:,
+  ))
+  answer.response
+}
+
+fn answer_request(request: wisp.Request) -> #(String, Answer) {
   case
     target.match_target(
       [
@@ -58,25 +76,38 @@ fn handle_request(request: wisp.Request) -> wisp.Response {
       path: request.path,
     )
   {
-    target.Selected(operation: Route0, parameters:) ->
-      serve_route_0(request, parameters)
-    target.Selected(operation: Route1, parameters:) ->
-      serve_route_1(request, parameters)
-    target.Selected(operation: Route2, parameters:) ->
-      serve_route_2(request, parameters)
-    target.UnknownPath(path:) ->
+    target.Selected(operation: Route0, parameters:) -> #(
+      "/shoppers/{shopper_id}/balance",
+      serve_route_0(request, parameters),
+    )
+    target.Selected(operation: Route1, parameters:) -> #(
+      "/shoppers/{shopper_id}/top-ups",
+      serve_route_1(request, parameters),
+    )
+    target.Selected(operation: Route2, parameters:) -> #(
+      "/shoppers/{shopper_id}/orders",
+      serve_route_2(request, parameters),
+    )
+    target.UnknownPath(path:) -> #(
+      request.path,
       shared_route_not_found(
         method: http.method_to_string(request.method),
         path:,
-      )
-    target.UndeclaredMethod(allowed:) ->
-      refuse_method(method: request.method, allowed:)
+      ),
+    )
+    target.UndeclaredMethod(allowed:) -> #(
+      request.path,
+      refuse_method(method: request.method, allowed:),
+    )
     target.UnreadablePath(segment:) -> {
       let written = segment |> json.string |> json.to_string
-      shared_request_refused(
-        part: "path",
-        name: segment,
-        reason: "invalid URL escape " <> written,
+      #(
+        request.path,
+        shared_request_refused(
+          part: "path",
+          name: segment,
+          reason: "invalid URL escape " <> written,
+        ),
       )
     }
   }
@@ -108,7 +139,7 @@ fn read_route_0(
 fn serve_route_0(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
-) -> wisp.Response {
+) -> Answer {
   case
     native_8.check(
       "read-balance",
@@ -151,7 +182,7 @@ fn read_route_1(
 fn serve_route_1(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
-) -> wisp.Response {
+) -> Answer {
   case read_route_1(request, parameters) {
     Ok(input) -> input |> native_0.top_up |> answer_c1e771b9bea48a3c
     Error(cause) -> request_refused(cause)
@@ -190,7 +221,7 @@ fn read_route_2(
 fn serve_route_2(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
-) -> wisp.Response {
+) -> Answer {
   case read_route_2(request, parameters) {
     Ok(input) -> input |> native_12.place |> answer_6fb7787a3145644b
     Error(cause) -> request_refused(cause)
@@ -267,69 +298,77 @@ fn shared_request_refused(
   part part: String,
   name name: String,
   reason reason: String,
-) -> wisp.Response {
-  json.object([
-    #("_tag", json.string("RequestRefused")),
-    #("code", json.string("NC-1001")),
-    #("part", json.string(part)),
-    #("name", json.string(name)),
-    #("reason", json.string(reason)),
-  ])
-  |> json.to_string
-  |> wisp.json_response(400)
+) -> Answer {
+  let response =
+    json.object([
+      #("_tag", json.string("RequestRefused")),
+      #("code", json.string("NC-1001")),
+      #("part", json.string(part)),
+      #("name", json.string(name)),
+      #("reason", json.string(reason)),
+    ])
+    |> json.to_string
+    |> wisp.json_response(400)
+  Answer(response:, code: option.Some("NC-1001"))
 }
 
 fn shared_answer_not_written(
   answer answer: String,
   reason reason: String,
-) -> wisp.Response {
-  json.object([
-    #("_tag", json.string("AnswerNotWritten")),
-    #("code", json.string("NC-1002")),
-    #("answer", json.string(answer)),
-    #("reason", json.string(reason)),
-  ])
-  |> json.to_string
-  |> wisp.json_response(500)
+) -> Answer {
+  let response =
+    json.object([
+      #("_tag", json.string("AnswerNotWritten")),
+      #("code", json.string("NC-1002")),
+      #("answer", json.string(answer)),
+      #("reason", json.string(reason)),
+    ])
+    |> json.to_string
+    |> wisp.json_response(500)
+  Answer(response:, code: option.Some("NC-1002"))
 }
 
-fn shared_route_not_found(
-  method method: String,
-  path path: String,
-) -> wisp.Response {
-  json.object([
-    #("_tag", json.string("RouteNotFound")),
-    #("code", json.string("NC-1069")),
-    #("method", json.string(method)),
-    #("path", json.string(path)),
-  ])
-  |> json.to_string
-  |> wisp.json_response(404)
+fn shared_route_not_found(method method: String, path path: String) -> Answer {
+  let response =
+    json.object([
+      #("_tag", json.string("RouteNotFound")),
+      #("code", json.string("NC-1069")),
+      #("method", json.string(method)),
+      #("path", json.string(path)),
+    ])
+    |> json.to_string
+    |> wisp.json_response(404)
+  Answer(response:, code: option.Some("NC-1069"))
 }
 
 fn shared_method_not_declared(
   method method: String,
   allowed allowed: List(String),
-) -> wisp.Response {
-  json.object([
-    #("_tag", json.string("MethodNotDeclared")),
-    #("code", json.string("NC-1070")),
-    #("method", json.string(method)),
-    #("allowed", json.array(allowed, of: json.string)),
-  ])
-  |> json.to_string
-  |> wisp.json_response(405)
+) -> Answer {
+  let response =
+    json.object([
+      #("_tag", json.string("MethodNotDeclared")),
+      #("code", json.string("NC-1070")),
+      #("method", json.string(method)),
+      #("allowed", json.array(allowed, of: json.string)),
+    ])
+    |> json.to_string
+    |> wisp.json_response(405)
+  Answer(response:, code: option.Some("NC-1070"))
 }
 
 fn refuse_method(
   method method: http.Method,
   allowed allowed: List(String),
-) -> wisp.Response {
+) -> Answer {
   case method {
-    http.Options ->
-      204
-      |> wisp.response
-      |> response.set_header("allow", string.join(allowed, ", "))
+    http.Options -> {
+      let response =
+        204
+        |> wisp.response
+        |> response.set_header("allow", string.join(allowed, ", "))
+      Answer(response:, code: option.None)
+    }
     http.Get
     | http.Head
     | http.Post
@@ -344,12 +383,19 @@ fn refuse_method(
           method: http.method_to_string(method),
           allowed:,
         )
-      response.set_header(refusal, "allow", string.join(allowed, ", "))
+      Answer(
+        ..refusal,
+        response: response.set_header(
+          refusal.response,
+          "allow",
+          string.join(allowed, ", "),
+        ),
+      )
     }
   }
 }
 
-fn request_refused(refusal: request_input.RequestRefusal) -> wisp.Response {
+fn request_refused(refusal: request_input.RequestRefusal) -> Answer {
   let #(part, name, reason) = request_input.describe(refusal)
   shared_request_refused(part:, name:, reason:)
 }
@@ -357,15 +403,19 @@ fn request_refused(refusal: request_input.RequestRefusal) -> wisp.Response {
 fn write_answer(
   tag tag: String,
   status status: Int,
+  code code: option.Option(String),
   fields fields: json.Json,
   schema schema: wire.Schema,
-) -> wisp.Response {
+) -> Answer {
   case fields |> json.to_string |> wire.read_body(schema, record_schemas()) {
-    Ok(prepared) ->
-      prepared
-      |> wire.encode_value
-      |> json.to_string
-      |> wisp.json_response(status)
+    Ok(prepared) -> {
+      let response =
+        prepared
+        |> wire.encode_value
+        |> json.to_string
+        |> wisp.json_response(status)
+      Answer(response:, code:)
+    }
     Error(cause) -> {
       let #(_, reason) = wire.describe(cause)
       shared_answer_not_written(answer: tag, reason:)
@@ -678,11 +728,12 @@ fn key_8470da3f4e468fd8(value: native_12.Courier) -> String {
   }
 }
 
-fn answer_5b078a63b0b22ccd(value: native_6.MissingShopper) -> wisp.Response {
+fn answer_5b078a63b0b22ccd(value: native_6.MissingShopper) -> Answer {
   let native_6.ShopperNotFound(shopper_id: field_0) = value
   write_answer(
     tag: "ShopperNotFound",
     status: 404,
+    code: option.Some("SH-1001"),
     fields: json.object([
       #("_tag", json.string("ShopperNotFound")),
       #("code", json.string("SH-1001")),
@@ -703,7 +754,7 @@ fn answer_5b078a63b0b22ccd(value: native_6.MissingShopper) -> wisp.Response {
   )
 }
 
-fn answer_65944b918453d5ca(value: native_1.ReadOutcome) -> wisp.Response {
+fn answer_65944b918453d5ca(value: native_1.ReadOutcome) -> Answer {
   case value {
     native_1.BalanceRead(
       balance: field_0,
@@ -714,6 +765,7 @@ fn answer_65944b918453d5ca(value: native_1.ReadOutcome) -> wisp.Response {
       write_answer(
         tag: "BalanceRead",
         status: 200,
+        code: option.None,
         fields: json.object([
           #("_tag", json.string("BalanceRead")),
           #("balance", encode_f0a29fb79065dfc3(field_0)),
@@ -737,6 +789,7 @@ fn answer_65944b918453d5ca(value: native_1.ReadOutcome) -> wisp.Response {
       write_answer(
         tag: "BalanceNotOpened",
         status: 404,
+        code: option.Some("SH-1003"),
         fields: json.object([
           #("_tag", json.string("BalanceNotOpened")),
           #("code", json.string("SH-1003")),
@@ -751,11 +804,12 @@ fn answer_65944b918453d5ca(value: native_1.ReadOutcome) -> wisp.Response {
   }
 }
 
-fn answer_6fb7787a3145644b(value: native_12.PlaceOutcome) -> wisp.Response {
+fn answer_6fb7787a3145644b(value: native_12.PlaceOutcome) -> Answer {
   let native_12.OrderPlaced(order: field_0) = value
   write_answer(
     tag: "OrderPlaced",
     status: 201,
+    code: option.None,
     fields: json.object([
       #("_tag", json.string("OrderPlaced")),
       #("order", encode_002d322116eae820(field_0)),
@@ -767,12 +821,13 @@ fn answer_6fb7787a3145644b(value: native_12.PlaceOutcome) -> wisp.Response {
   )
 }
 
-fn answer_c1e771b9bea48a3c(value: native_11.TopUpOutcome) -> wisp.Response {
+fn answer_c1e771b9bea48a3c(value: native_11.TopUpOutcome) -> Answer {
   case value {
     native_11.TopUpQueued(reference: field_0) ->
       write_answer(
         tag: "TopUpQueued",
         status: 202,
+        code: option.None,
         fields: json.object([
           #("_tag", json.string("TopUpQueued")),
           #("reference", encode_b2ef230e7f4f315a(field_0)),
@@ -786,6 +841,7 @@ fn answer_c1e771b9bea48a3c(value: native_11.TopUpOutcome) -> wisp.Response {
       write_answer(
         tag: "TopUpRefused",
         status: 409,
+        code: option.Some("SH-1002"),
         fields: json.object([
           #("_tag", json.string("TopUpRefused")),
           #("code", json.string("SH-1002")),
@@ -801,11 +857,12 @@ fn answer_c1e771b9bea48a3c(value: native_11.TopUpOutcome) -> wisp.Response {
   }
 }
 
-fn answer_c7953ea1770cddb2(value: native_8.Refusal) -> wisp.Response {
+fn answer_c7953ea1770cddb2(value: native_8.Refusal) -> Answer {
   let native_8.NotSignedIn(scope: field_0) = value
   write_answer(
     tag: "NotSignedIn",
     status: 401,
+    code: option.Some("SH-1101"),
     fields: json.object([
       #("_tag", json.string("NotSignedIn")),
       #("code", json.string("SH-1101")),

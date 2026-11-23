@@ -123,17 +123,18 @@ func generateServer(project Project, api description.API) outcome.Result[[]nativ
 					call = "case " + generated.module(guard.Module) + "." + guard.Function + "(" + quoted(guard.Scope) + ", request.headers |> list.reverse |> dict.from_list) { option.Some(refusal) -> " + generated.outcomeEncoder(guard.Output) + "(refusal) option.None -> { " + call + " } }"
 				}
 				handler := fmt.Sprintf("serve_route_%d", len(readers))
-				readers = append(readers, generated.inputReader(reader, route.Input, endpoint)+"\nfn "+handler+"(request: wisp.Request, parameters: dict.Dict(String, String)) -> wisp.Response { "+call+" }\n")
-				dispatch = append(dispatch, "target.Selected(operation: "+name+", parameters:) -> "+handler+"(request, parameters)")
+				readers = append(readers, generated.inputReader(reader, route.Input, endpoint)+"\nfn "+handler+"(request: wisp.Request, parameters: dict.Dict(String, String)) -> Answer { "+call+" }\n")
+				dispatch = append(dispatch, "target.Selected(operation: "+name+", parameters:) -> #("+quoted(description.PathTemplate(endpoint.Path))+", "+handler+"(request, parameters))")
 			}
 		}
 	}
+	generated.module("gleam/option")
 	main := "type Operation {\n" + strings.Join(operations, "\n") + "\n}\n\n" +
-		"fn handle_request(request: wisp.Request) -> wisp.Response {\ncase target.match_target([" + strings.Join(routes, ",\n") + "], method: http.method_to_string(request.method), path: request.path) {\n" +
+		loggedRequest + "fn answer_request(request: wisp.Request) -> #(String, Answer) {\ncase target.match_target([" + strings.Join(routes, ",\n") + "], method: http.method_to_string(request.method), path: request.path) {\n" +
 		strings.Join(dispatch, "\n") + "\n" +
-		"target.UnknownPath(path:) -> shared_route_not_found(method: http.method_to_string(request.method), path:)\n" +
-		"target.UndeclaredMethod(allowed:) -> refuse_method(method: request.method, allowed:)\n" +
-		"target.UnreadablePath(segment:) -> { let written = segment |> json.string |> json.to_string shared_request_refused(part: \"path\", name: segment, reason: \"invalid URL escape \" <> written) }\n}\n}\n\n" + strings.Join(readers, "\n")
+		"target.UnknownPath(path:) -> #(request.path, shared_route_not_found(method: http.method_to_string(request.method), path:))\n" +
+		"target.UndeclaredMethod(allowed:) -> #(request.path, refuse_method(method: request.method, allowed:))\n" +
+		"target.UnreadablePath(segment:) -> { let written = segment |> json.string |> json.to_string #(request.path, shared_request_refused(part: \"path\", name: segment, reason: \"invalid URL escape \" <> written)) }\n}\n}\n\n" + strings.Join(readers, "\n")
 	main += queryTextFunction(api)
 	main += generated.recordSchemas(api.Structs) + sharedResponses() + serverStart
 	for _, definitions := range []map[string]string{generated.decoders, generated.encoders, generated.outcomes} {
@@ -148,7 +149,7 @@ func generateServer(project Project, api description.API) outcome.Result[[]nativ
 		}
 		return outcome.Err[[]native.File](GenerationRefused{Problems: problems})
 	}
-	imports := []string{"import gleam/dict", "import gleam/http", "import gleam/http/response", "import gleam/json", "import gleam/otp/actor", "import gleam/otp/static_supervisor", "import gleam/string", "import mist", "import nocontract_runtime/bind_address", "import nocontract_runtime/request_reading as request_input", "import nocontract_runtime/target_matching as target", "import nocontract_runtime/value_reading as wire", "import wisp", "import wisp/wisp_mist"}
+	imports := []string{"import gleam/dict", "import gleam/http", "import gleam/http/response", "import gleam/json", "import gleam/otp/actor", "import gleam/otp/static_supervisor", "import gleam/string", "import mist", "import nocontract_runtime/bind_address", "import nocontract_runtime/request_logging", "import nocontract_runtime/request_reading as request_input", "import nocontract_runtime/target_matching as target", "import nocontract_runtime/value_reading as wire", "import wisp", "import wisp/wisp_mist"}
 	if len(generated.decoders) > 0 {
 		imports = append(imports, "import gleam/dynamic/decode")
 	}
@@ -159,6 +160,25 @@ func generateServer(project Project, api description.API) outcome.Result[[]nativ
 	}
 	return outcome.Ok([]native.File{{Path: filepath.Join(project.Server, "server.gleam"), Contents: []byte(description.GeneratedHeader + strings.Join(imports, "\n") + "\n\n" + main)}})
 }
+
+const loggedRequest = `
+type Answer {
+  Answer(response: wisp.Response, code: option.Option(String))
+}
+
+fn handle_request(request: wisp.Request) -> wisp.Response {
+  let #(duration_us, #(route, answer)) = request_logging.measure_request(fn() { answer_request(request) })
+  request_logging.log_request(request_logging.RequestLog(
+    route:,
+    method: http.method_to_string(request.method),
+    status: answer.response.status,
+    code: answer.code,
+    duration_us:,
+  ))
+  answer.response
+}
+
+`
 
 const serverStart = `
 /// A listening address and port, accepted only by options.

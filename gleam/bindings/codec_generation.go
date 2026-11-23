@@ -356,7 +356,7 @@ func (generated generator) outcomeEncoder(value Outcome) string {
 				generated.problems[branch.Constructor.Name] = AnswerUnresolved{Type: value.Native}
 				continue
 			}
-			status := 0
+			status, code := 0, "option.None"
 			envelope := []string{"#(\"_tag\", json.string(" + quoted(member.Name) + "))"}
 			schemas := []string{"#(\"_tag\", wire.LiteralsSchema(values: [" + quoted(member.Name) + "]))"}
 			switch answer := member.Answer.(type) {
@@ -364,6 +364,7 @@ func (generated generator) outcomeEncoder(value Outcome) string {
 				status = answer.Status.Code()
 			case description.Fails:
 				status = answer.Status.Code()
+				code = "option.Some(" + quoted(answer.Code.String()) + ")"
 				envelope = append(envelope, "#(\"code\", json.string("+quoted(answer.Code.String())+"))")
 				schemas = append(schemas, "#(\"code\", wire.LiteralsSchema(values: ["+quoted(answer.Code.String())+"]))")
 			case nil:
@@ -371,7 +372,7 @@ func (generated generator) outcomeEncoder(value Outcome) string {
 			for _, field := range member.Fields {
 				schemas = append(schemas, "#("+quoted(field.Name.Text())+", "+generated.schema(field.Schema)+")")
 			}
-			arms = append(arms, constructorBranch{pattern: pattern, expression: fmt.Sprintf("write_answer(tag: %s, status: %d, fields: json.object([%s]), schema: wire.RecordSchema(fields: [%s]))", quoted(member.Name), status, strings.Join(append(envelope, fields...), ", "), strings.Join(schemas, ", "))})
+			arms = append(arms, constructorBranch{pattern: pattern, expression: fmt.Sprintf("write_answer(tag: %s, status: %d, code: %s, fields: json.object([%s]), schema: wire.RecordSchema(fields: [%s]))", quoted(member.Name), status, code, strings.Join(append(envelope, fields...), ", "), strings.Join(schemas, ", "))})
 		case Forwarded:
 			pattern := constructorCall(generated.module(value.Native.Identity.Module), branch.Constructor, []string{"inner"})
 			arms = append(arms, constructorBranch{pattern: pattern, expression: generated.outcomeEncoder(branch.Inner) + "(inner)"})
@@ -379,6 +380,6 @@ func (generated generator) outcomeEncoder(value Outcome) string {
 			generated.problems["missing outcome"] = AnswerUnresolved{Type: value.Native}
 		}
 	}
-	generated.outcomes[name] = "fn " + name + "(value: " + typeName + ") -> wisp.Response {\n" + constructorExpression("value", arms) + "\n}\n"
+	generated.outcomes[name] = "fn " + name + "(value: " + typeName + ") -> Answer {\n" + constructorExpression("value", arms) + "\n}\n"
 	return name
 }

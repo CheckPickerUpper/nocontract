@@ -17,7 +17,7 @@ func sharedResponses() string {
 			arguments = append(arguments, name+" "+name+": "+typeName)
 			fields = append(fields, "#("+quoted(name)+", "+encoder+")")
 		}
-		written += fmt.Sprintf("fn shared_%s(%s) -> wisp.Response { json.object([%s]) |> json.to_string |> wisp.json_response(%d) }\n", snakeName(failure.Name), strings.Join(arguments, ", "), strings.Join(fields, ", "), failure.Status.Code())
+		written += fmt.Sprintf("fn shared_%s(%s) -> Answer { let response = json.object([%s]) |> json.to_string |> wisp.json_response(%d) Answer(response:, code: option.Some(%s)) }\n", snakeName(failure.Name), strings.Join(arguments, ", "), strings.Join(fields, ", "), failure.Status.Code(), quoted(failure.Code.String()))
 	}
 	return written + responseFunctions
 }
@@ -45,24 +45,30 @@ func snakeName(name string) string {
 }
 
 const responseFunctions = `
-fn refuse_method(method method: http.Method, allowed allowed: List(String)) -> wisp.Response {
+fn refuse_method(method method: http.Method, allowed allowed: List(String)) -> Answer {
   case method {
-    http.Options -> 204 |> wisp.response |> response.set_header("allow", string.join(allowed, ", "))
+    http.Options -> {
+      let response = 204 |> wisp.response |> response.set_header("allow", string.join(allowed, ", "))
+      Answer(response:, code: option.None)
+    }
     http.Get | http.Head | http.Post | http.Put | http.Patch | http.Delete | http.Connect | http.Trace | http.Other(_) -> {
       let refusal = shared_method_not_declared(method: http.method_to_string(method), allowed:)
-      response.set_header(refusal, "allow", string.join(allowed, ", "))
+      Answer(..refusal, response: response.set_header(refusal.response, "allow", string.join(allowed, ", ")))
     }
   }
 }
 
-fn request_refused(refusal: request_input.RequestRefusal) -> wisp.Response {
+fn request_refused(refusal: request_input.RequestRefusal) -> Answer {
   let #(part, name, reason) = request_input.describe(refusal)
   shared_request_refused(part:, name:, reason:)
 }
 
-fn write_answer(tag tag: String, status status: Int, fields fields: json.Json, schema schema: wire.Schema) -> wisp.Response {
+fn write_answer(tag tag: String, status status: Int, code code: option.Option(String), fields fields: json.Json, schema schema: wire.Schema) -> Answer {
   case fields |> json.to_string |> wire.read_body(schema, record_schemas()) {
-    Ok(prepared) -> prepared |> wire.encode_value |> json.to_string |> wisp.json_response(status)
+    Ok(prepared) -> {
+      let response = prepared |> wire.encode_value |> json.to_string |> wisp.json_response(status)
+      Answer(response:, code:)
+    }
     Error(cause) -> {
       let #(_, reason) = wire.describe(cause)
       shared_answer_not_written(answer: tag, reason:)
