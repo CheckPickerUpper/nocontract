@@ -333,16 +333,18 @@ Client methods are grouped by Go package name and camelCased from the Go handler
 
 ## Wire format
 
-Every response is a JSON object containing `_tag` (the Go struct name), `code` (for errors), and the struct's JSON-serialized fields. The HTTP status code matches the struct's `//nocontract:status` annotation.
+A response with a body is a JSON object containing `_tag` (the declared answer's name), `code` (for errors), and the answer's JSON-serialized fields. The HTTP status code matches its `nocontract:status` annotation.
 
 ```json
 {"_tag":"ShopperNotFound","code":"SH-1001","shopper_id":"8"}
 ```
 
-In addition to `RouteNotFound` and `MethodNotDeclared`, any route can return two built-in framework errors:
+The listener can return these built-in errors in addition to `RouteNotFound` and `MethodNotDeclared`.
 
-* `RequestRefused` (`400`, `NC-1001`): Returned before the handler runs if path parameters, query parameters, or the JSON body fail validation or URL unescaping.
-* `AnswerNotWritten` (`500`, `NC-1002`): Returned if the handler's outcome fails to marshal to JSON.
+* `RequestRefused` (`400`, `NC-1001`) reports a path, query parameter, header, or JSON body the listener could not read.
+* `RequestBodyTooLarge` (`413`, `NC-1168`) reports the configured limit and the declared or observed byte count. Go and Odin enforce the limit on routes that decode a JSON body.
+* `AnswerNotWritten` (`500`, `NC-1002`) reports an answer the listener could not encode, or a route that answered no outcome.
+* `RequestDeadlineExceeded` (`503`, `NC-1170`) reports the configured deadline and the route that exceeded it.
 
 ## Type mapping
 
