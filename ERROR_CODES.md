@@ -160,7 +160,7 @@ FieldOptionUnsupported is a JSON field whose tag carries an option, such as omit
 
 Declared in `go/reading/refusals.go`.
 
-Message: `The field {Field} carries the JSON option "{Option}"; a value that may be absent is a mo.Option.`
+Message: `The field {Field} carries the JSON option "{Option}"; a value that may be absent is an outcome.Option.`
 
 | Field | Type |
 | --- | --- |
@@ -185,7 +185,7 @@ TypeUnsupported is a field type with no JSON shape the Effect API can declare.
 
 Declared in `go/reading/refusals.go`.
 
-Message: `The type {Type} cannot be declared on the wire: {Flaw, select, ByteSliceField {encoding/json writes a byte slice as base64 text} MapKeyNotText {only a map with string keys is a JSON object} PointerField {a pointer may be nil; a value that may be absent is a mo.Option} InterfaceField {an interface has no single JSON shape} ShapelessField {encoding/json cannot write it}}.`
+Message: `The type {Type} cannot be declared on the wire: {Flaw, select, ByteSliceField {encoding/json writes a byte slice as base64 text} MapKeyNotText {only a map with string keys is a JSON object} PointerField {a pointer may be nil; a value that may be absent is an outcome.Option} InterfaceField {an interface has no single JSON shape} ShapelessField {encoding/json cannot write it}}.`
 
 | Field | Type |
 | --- | --- |

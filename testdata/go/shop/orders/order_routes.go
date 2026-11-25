@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/samber/mo"
+	"github.com/CheckPickerUpper/outcome"
 )
 
 // Item is one line of an order: the product, quantity, and items included with it.
@@ -29,7 +29,7 @@ const (
 // may deliver it.
 type Order struct {
 	Items          []Item             `json:"items"`
-	GiftNote       mo.Option[string]  `json:"gift_note"`
+	GiftNote       outcome.Option[string] `json:"gift_note"`
 	DeliverBetween [2]time.Time       `json:"deliver_between"`
 	Wrapped        bool               `json:"wrapped"`
 	Tips           map[string]float64 `json:"tips"`

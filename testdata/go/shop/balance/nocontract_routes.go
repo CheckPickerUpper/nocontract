@@ -4,7 +4,7 @@ package balance
 
 import (
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
-	mo "github.com/samber/mo"
+	outcome "github.com/CheckPickerUpper/outcome"
 	http "net/http"
 )
 
@@ -17,10 +17,10 @@ func NocontractRouteReadBalance(receiver Ledger, request *http.Request, limit no
 	})
 }
 
-func nocontractAnswerReadOutcome(outcome ReadOutcome) nocontract.Answer {
-	switch member := outcome.(type) {
+func nocontractAnswerReadOutcome(returned ReadOutcome) nocontract.Answer {
+	switch member := returned.(type) {
 	case BalanceRead:
-		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "BalanceRead"}, member, nocontract.AnswerMarshalers{nocontract.SignedText[int](), nocontract.NullableValue[Money]()})
+		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "BalanceRead"}, member, nocontract.AnswerMarshalers{nocontract.SignedText[int](), nocontract.NullableValue[Money](), nocontract.NullableValue[string]()})
 	case ShopperNotFound:
 		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member, nocontract.AnswerMarshalers{nocontract.SignedText[int]()})
 	case BalanceNotOpened:
@@ -50,8 +50,8 @@ func NocontractRouteTopUp(request *http.Request, limit nocontract.RequestBodyLim
 	})
 }
 
-func nocontractAnswerTopUpOutcome(outcome TopUpOutcome) nocontract.Answer {
-	switch member := outcome.(type) {
+func nocontractAnswerTopUpOutcome(returned TopUpOutcome) nocontract.Answer {
+	switch member := returned.(type) {
 	case ShopperNotFound:
 		return nocontract.Failed(nocontract.Failure{Status: 404, Tag: "ShopperNotFound", Code: "SH-1001"}, member, nocontract.AnswerMarshalers{nocontract.SignedText[int]()})
 	case TopUpQueued:
@@ -65,13 +65,13 @@ func nocontractAnswerTopUpOutcome(outcome TopUpOutcome) nocontract.Answer {
 
 // nocontractBodyMoneyMembers holds each member nocontractBodyMoney has read.
 type nocontractBodyMoneyMembers struct {
-	Cents    mo.Option[int]
-	Currency mo.Option[Currency]
+	Cents    outcome.Option[int]
+	Currency outcome.Option[Currency]
 }
 
 // nocontractBodyMoney reads a JSON object holding each field of the struct it returns once.
 func nocontractBodyMoney(value nocontract.BodyValue) nocontract.BodyReading[Money] {
-	return nocontract.Next(nocontract.BodyObject(value, nocontractBodyMoneyMembers{Cents: mo.None[int](), Currency: mo.None[Currency]()}, nocontractBodyMoneyMember), func(members nocontractBodyMoneyMembers) nocontract.BodyReading[Money] {
+	return nocontract.Next(nocontract.BodyObject(value, nocontractBodyMoneyMembers{Cents: outcome.None[int](), Currency: outcome.None[Currency]()}, nocontractBodyMoneyMember), func(members nocontractBodyMoneyMembers) nocontract.BodyReading[Money] {
 		return nocontract.Next(nocontract.Present(value, "cents", members.Cents), func(readCents int) nocontract.BodyReading[Money] {
 			return nocontract.Next(nocontract.Present(value, "currency", members.Currency), func(readCurrency Currency) nocontract.BodyReading[Money] {
 				return nocontract.Read[Money]{Value: Money{Cents: readCents, Currency: readCurrency}}
@@ -85,11 +85,11 @@ func nocontractBodyMoneyMember(members nocontractBodyMoneyMembers, member nocont
 	switch member.Name {
 	case "cents":
 		return nocontract.Once(member, members.Cents, nocontract.BodySignedText[int], func(read int) nocontractBodyMoneyMembers {
-			return nocontractBodyMoneyMembers{Cents: mo.Some(read), Currency: members.Currency}
+			return nocontractBodyMoneyMembers{Cents: outcome.Some(read), Currency: members.Currency}
 		})
 	case "currency":
 		return nocontract.Once(member, members.Currency, nocontract.BodyLiteral[Currency]("CAD", "USD"), func(read Currency) nocontractBodyMoneyMembers {
-			return nocontractBodyMoneyMembers{Cents: members.Cents, Currency: mo.Some(read)}
+			return nocontractBodyMoneyMembers{Cents: members.Cents, Currency: outcome.Some(read)}
 		})
 	}
 	return nocontract.Unknown[nocontractBodyMoneyMembers](member)
@@ -97,12 +97,12 @@ func nocontractBodyMoneyMember(members nocontractBodyMoneyMembers, member nocont
 
 // nocontractBodyTopUpBodyMembers holds each member nocontractBodyTopUpBody has read.
 type nocontractBodyTopUpBodyMembers struct {
-	Amount mo.Option[Money]
+	Amount outcome.Option[Money]
 }
 
 // nocontractBodyTopUpBody reads a JSON object holding each field of the struct it returns once.
 func nocontractBodyTopUpBody(value nocontract.BodyValue) nocontract.BodyReading[TopUpBody] {
-	return nocontract.Next(nocontract.BodyObject(value, nocontractBodyTopUpBodyMembers{Amount: mo.None[Money]()}, nocontractBodyTopUpBodyMember), func(members nocontractBodyTopUpBodyMembers) nocontract.BodyReading[TopUpBody] {
+	return nocontract.Next(nocontract.BodyObject(value, nocontractBodyTopUpBodyMembers{Amount: outcome.None[Money]()}, nocontractBodyTopUpBodyMember), func(members nocontractBodyTopUpBodyMembers) nocontract.BodyReading[TopUpBody] {
 		return nocontract.Next(nocontract.Present(value, "amount", members.Amount), func(readAmount Money) nocontract.BodyReading[TopUpBody] {
 			return nocontract.Read[TopUpBody]{Value: TopUpBody{Amount: readAmount}}
 		})
@@ -114,7 +114,7 @@ func nocontractBodyTopUpBodyMember(members nocontractBodyTopUpBodyMembers, membe
 	switch member.Name {
 	case "amount":
 		return nocontract.Once(member, members.Amount, nocontractBodyMoney, func(read Money) nocontractBodyTopUpBodyMembers {
-			return nocontractBodyTopUpBodyMembers{Amount: mo.Some(read)}
+			return nocontractBodyTopUpBodyMembers{Amount: outcome.Some(read)}
 		})
 	}
 	return nocontract.Unknown[nocontractBodyTopUpBodyMembers](member)

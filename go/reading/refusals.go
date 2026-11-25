@@ -131,7 +131,7 @@ type CodeRepeated struct {
 // FieldOptionUnsupported is a JSON field whose tag carries an option, such as omitempty.
 //
 //ergo:code NC-1015
-//ergo:message The field {Field} carries the JSON option "{Option}"; a value that may be absent is a mo.Option.
+//ergo:message The field {Field} carries the JSON option "{Option}"; a value that may be absent is an outcome.Option.
 type FieldOptionUnsupported struct {
 	Field  string
 	Option string
@@ -146,7 +146,7 @@ type EmbeddedFieldUnsupported struct{ Field string }
 // TypeUnsupported is a field type with no JSON shape the Effect API can declare.
 //
 //ergo:code NC-1017
-//ergo:message The type {Type} cannot be declared on the wire: {Flaw, select, ByteSliceField {encoding/json writes a byte slice as base64 text} MapKeyNotText {only a map with string keys is a JSON object} PointerField {a pointer may be nil; a value that may be absent is a mo.Option} InterfaceField {an interface has no single JSON shape} ShapelessField {encoding/json cannot write it}}.
+//ergo:message The type {Type} cannot be declared on the wire: {Flaw, select, ByteSliceField {encoding/json writes a byte slice as base64 text} MapKeyNotText {only a map with string keys is a JSON object} PointerField {a pointer may be nil; a value that may be absent is an outcome.Option} InterfaceField {an interface has no single JSON shape} ShapelessField {encoding/json cannot write it}}.
 type TypeUnsupported struct {
 	Type string
 	Flaw TypeFlaw

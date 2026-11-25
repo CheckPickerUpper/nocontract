@@ -85,12 +85,12 @@ func UnsignedText[U ~uint | ~uint64 | ~uintptr]() *jsonv2.Marshalers {
 	})
 }
 
-// NullableValue writes a mo.Option of T as null, or as the value it holds written with the
-// answer's marshalers. mo.Option's own MarshalJSON writes the value with encoding/json's first
-// version, which no marshaler of the answer reaches.
+// NullableValue writes an outcome.Option of T as null, or as the value it holds written with the
+// answer's marshalers. The Option's members keep their value unexported, so encoding/json writes
+// none of it without this marshaler.
 func NullableValue[T any]() *jsonv2.Marshalers {
-	return jsonv2.MarshalToFunc(func(encoder *jsontext.Encoder, value mo.Option[T]) error {
-		return mo.Fold(value, func(held T) error { return jsonv2.MarshalEncode(encoder, held) }, func(error) error {
+	return jsonv2.MarshalToFunc(func(encoder *jsontext.Encoder, value *outcome.Option[T]) error {
+		return outcome.FoldOption(*value, func(held T) error { return jsonv2.MarshalEncode(encoder, held) }, func() error {
 			return encoder.WriteToken(jsontext.Null)
 		})
 	})

@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/samber/mo"
+	"github.com/CheckPickerUpper/outcome"
 )
 
 // Currency is a currency a balance is held in.
@@ -42,10 +42,10 @@ type ReadOutcome interface {
 //ergo:not-an-error
 //nocontract:status 200
 type BalanceRead struct {
-	Balance   Money             `json:"balance"`
-	Overdraft mo.Option[Money]  `json:"overdraft"`
-	Changed   time.Time         `json:"changed"`
-	Note      mo.Option[string] `json:"note"`
+	Balance   Money                  `json:"balance"`
+	Overdraft outcome.Option[Money]  `json:"overdraft"`
+	Changed   time.Time              `json:"changed"`
+	Note      outcome.Option[string] `json:"note"`
 }
 
 // ShopperNotFound is a shopper the shop holds no balance for.
@@ -73,7 +73,7 @@ func (BalanceNotOpened) isReadOutcome() {}
 type Ledger struct {
 	ShopperID      int
 	Cents          int
-	OverdraftCents mo.Option[int]
+	OverdraftCents outcome.Option[int]
 }
 
 // ReadBalance reads one shopper's balance, for a request the Shopper guard admitted.
@@ -87,13 +87,13 @@ func (ledger Ledger) ReadBalance(_ context.Context, input ReadInput) ReadOutcome
 	if input.Currency != CAD {
 		return BalanceNotOpened{Currency: input.Currency}
 	}
-	overdraft := mo.Fold(ledger.OverdraftCents, func(cents int) mo.Option[Money] { return mo.Some(Money{Cents: cents, Currency: input.Currency}) },
-		func(error) mo.Option[Money] { return mo.None[Money]() })
+	overdraft := outcome.FoldOption(ledger.OverdraftCents, func(cents int) outcome.Option[Money] { return outcome.Some(Money{Cents: cents, Currency: input.Currency}) },
+		outcome.None[Money])
 	return BalanceRead{
 		Balance:   Money{Cents: ledger.Cents, Currency: input.Currency},
 		Overdraft: overdraft,
 		Changed:   time.Date(2026, time.November, 14, 12, 0, 0, 0, time.UTC),
-		Note:      mo.Some("first top-up"),
+		Note:      outcome.Some("first top-up"),
 	}
 }
 

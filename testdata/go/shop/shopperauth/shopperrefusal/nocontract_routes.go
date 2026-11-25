@@ -8,8 +8,8 @@ import (
 
 // NocontractAnswerRefusal answers a refusal of the Shopper guard with its status, tag and code, in place of the route
 // the guard refused.
-func NocontractAnswerRefusal(outcome Refusal) nocontract.Answer {
-	switch member := outcome.(type) {
+func NocontractAnswerRefusal(returned Refusal) nocontract.Answer {
+	switch member := returned.(type) {
 	case NotSignedIn:
 		return nocontract.Failed(nocontract.Failure{Status: 401, Tag: "NotSignedIn", Code: "SH-1101"}, member, nocontract.AnswerMarshalers{})
 	case ShopperCredentialRejected:

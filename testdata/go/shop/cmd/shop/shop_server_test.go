@@ -45,7 +45,7 @@ func TestTheGeneratedServerStartsItsOwnListenerAndStopsIt(t *testing.T) {
 // built.
 func shopServer(t *testing.T, layers []nocontract.Layer) nocontract.ListeningServer {
 	t.Helper()
-	return ledgerServer(t, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: mo.None[int]()}, layers)
+	return ledgerServer(t, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: outcome.None[int]()}, layers)
 }
 
 // ledgerServer serves the shop's generated API over ledger through layers, stopping the test when it
@@ -120,11 +120,11 @@ func TestAWholeNumberPastWhatJavaScriptHoldsIsAnsweredAsDecimalText(t *testing.T
 	}
 	for _, each := range []struct {
 		name      string
-		overdraft mo.Option[int]
+		overdraft outcome.Option[int]
 		want      received
 	}{
-		{name: "an overdraft", overdraft: mo.Some(1<<53 + 3), want: answered(`{"cents":"9007199254740995","currency":"CAD"}`)},
-		{name: "no overdraft", overdraft: mo.None[int](), want: answered("null")},
+		{name: "an overdraft", overdraft: outcome.Some(1<<53 + 3), want: answered(`{"cents":"9007199254740995","currency":"CAD"}`)},
+		{name: "no overdraft", overdraft: outcome.None[int](), want: answered("null")},
 	} {
 		t.Run(each.name, func(t *testing.T) {
 			served := ledgerServer(t, balance.Ledger{ShopperID: 7, Cents: 1<<53 + 1, OverdraftCents: each.overdraft}, []nocontract.Layer{})
@@ -148,7 +148,7 @@ func (closedGuard) CheckRoute(route nocontract.GuardedRoute) mo.Result[nocontrac
 }
 
 func TestAGuardThatCannotCheckARouteKeepsTheAPIFromBeingBuiltWithItsReason(t *testing.T) {
-	built := server.New([]nocontract.Layer{}, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: mo.None[int]()}, closedGuard{})
+	built := server.New([]nocontract.Layer{}, balance.Ledger{ShopperID: 7, Cents: 1250, OverdraftCents: outcome.None[int]()}, closedGuard{})
 	mo.Fold(built, func(server.API) struct{} {
 		t.Fatal("the API was built; want the guard's reason")
 		return struct{}{}

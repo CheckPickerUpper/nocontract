@@ -122,8 +122,8 @@ func (MethodNotDeclared) isSharedFailure() {}
 
 // NocontractAnswerSharedFailure answers each failure nocontract answers itself
 // with its status, tag and code.
-func NocontractAnswerSharedFailure(outcome SharedFailure) Answer {
-	switch member := outcome.(type) {
+func NocontractAnswerSharedFailure(returned SharedFailure) Answer {
+	switch member := returned.(type) {
 	case RequestCompletionUnavailable:
 		return Failed(Failure{Status: 503, Tag: "RequestCompletionUnavailable", Code: "NC-1174"}, member, AnswerMarshalers{})
 	case RequestDeadlineExceeded:

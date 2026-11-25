@@ -415,7 +415,7 @@ type DictionaryShape struct {
 	Value   BodyValue
 }
 
-// NullableShape is null read as an empty mo.Option, and any other value as Inner.
+// NullableShape is null read as None, and any other value as Inner held in Some.
 //
 //ergo:not-an-error
 type NullableShape struct{ Inner BodyValue }
@@ -478,7 +478,7 @@ func (value BodyValue) values(visited map[*StructShape]struct{}) []BodyValue {
 // OptionPath is the import path of the package declaring Option, the type a field that may hold
 // null is written as, and the type the generated code keeps each member of a body's struct in until
 // it is read.
-const OptionPath = "github.com/samber/mo"
+const OptionPath = "github.com/CheckPickerUpper/outcome"
 
 // Member is one member of an outcome or a guard's refusal: its Go type, whose name is its tag, and
 // how it answers, and once each Go type its answer holds that encoding/json writes otherwise than
@@ -504,8 +504,8 @@ type DecimalTextType struct {
 	Width  description.IntegerWidth
 }
 
-// NullableType is the mo.Option holding Inner, a value that holds a DecimalTextType. mo.Option's
-// own MarshalJSON writes its value with encoding/json's first version, which no marshaler reaches.
+// NullableType is the outcome.Option holding Inner. An Option is an interface whose members keep
+// their value unexported, so encoding/json writes it only through the runtime's marshaler.
 //
 //ergo:not-an-error
 type NullableType struct{ Inner types.Type }
@@ -538,9 +538,7 @@ func WrittenTypes(value BodyValue) []WrittenType {
 			case description.NumberWire, nil:
 			}
 		case NullableShape:
-			if slices.ContainsFunc(shape.Inner.Values(), usesDecimalMarshal) {
-				written = append(written, NullableType{Inner: shape.Inner.GoType})
-			}
+			written = append(written, NullableType{Inner: shape.Inner.GoType})
 		case TextShape, NumberShape, TruthShape, InstantShape, LiteralShape, ListShape, ArrayShape, DictionaryShape, *StructShape, nil:
 		}
 	}
@@ -551,14 +549,6 @@ func WrittenTypes(value BodyValue) []WrittenType {
 		}
 	}
 	return once
-}
-
-func usesDecimalMarshal(value BodyValue) bool {
-	if whole, isWhole := value.Shape.(WholeShape); isWhole {
-		_, decimal := whole.Width.Wire().(description.DecimalTextWire)
-		return decimal
-	}
-	return false
 }
 
 // sameWrittenType is whether left and right hand the runtime a marshaler for the same Go type.

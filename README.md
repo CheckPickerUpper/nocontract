@@ -357,7 +357,7 @@ The listener can return these built-in errors in addition to `RouteNotFound` and
 | `float32`, `float64` | `Schema.Finite` |
 | `bool` | `Schema.Boolean` |
 | `time.Time` | `Schema.DateTimeUtcFromString` |
-| `mo.Option[T]` | `Schema.NullOr` of `T` |
+| `outcome.Option[T]` | `Schema.NullOr` of `T` |
 | Slices and arrays | `Schema.Array` |
 | `map[string]T` | `Schema.Record(Schema.String, T)` |
 | Structs (named or inline) | `Schema.Struct` |

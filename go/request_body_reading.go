@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CheckPickerUpper/outcome"
 	"github.com/samber/mo"
 
 	"github.com/CheckPickerUpper/nocontract/messages"
@@ -628,9 +629,9 @@ func BodyDictionary[M ~map[K]V, K ~string, V any](key func(BodyMember) BodyReadi
 }
 
 // BodyNullable reads JSON null as no T and any other value as the T inner reads, for a field
-// holding a mo.Option.
-func BodyNullable[T any](inner func(BodyValue) BodyReading[T]) func(BodyValue) BodyReading[mo.Option[T]] {
-	return BodyNullableAs(inner, mo.Some[T], mo.None[T])
+// holding an outcome.Option.
+func BodyNullable[T any](inner func(BodyValue) BodyReading[T]) func(BodyValue) BodyReading[outcome.Option[T]] {
+	return BodyNullableAs(inner, outcome.Some[T], outcome.None[T])
 }
 
 // BodyNullableAs reads a nullable value into the caller's representation of present and null.
@@ -682,8 +683,8 @@ func BodyObject[M any](value BodyValue, start M, member func(M, BodyMember) Body
 
 // Once is the members kept with member's value, which read reads and kept keeps, or the refusal of a
 // member the object already wrote, which held holds.
-func Once[V, M any](member BodyMember, held mo.Option[V], read func(BodyValue) BodyReading[V], kept func(V) M) BodyReading[M] {
-	return mo.Fold(held, func(V) BodyReading[M] { return BodyRefused{Cause: BodyMemberRepeated{Path: member.Value.path}} }, func(error) BodyReading[M] {
+func Once[V, M any](member BodyMember, held outcome.Option[V], read func(BodyValue) BodyReading[V], kept func(V) M) BodyReading[M] {
+	return outcome.FoldOption(held, func(V) BodyReading[M] { return BodyRefused{Cause: BodyMemberRepeated{Path: member.Value.path}} }, func() BodyReading[M] {
 		return Next(read(member.Value), func(value V) BodyReading[M] { return Read[M]{Value: kept(value)} })
 	})
 }
@@ -695,8 +696,8 @@ func Unknown[M any](member BodyMember) BodyReading[M] {
 
 // Present is the value of the member name of the object at object, which held holds, or the refusal
 // of a member the object does not hold.
-func Present[V any](object BodyValue, name string, held mo.Option[V]) BodyReading[V] {
-	return mo.Fold(held, func(value V) BodyReading[V] { return Read[V]{Value: value} }, func(error) BodyReading[V] {
+func Present[V any](object BodyValue, name string, held outcome.Option[V]) BodyReading[V] {
+	return outcome.FoldOption(held, func(value V) BodyReading[V] { return Read[V]{Value: value} }, func() BodyReading[V] {
 		return BodyRefused{Cause: BodyMemberMissing{Path: object.member(name).path}}
 	})
 }

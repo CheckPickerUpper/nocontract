@@ -310,7 +310,7 @@ func (FieldOptionUnsupportedArguments) ReportArguments() {}
 // Report is FieldOptionUnsupported's code, its message in language and the arguments the message names.
 func (failure FieldOptionUnsupported) Report(language messages.Language) ergo.Report {
 	arguments := FieldOptionUnsupportedArguments{Field: string(failure.Field), Option: string(failure.Option)}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " carries the JSON option \""}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "\"; a value that may be absent is a mo.Option."}}}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The field "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " carries the JSON option \""}, messageformat.Argument{Index: 1}, messageformat.Literal{Text: "\"; a value that may be absent is an outcome.Option."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:
@@ -379,7 +379,7 @@ func (failure TypeUnsupported) Report(language messages.Language) ergo.Report {
 	case nil:
 	}
 	arguments := TypeUnsupportedArguments{Type: string(failure.Type), Flaw: argumentFlaw_}
-	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The type "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " cannot be declared on the wire: "}, messageformat.Select{Index: 1, Forms: []messageformat.SelectForm{{Member: "ByteSliceField", Parts: []messageformat.Part{messageformat.Literal{Text: "encoding/json writes a byte slice as base64 text"}}}, {Member: "MapKeyNotText", Parts: []messageformat.Part{messageformat.Literal{Text: "only a map with string keys is a JSON object"}}}, {Member: "PointerField", Parts: []messageformat.Part{messageformat.Literal{Text: "a pointer may be nil; a value that may be absent is a mo.Option"}}}, {Member: "InterfaceField", Parts: []messageformat.Part{messageformat.Literal{Text: "an interface has no single JSON shape"}}}, {Member: "ShapelessField", Parts: []messageformat.Part{messageformat.Literal{Text: "encoding/json cannot write it"}}}}}, messageformat.Literal{Text: "."}}}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The type "}, messageformat.Argument{Index: 0}, messageformat.Literal{Text: " cannot be declared on the wire: "}, messageformat.Select{Index: 1, Forms: []messageformat.SelectForm{{Member: "ByteSliceField", Parts: []messageformat.Part{messageformat.Literal{Text: "encoding/json writes a byte slice as base64 text"}}}, {Member: "MapKeyNotText", Parts: []messageformat.Part{messageformat.Literal{Text: "only a map with string keys is a JSON object"}}}, {Member: "PointerField", Parts: []messageformat.Part{messageformat.Literal{Text: "a pointer may be nil; a value that may be absent is an outcome.Option"}}}, {Member: "InterfaceField", Parts: []messageformat.Part{messageformat.Literal{Text: "an interface has no single JSON shape"}}}, {Member: "ShapelessField", Parts: []messageformat.Part{messageformat.Literal{Text: "encoding/json cannot write it"}}}}}, messageformat.Literal{Text: "."}}}
 	locale := messages.EnLocale()
 	switch language.(type) {
 	case messages.En:

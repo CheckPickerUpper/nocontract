@@ -264,7 +264,7 @@ type answerFunction struct {
 // code.
 func answerText(function answerFunction, names *imports) string {
 	text := &strings.Builder{}
-	fmt.Fprintf(text, "\nfunc %s(outcome %s) %s {\n\tswitch member := outcome.(type) {\n", function.name, function.sealed, names.runtime("Answer"))
+	fmt.Fprintf(text, "\nfunc %s(returned %s) %s {\n\tswitch member := returned.(type) {\n", function.name, function.sealed, names.runtime("Answer"))
 	for _, member := range function.members {
 		switch answer := member.Answer.(type) {
 		case description.Fails:
@@ -367,7 +367,7 @@ func (qualifiedBy) isReference() {}
 // localNames are the names the generated functions give their parameters and variables, which no
 // package alias may take.
 func localNames() []string {
-	return []string{"read", "request", "writer", "outcome", "member", "members", "value", "items", "receiver", "api", "layers", "limit"}
+	return []string{"read", "request", "writer", "returned", "member", "members", "value", "items", "receiver", "api", "layers", "limit"}
 }
 
 // runtime is a declaration of nocontract's runtime as the generated file writes it.

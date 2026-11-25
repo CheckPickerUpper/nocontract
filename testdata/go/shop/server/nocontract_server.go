@@ -8,7 +8,7 @@ import (
 	orders "example.com/shop/orders"
 	shopperrefusal "example.com/shop/shopperauth/shopperrefusal"
 	nocontract "github.com/CheckPickerUpper/nocontract/go"
-	outcome2 "github.com/CheckPickerUpper/outcome"
+	outcome "github.com/CheckPickerUpper/outcome"
 	mo "github.com/samber/mo"
 	http "net/http"
 )
@@ -20,7 +20,7 @@ type API struct {
 }
 
 // Listen starts the API's declared routes on the chosen TCP address.
-func Listen(serverContext context.Context, options nocontract.ListenOptions, api API) outcome2.Result[nocontract.ListeningServer] {
+func Listen(serverContext context.Context, options nocontract.ListenOptions, api API) outcome.Result[nocontract.ListeningServer] {
 	return nocontract.Listen(serverContext, options, api.binding)
 }
 
