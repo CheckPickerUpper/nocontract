@@ -223,7 +223,7 @@ Use NoContract [layers](#layers) for cross-cutting concerns like logging and COR
 
 A `nocontract.Layer` wraps every incoming request, whether it matches a route or not. Layers receive a `nocontract.Visit` (providing read access to the method, URL, headers, and matched route metadata, plus write access to response headers) and a `next()` function.
 
-Calling `next()` executes the route once and returns a `nocontract.Answered` struct containing the response status, `_tag`, and error `code`. Layers cannot alter the response status or body; the server always writes the route's actual return value. Layers execute in the order provided, with the first layer on the outside.
+Calling `next()` executes the route once and returns a `nocontract.Answered` struct containing the route's response status, `_tag`, and error `code`. Layers can set response headers. The generated listener selects and writes the response status and body, including a typed error when dispatch crashes or exceeds its deadline. Layers execute in the order provided, with the first layer on the outside.
 
 ```go
 func logRequest(visit nocontract.Visit, next func() nocontract.Answered) nocontract.Answered {
@@ -258,10 +258,11 @@ Gleam graceful shutdown waits for Mist and Glisten to release a listener stop op
 
 ## Odin server
 
-The Odin application calls its generated `serve` function on the thread that owns
-the native event loop. Odin servers require Linux. Other targets fail to compile
-because Odin's native event loop cannot cancel an accept and report whether it
-accepted a connection on those platforms.
+The Odin application calls its generated `serve` function. It starts a worker
+process that owns the HTTP connections and runs the handlers. Odin servers
+require Linux. Other targets fail to compile because Odin's native event loop
+cannot cancel an accept and report whether it accepted a connection on those
+platforms.
 
 Use the same NoContract revision for the generator and the runtime source
 collection. Initialize that checkout's Git submodules with
@@ -284,8 +285,7 @@ main :: proc() {
 	options := nocontract.listen_on(net.Endpoint{address = net.IP4_Loopback, port = 8080})
 	switch terminal in server.serve(options) {
 	case nocontract.Server_Stopped:
-	case nocontract.Listener_Event_Loop_Not_Available, nocontract.Listener_Not_Opened,
-		nocontract.Listener_Endpoint_Not_Read, nocontract.Listener_Not_Served:
+	case nocontract.Listener_Not_Opened, nocontract.Listener_Not_Served, nocontract.Listener_Not_Stopped:
 		fmt.eprintln(terminal)
 		os.exit(1)
 	}
@@ -293,11 +293,32 @@ main :: proc() {
 ```
 
 Build with `-collection:nocontract=<NoContract checkout>` and
-`-custom-attribute:error_code,not_an_error`. `serve` blocks until the HTTP library's
-interrupt handler stops the listener and joins its workers. For an ephemeral
-port, pass port zero and use `nocontract.notify_when_ready(options, callback)` to
-observe the actual bound endpoint. The generated package owns request decoding,
-route calls and typed responses.
+`-custom-attribute:error_code,not_an_error`. For an ephemeral port, pass port zero
+and use `nocontract.notify_when_ready(options, callback)` to observe the actual
+bound endpoint. The callback runs again when a replacement worker is ready at
+that address.
+
+On SIGINT or SIGTERM, the supervisor asks the worker to stop accepting new
+connections and finish active requests. Use `nocontract.with_shutdown_period` to
+set how long the supervisor waits. The default is five seconds. If that period
+expires, the supervisor kills and reaps the worker, and `serve` returns
+`Listener_Not_Stopped` (NC-1142) holding the worker's process state.
+
+The supervisor binds the listening socket once, before it starts the first
+worker, and every worker serves that socket. A bind failure, such as a port
+already in use, returns `Listener_Not_Opened` (NC-1140) before any worker starts.
+A worker that dies before it reports ready is not replaced: `serve` returns
+`Listener_Not_Opened` before the first worker is ready and `Listener_Not_Served`
+(NC-1141) after it. Each holds the step that failed. A worker exits as soon as
+its supervisor does, even when the supervisor is killed.
+
+When a handler or layer crashes, the worker sends the request's declared
+`RequestCrashed` response, writes one JSON line to stderr and exits. The line
+holds `method`, `path`, `route`, `cause` and `stack`, as Go's and Gleam's crash
+logs do. The cause is the panic or assertion message, or the signal name; the
+stack is the failing source location, or `null` for a signal. The supervisor
+starts a replacement at the same address. The worker's other active connections
+close with it. Go and Gleam keep their other in-flight requests active.
 
 ## Running an application
 
@@ -344,6 +365,7 @@ The listener can return these built-in errors in addition to `RouteNotFound` and
 * `RequestRefused` (`400`, `NC-1001`) reports a path, query parameter, header, or JSON body the listener could not read.
 * `RequestBodyTooLarge` (`413`, `NC-1168`) reports the configured limit and the declared or observed byte count. Go and Odin enforce the limit on routes that decode a JSON body.
 * `AnswerNotWritten` (`500`, `NC-1002`) reports an answer the listener could not encode, or a route that answered no outcome.
+* `RequestCrashed` (`500`, `NC-1172`) reports a crash during dispatch and includes the declared route if one matched.
 * `RequestDeadlineExceeded` (`503`, `NC-1170`) reports the configured deadline and the route that exceeded it.
 
 ## Type mapping
