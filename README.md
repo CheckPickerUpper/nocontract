@@ -267,7 +267,11 @@ platforms.
 Odin servers need Linux 7.4 or later to start reliably and to answer without
 delay a connection that arrives right after a worker is replaced. On earlier
 kernels, setting up a worker's io_uring event loop can fail with ENOMEM when
-memory is fragmented, and the worker exits with `Event_Loop_Not_Acquired`;
+memory is fragmented. The worker's own `serve` returns a failure holding
+`Event_Loop_Not_Acquired` and the worker exits. The supervisor does not replace
+a worker that exits, and its `serve` returns `Worker_Exited` inside
+`Listener_Not_Opened` when no worker had reported ready, or inside
+`Listener_Not_Served` after one had, so the server stops;
 Linux commit `68477e4c562e` fixes this. On earlier kernels, a dead worker's
 pending io_uring accepts stay on the listening socket for up to about 50 ms and
 take the wakeup of the next connection, which then waits in the backlog until
