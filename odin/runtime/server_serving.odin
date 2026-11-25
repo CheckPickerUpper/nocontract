@@ -212,8 +212,6 @@ Listener_Opening_Failure :: union #no_nil {
 	supervisor.Shutdown_Period_Not_Positive,
 	Crash_Diagnostic_Not_Encoded,
 	Event_Loop_Not_Acquired,
-	Listener_Readiness_Not_Announced,
-	Server_Thread_Not_Spawned,
 	Supervision_Refused,
 	Worker_Exited,
 }
@@ -303,12 +301,17 @@ serve_on_event_loop :: proc(worker: supervisor.Worker_Entry, options: TCP_Listen
 	switch installed in httpbinding.install_shutdown_handlers(server) {
 	case httpbinding.Shutdown_Handlers_Installed:
 	case httpbinding.Shutdown_Handler_Not_Installed:
-		http.server_shutdown(server)
-		_ = http.serve(server, {})
+		close_unserved_listener(server)
 		return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = installed}
 	}
-	announcement := Listener_Announcement{worker = worker, endpoint = endpoint, server = server, state = Announcement_Pending{}}
-	_ = nbio.timeout_poly(0, &announcement, announce_listener)
+	// The worker reports ready before serve starts any thread that accepts, so the supervisor
+	// replaces a worker that crashes on its first request instead of ending supervision.
+	switch ready in supervisor.report_ready(worker, u16(endpoint.port)) {
+	case supervisor.Ready_Reported:
+	case supervisor.Readiness_Report_Refusal:
+		close_unserved_listener(server)
+		return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = ready}
+	}
 	bound := Serving_API{binding = binding, layers = options.layers, deadline = options.deadline, allocator = context.allocator, body_limit = options.body_limit, crash_fallback = fallback}
 	handler := http.Handler{
 		user_data = &bound,
@@ -330,36 +333,24 @@ serve_on_event_loop :: proc(worker: supervisor.Worker_Entry, options: TCP_Listen
 	}
 	switch cause in http.serve(server, handler) {
 	case nil:
-		switch state in announcement.state {
-		case Announcement_Completed:
-		case Announcement_Pending:
-			return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = Listener_Readiness_Not_Announced{endpoint = endpoint}}
-		case supervisor.Readiness_Report_Refusal:
-			return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = state}
-		}
 		return Server_Stopped{endpoint = Bound_Endpoint{value = endpoint}}
 	case net.Network_Error:
 		return Listener_Not_Served{bound = Bound_Endpoint{value = endpoint}, failure = Network_Failure{cause = cause}}
 	case http.Server_Thread_Error:
-		return fail_supervision(announced_endpoint(announcement, options.endpoint), Server_Thread_Not_Spawned{cause = cause})
+		return Listener_Not_Served{bound = Bound_Endpoint{value = endpoint}, failure = Server_Thread_Not_Spawned{cause = cause}}
 	case nbio.General_Error:
-		return fail_supervision(announced_endpoint(announcement, options.endpoint), Event_Loop_Not_Acquired{cause = cause})
+		return Listener_Not_Served{bound = Bound_Endpoint{value = endpoint}, failure = Event_Loop_Not_Acquired{cause = cause}}
 	}
 	unreachable()
 }
 
-// announced_endpoint is the bound address once the worker reported it ready, and the requested
-// address before. A serve that abandons startup runs this thread's loop to close the socket, and
-// that run can fire the queued announcement.
-@(private, require_results)
-announced_endpoint :: proc(announcement: Listener_Announcement, requested: net.Endpoint) -> Listener_Endpoint {
-	switch _ in announcement.state {
-	case Announcement_Completed:
-		return Bound_Endpoint{value = announcement.endpoint}
-	case Announcement_Pending, supervisor.Readiness_Report_Refusal:
-		return Requested_Endpoint{value = requested}
-	}
-	unreachable()
+// close_unserved_listener closes an adopted listener that will not serve. Only serve on the
+// adopting thread closes its socket and releases odin-http's event loop reference, and after
+// server_shutdown it returns at once with no error.
+@(private)
+close_unserved_listener :: proc(server: ^http.Server) {
+	http.server_shutdown(server)
+	_ = http.serve(server, {})
 }
 
 @(private)
