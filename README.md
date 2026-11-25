@@ -264,6 +264,16 @@ require Linux. Other targets fail to compile because Odin's native event loop
 cannot cancel an accept and report whether it accepted a connection on those
 platforms.
 
+Odin servers need Linux 7.4 or later to start reliably and to answer without
+delay a connection that arrives right after a worker is replaced. On earlier
+kernels, setting up a worker's io_uring event loop can fail with ENOMEM when
+memory is fragmented, and the worker exits with `Event_Loop_Not_Acquired`;
+Linux commit `68477e4c562e` fixes this. On earlier kernels, a dead worker's
+pending io_uring accepts stay on the listening socket for up to about 50 ms and
+take the wakeup of the next connection, which then waits in the backlog until
+another connection arrives; Linux commit `044e5f30b3e0` removes them by
+cancelling a process's io_uring requests when it exits.
+
 Use the same NoContract revision for the generator and the runtime source
 collection. Initialize that checkout's Git submodules with
 `git submodule update --init --recursive`; the runtime imports the pinned
@@ -317,8 +327,10 @@ When a handler or layer crashes, the worker sends the request's declared
 holds `method`, `path`, `route`, `cause` and `stack`, as Go's and Gleam's crash
 logs do. The cause is the panic or assertion message, or the signal name; the
 stack is the failing source location, or `null` for a signal. The supervisor
-starts a replacement at the same address. The worker's other active connections
-close with it. Go and Gleam keep their other in-flight requests active.
+starts a replacement worker on the same listening socket. Connections that
+arrive meanwhile wait in the socket's backlog, and the replacement accepts them.
+The worker's other active connections close with it. Go and Gleam keep their
+other in-flight requests active.
 
 ## Running an application
 

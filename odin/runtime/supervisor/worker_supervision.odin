@@ -45,7 +45,8 @@ Worker_Started :: struct #all_or_none {}
 
 // Listening_Socket is the bound, listening socket the supervisor keeps open for its whole
 // supervision and every worker inherits, and the port the kernel bound it to. Connections that
-// arrive while a worker is replaced wait in its backlog.
+// arrive while a worker is replaced wait in the socket's backlog, and the replacement accepts
+// them. On Linux before 7.4, one such connection can wait until the next one arrives.
 Listening_Socket :: struct #all_or_none {
 	descriptor: posix.FD,
 	port:       u16,
