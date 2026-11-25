@@ -42,11 +42,12 @@ func TestShopBackendsRecoverCrashedRequestsAtTheSameAddress(t *testing.T) {
 					defer cancel()
 					held := holdShopTopUp(t, proof, served, control)
 					request := crashShopRequest(crash)
+					crashed := served.notices.mark()
 					answer := sendShopRequest(t, served, request)
 					assertShopAnswer(t, request, answer)
 					assertShopCrashSchemas(t, contract, answer)
 					if backend.language == "odin" {
-						awaitShopReplacement(t, proof, served)
+						awaitShopReplacement(t, proof, served, crashed)
 						assertCrashedWorkerDisconnected(t, held)
 						t.Log("the Odin worker's other in-flight top-up lost its connection")
 					} else {
@@ -61,11 +62,12 @@ func TestShopBackendsRecoverCrashedRequestsAtTheSameAddress(t *testing.T) {
 			decoded := exec.CommandContext(t.Context(), "bun", "run", "--no-install", "src/request_crash.ts")
 			decoded.Dir = client
 			decoded.Env = append(os.Environ(), "SHOP_URL="+served.url)
+			crashed := served.notices.mark()
 			t.Logf("Effect decoded %s", strings.TrimSpace(string(runShopCommand(t, decoded))))
 			if backend.language == "odin" {
 				proof, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 				defer cancel()
-				awaitShopReplacement(t, proof, served)
+				awaitShopReplacement(t, proof, served, crashed)
 				assertOdinShopCrashDiagnostics(t, served.finish(), len(crashes)+2)
 			}
 		})
@@ -89,10 +91,11 @@ func TestShopBackendsAnswerCrashesUnderTheirRequestDeadline(t *testing.T) {
 			served := openCheckedShop(t, checkout, backend, expected)
 			for _, crash := range crashes {
 				request := crashShopRequest(crash)
+				crashed := served.notices.mark()
 				assertShopAnswer(t, request, sendShopRequest(t, served, request))
 				if backend.language == "odin" {
 					proof, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-					awaitShopReplacement(t, proof, served)
+					awaitShopReplacement(t, proof, served, crashed)
 					cancel()
 				}
 			}
@@ -134,14 +137,22 @@ func assertShopCrashSchemas(t *testing.T, contract shopContract, answer shopAnsw
 	}
 }
 
-func awaitShopReplacement(t *testing.T, proof context.Context, served shopServerAddress) {
+// awaitShopReplacement waits for the first notice the shop printed after crashed, the mark taken
+// before the request that crashed its worker.
+func awaitShopReplacement(t *testing.T, proof context.Context, served shopServerAddress, crashed shopNoticeMark) {
 	t.Helper()
 	select {
-	case address := <-served.ready:
-		if address != served.url {
-			t.Fatalf("replacement listening address = %q, want %s", address, served.url)
+	case notice := <-served.notices.after(crashed):
+		switch notice := notice.(type) {
+		case shopListening:
+			if notice.address != served.url {
+				t.Fatalf("replacement listening address = %q, want %s", notice.address, served.url)
+			}
+			served.client.CloseIdleConnections()
+		case shopExited:
+			t.Fatalf("the shop exited before its replacement Odin worker reported ready; its last standard error lines:\n%s", strings.Join(notice.stderr, "\n"))
+		case nil:
 		}
-		served.client.CloseIdleConnections()
 	case <-proof.Done():
 		t.Fatalf("waiting for the replacement Odin worker: %v", proof.Err())
 	}

@@ -27,13 +27,33 @@ type shopProcessOutput struct {
 	wait  outcome.Result[struct{}]
 }
 
+// shopOutputPipes are the shop's standard output and standard error, both read by the test.
+type shopOutputPipes struct {
+	stdout io.ReadCloser
+	stderr io.ReadCloser
+}
+
+func openShopOutput(command *exec.Cmd) outcome.Result[shopOutputPipes] {
+	return outcome.Fold(outcome.TupleToResult(command.StdoutPipe()), func(stdout io.ReadCloser) outcome.Result[shopOutputPipes] {
+		return outcome.Fold(outcome.TupleToResult(command.StderrPipe()), func(stderr io.ReadCloser) outcome.Result[shopOutputPipes] {
+			return outcome.Ok(shopOutputPipes{stdout: stdout, stderr: stderr})
+		}, outcome.Err[shopOutputPipes])
+	}, outcome.Err[shopOutputPipes])
+}
+
 func openShopProcess(t *testing.T, command *exec.Cmd, shutdown shopProcessShutdown) shopServerAddress {
 	t.Helper()
 	diagnostics, emitted := &bytes.Buffer{}, &bytes.Buffer{}
-	command.Stderr = diagnostics
-	return outcome.Fold(outcome.TupleToResult(command.StdoutPipe()), func(stdout io.ReadCloser) shopServerAddress {
+	return outcome.Fold(openShopOutput(command), func(output shopOutputPipes) shopServerAddress {
 		scratchproject.StopOn(t, "starting the "+command.Path+" shop", command.Start())
 		readers := &errgroup.Group{}
+		// Closed once the shop's standard error ended, after which diagnostics holds all of it.
+		stderrEnded := make(chan struct{})
+		readers.Go(func() error {
+			defer close(stderrEnded)
+			_, cause := io.Copy(diagnostics, output.stderr)
+			return cause
+		})
 		collected := sync.OnceValue(func() shopProcessOutput {
 			shutdown.stop()
 			read := outcome.TupleToResult(struct{}{}, readers.Wait())
@@ -51,8 +71,8 @@ func openShopProcess(t *testing.T, command *exec.Cmd, shutdown shopProcessShutdo
 		})
 		finish := func() []string { output := collected(); verified(); return output.lines }
 		t.Cleanup(func() { finish() })
-		lines := bufio.NewReader(stdout)
-		ready := make(chan string, 1)
+		lines := bufio.NewReader(output.stdout)
+		notices := newShopListeningNotices()
 		for {
 			line := scratchproject.PathOrStop(t, "reading the shop's listening address", outcome.TupleToResult(lines.ReadString('\n')))
 			address, listening := strings.CutPrefix(strings.TrimSpace(line), "Listening on ")
@@ -60,7 +80,6 @@ func openShopProcess(t *testing.T, command *exec.Cmd, shutdown shopProcessShutdo
 				continue
 			}
 			readers.Go(func() error {
-				defer close(ready)
 				scanner := bufio.NewScanner(lines)
 				scanner.Buffer(make([]byte, 4096), 1<<20)
 				for scanner.Scan() {
@@ -68,22 +87,19 @@ func openShopProcess(t *testing.T, command *exec.Cmd, shutdown shopProcessShutdo
 					emitted.WriteString(line)
 					emitted.WriteByte('\n')
 					if address, listening := strings.CutPrefix(strings.TrimSpace(line), "Listening on "); listening {
-						select {
-						case ready <- address:
-						default:
-						}
+						notices.add(shopListening{address: address})
 					}
 				}
+				<-stderrEnded
+				notices.add(shopExited{stderr: lastLines(diagnostics.String(), shopExitStderrLines)})
 				return scanner.Err()
 			})
 			client := *http.DefaultClient
 			client.Timeout = 10 * time.Second
-			return shopServerAddress{url: address, client: &client, finish: finish, ready: ready, pid: command.Process.Pid}
+			return shopServerAddress{url: address, client: &client, finish: finish, notices: notices, pid: command.Process.Pid}
 		}
 	}, func(cause error) shopServerAddress {
-		t.Fatalf("opening shop stdout: %v", cause)
-		ready := make(chan string)
-		close(ready)
-		return shopServerAddress{url: "", client: http.DefaultClient, finish: func() []string { return []string{} }, ready: ready, pid: 0}
+		t.Fatalf("opening the shop's output: %v", cause)
+		return shopServerAddress{url: "", client: http.DefaultClient, finish: func() []string { return []string{} }, notices: newShopListeningNotices(), pid: 0}
 	})
 }
