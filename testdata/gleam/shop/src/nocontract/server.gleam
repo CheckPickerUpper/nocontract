@@ -19,6 +19,7 @@ import nocontract_runtime/request_deadline
 import nocontract_runtime/request_layers
 import nocontract_runtime/request_logging
 import nocontract_runtime/request_reading as request_input
+import nocontract_runtime/request_recovery as recovery
 import nocontract_runtime/server_options
 import nocontract_runtime/target_matching as target
 import nocontract_runtime/value_reading as wire
@@ -38,6 +39,7 @@ type Operation {
   Route2
   Route3
   Route4
+  Route5
 }
 
 type Answer {
@@ -54,31 +56,45 @@ fn handle_request(
   layers layers: List(request_layers.Layer),
   deadline deadline: option.Option(request_deadline.RequestDeadline),
 ) -> wisp.Response {
+  let method = http.method_to_string(request.method)
   let #(duration_us, #(route, answer)) =
     request_logging.measure_request(fn() {
       let #(route, selected) = select_request(request)
-      let visit =
-        request_layers.Visit(
-          method: http.method_to_string(request.method),
-          path: request.path,
-          route:,
-        )
+      let visit = request_layers.Visit(method:, path: request.path, route:)
       case selected {
-        SelectedRoute(run:) -> #(
-          route,
-          answer_route(route:, deadline:, run: fn(lifetime) {
-            answer_through_layers(layers, visit, fn() { run(lifetime) })
-          }),
-        )
-        ImmediateAnswer(run:) -> #(
-          route,
-          answer_through_layers(layers, visit, run),
-        )
+        SelectedRoute(run:) -> {
+          let evidence =
+            recovery.RequestEvidence(
+              method:,
+              path: request.path,
+              route: recovery.RouteMatched(method:, path: route),
+            )
+          #(
+            route,
+            answer_route(evidence:, deadline:, run: fn(lifetime) {
+              answer_through_layers(layers:, visit:, run: fn() { run(lifetime) })
+            }),
+          )
+        }
+        ImmediateAnswer(run:) -> {
+          let evidence =
+            recovery.RequestEvidence(
+              method:,
+              path: request.path,
+              route: recovery.NoRouteMatched,
+            )
+          #(
+            route,
+            protect_request(evidence:, run: fn() {
+              answer_through_layers(layers:, visit:, run:)
+            }),
+          )
+        }
       }
     })
   request_logging.log_request(request_logging.RequestLog(
     route:,
-    method: http.method_to_string(request.method),
+    method:,
     status: answer.response.status,
     code: answer.code,
     duration_us:,
@@ -87,9 +103,9 @@ fn handle_request(
 }
 
 fn answer_through_layers(
-  layers: List(request_layers.Layer),
-  visit: request_layers.Visit,
-  run: fn() -> Answer,
+  layers layers: List(request_layers.Layer),
+  visit visit: request_layers.Visit,
+  run run: fn() -> Answer,
 ) -> Answer {
   let finish = request_layers.enter(layers, visit)
   let answer = run()
@@ -100,23 +116,59 @@ fn answer_through_layers(
   answer
 }
 
+fn protect_request(
+  evidence evidence: recovery.RequestEvidence,
+  run run: fn() -> Answer,
+) -> Answer {
+  recovery.answer_request(
+    evidence,
+    record: recovery.log_crash,
+    dispatch: run,
+    prepare: fn() { crash_answer(evidence) },
+  )
+}
+
 fn answer_route(
-  route route: String,
+  evidence evidence: recovery.RequestEvidence,
   deadline deadline: option.Option(request_deadline.RequestDeadline),
   run run: fn(request_deadline.RequestLifetime) -> Answer,
 ) -> Answer {
   case deadline {
-    option.None -> request_deadline.without_deadline(run:)
+    option.None ->
+      protect_request(evidence:, run: fn() {
+        request_deadline.without_deadline(run:)
+      })
     option.Some(within) -> {
-      case request_deadline.answer_before_deadline(within:, run:) {
+      case
+        request_deadline.answer_before_deadline(within:, run: fn(lifetime) {
+          protect_request(evidence:, run: fn() { run(lifetime) })
+        })
+      {
         request_deadline.RequestCompleted(answer:) -> answer
         request_deadline.RequestExpired(timeout_milliseconds:, ..) ->
-          shared_request_deadline_exceeded(route:, timeout_milliseconds:)
+          shared_request_deadline_exceeded(
+            route: recovery.route_path(evidence),
+            timeout_milliseconds:,
+          )
         request_deadline.RequestWorkerExited(stopped:) ->
-          request_deadline.worker_exited(stopped)
+          recovery.answer_worker_exit(
+            evidence,
+            stopped:,
+            record: recovery.log_crash,
+            prepare: fn() { crash_answer(evidence) },
+          )
       }
     }
   }
+}
+
+fn crash_answer(evidence: recovery.RequestEvidence) -> Answer {
+  let route = case evidence.route {
+    recovery.RouteMatched(method:, path:) ->
+      option.Some(RequestCrashedRoute(method: method, path: path))
+    recovery.NoRouteMatched -> option.None
+  }
+  shared_request_crashed(route:)
 }
 
 fn select_request(request: wisp.Request) -> #(String, RequestSelection) {
@@ -138,12 +190,16 @@ fn select_request(request: wisp.Request) -> #(String, RequestSelection) {
           target.PathParameter(name: "shopper_id"),
           target.PathText(text: "top-ups"),
         ]),
-        target.Route(operation: Route3, method: "POST", path: [
+        target.Route(operation: Route3, method: "GET", path: [
+          target.PathText(text: "crashes"),
+          target.PathParameter(name: "cause"),
+        ]),
+        target.Route(operation: Route4, method: "POST", path: [
           target.PathText(text: "shoppers"),
           target.PathParameter(name: "shopper_id"),
           target.PathText(text: "orders"),
         ]),
-        target.Route(operation: Route4, method: "GET", path: [
+        target.Route(operation: Route5, method: "GET", path: [
           target.PathText(text: "headers"),
           target.PathText(text: "order-count"),
         ]),
@@ -167,12 +223,16 @@ fn select_request(request: wisp.Request) -> #(String, RequestSelection) {
       SelectedRoute(run: fn(_lifetime) { serve_route_2(request, parameters) }),
     )
     target.Selected(operation: Route3, parameters:) -> #(
-      "/shoppers/{shopper_id}/orders",
+      "/crashes/{cause}",
       SelectedRoute(run: fn(_lifetime) { serve_route_3(request, parameters) }),
     )
     target.Selected(operation: Route4, parameters:) -> #(
-      "/headers/order-count",
+      "/shoppers/{shopper_id}/orders",
       SelectedRoute(run: fn(_lifetime) { serve_route_4(request, parameters) }),
+    )
+    target.Selected(operation: Route5, parameters:) -> #(
+      "/headers/order-count",
+      SelectedRoute(run: fn(_lifetime) { serve_route_5(request, parameters) }),
     )
     target.UnknownPath(path:) -> #(
       request.path,
@@ -325,6 +385,29 @@ fn serve_route_2(
 }
 
 fn read_route_3(
+  _request: wisp.Request,
+  parameters: dict.Dict(String, String),
+) -> Result(native_12.CrashInput, request_input.RequestRefusal) {
+  use field_0 <- result.try(request_input.read_path(
+    parameters,
+    "cause",
+    parameter.TextParameter,
+    decode_b2ef230e7f4f315a(),
+  ))
+  Ok(native_12.CrashInput(cause: field_0))
+}
+
+fn serve_route_3(
+  request: wisp.Request,
+  parameters: dict.Dict(String, String),
+) -> Answer {
+  case read_route_3(request, parameters) {
+    Ok(input) -> input |> native_12.crash |> answer_dd8bf8c137db7b72
+    Error(cause) -> request_refused(cause)
+  }
+}
+
+fn read_route_4(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
 ) -> Result(native_12.PlaceInput, request_input.RequestRefusal) {
@@ -353,17 +436,17 @@ fn read_route_3(
   Ok(native_12.PlaceInput(shopper_id: field_0, store: field_1, body: field_2))
 }
 
-fn serve_route_3(
+fn serve_route_4(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
 ) -> Answer {
-  case read_route_3(request, parameters) {
+  case read_route_4(request, parameters) {
     Ok(input) -> input |> native_12.place |> answer_6fb7787a3145644b
     Error(cause) -> request_refused(cause)
   }
 }
 
-fn read_route_4(
+fn read_route_5(
   request: wisp.Request,
   _parameters: dict.Dict(String, String),
 ) -> Result(native_12.OrderCountInput, request_input.RequestRefusal) {
@@ -380,11 +463,11 @@ fn read_route_4(
   Ok(native_12.OrderCountInput(order_count: field_0))
 }
 
-fn serve_route_4(
+fn serve_route_5(
   request: wisp.Request,
   parameters: dict.Dict(String, String),
 ) -> Answer {
-  case read_route_4(request, parameters) {
+  case read_route_5(request, parameters) {
     Ok(input) -> input |> native_12.read_order_count |> answer_dd8bf8c137db7b72
     Error(cause) -> request_refused(cause)
   }
@@ -454,6 +537,37 @@ fn record_schemas() -> dict.Dict(String, wire.Schema) {
       ]),
     ),
   ])
+}
+
+type RequestCrashedRoute {
+  RequestCrashedRoute(method: String, path: String)
+}
+
+fn shared_request_crashed(
+  route route: option.Option(RequestCrashedRoute),
+) -> Answer {
+  let response =
+    json.object([
+      #("_tag", json.string("RequestCrashed")),
+      #("code", json.string("NC-1172")),
+      #("route", case route {
+        option.Some(route_value) ->
+          case route_value {
+            RequestCrashedRoute(
+              method: route_value_method,
+              path: route_value_path,
+            ) ->
+              json.object([
+                #("method", json.string(route_value_method)),
+                #("path", json.string(route_value_path)),
+              ])
+          }
+        option.None -> json.null()
+      }),
+    ])
+    |> json.to_string
+    |> wisp.json_response(500)
+  Answer(response:, code: option.Some("NC-1172"))
 }
 
 fn shared_request_deadline_exceeded(

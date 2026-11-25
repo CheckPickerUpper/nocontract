@@ -796,6 +796,32 @@ func (failure RequestDeadlineOutside) Causes() []error {
 	return nil
 }
 
+func (RequestCrashed) ErrorCode() ergo.Code { return "NC-1172" }
+
+// RequestCrashedArguments holds the arguments RequestCrashed's message names, in the order the message first names them.
+type RequestCrashedArguments struct {
+}
+
+// ReportArguments marks RequestCrashedArguments as the arguments of a report.
+func (RequestCrashedArguments) ReportArguments() {}
+
+// Report is RequestCrashed's code, its message in language and the arguments the message names.
+func (failure RequestCrashed) Report(language messages.Language) ergo.Report {
+	arguments := RequestCrashedArguments{}
+	message := messageformat.Message{Parts: []messageformat.Part{messageformat.Literal{Text: "The request crashed before its answer was written."}}}
+	locale := messages.EnLocale()
+	switch language.(type) {
+	case messages.En:
+	case nil:
+	}
+	return ergo.Report{Code: "NC-1172", Message: messageformat.Render(messageformat.RenderRequest{Locale: locale, Message: message, Values: []messageformat.Value{}}), Arguments: arguments}
+}
+
+// Causes is every error RequestCrashed holds, then the causes of every failure it holds.
+func (failure RequestCrashed) Causes() []error {
+	return nil
+}
+
 func (RequestCompletionUnavailable) ErrorCode() ergo.Code { return "NC-1174" }
 
 // RequestCompletionUnavailableArguments holds the arguments RequestCompletionUnavailable's message names, in the order the message first names them.

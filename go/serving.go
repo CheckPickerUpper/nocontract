@@ -231,9 +231,11 @@ func respond(writer http.ResponseWriter, request *http.Request, endpoints []Endp
 	completion := completeRequest(matched, request.Context(), deadline, workers, func(requestContext context.Context) Answered {
 		workerRequest := request.WithContext(requestContext)
 		workerVisit := Visit{request: workerRequest, route: visit.route, header: headers}
-		answer := sync.OnceValue(func() Answered { return answerMatched(matched, workerRequest, limit) })
-		throughLayers(layers, workerVisit, answer)
-		return answer()
+		return recoverRequest(workerVisit, logger, func() Answered {
+			answer := sync.OnceValue(func() Answered { return answerMatched(matched, workerRequest, limit) })
+			throughLayers(layers, workerVisit, answer)
+			return answer()
+		})
 	})
 	publish := func(answered Answered) {
 		outcome.ForEachOption(logger, func(logger *slog.Logger) {

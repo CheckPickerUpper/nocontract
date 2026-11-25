@@ -14,13 +14,19 @@ func WithRequestLogger(options ListenOptions, logger *slog.Logger) ListenOptions
 	return ListenOptions{address: options.address, requestLogger: outcome.EmptyableToOption(logger), deadline: options.deadline, bodyLimit: options.bodyLimit}
 }
 
-func logRequest(logger *slog.Logger, visit Visit, answered Answered, duration time.Duration) {
-	route := visit.request.URL.Path
+// loggedRoute is the route a request or crash log names: the matched path template, or the
+// requested path when no route matched.
+func loggedRoute(visit Visit) string {
 	switch matched := visit.Route().(type) {
 	case RouteMatched:
-		route = matched.Path
+		return matched.Path
 	case NoRouteMatched, nil:
 	}
+	return visit.URL().Path
+}
+
+func logRequest(logger *slog.Logger, visit Visit, answered Answered, duration time.Duration) {
+	route := loggedRoute(visit)
 	code := mo.Fold(answered.Code(), func(code string) slog.Attr {
 		return slog.String("code", code)
 	}, func(error) slog.Attr { return slog.Attr{Key: "", Value: slog.Value{}} })

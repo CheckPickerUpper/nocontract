@@ -16,10 +16,10 @@ import (
 )
 
 // SharedFieldUnsupported is a field of one of nocontract's own failures whose schema the Go runtime
-// declares no type for: only text, whole numbers, a set of string constants and a list of text have one.
+// declares no type for.
 //
 //ergo:code NC-1063
-//ergo:message The field {Field} of {Failure} has no Go runtime type: only text, whole numbers, a set of string constants and a list of text have one.
+//ergo:message The field {Field} of {Failure} has no Go runtime type.
 type SharedFieldUnsupported struct {
 	Failure string
 	Field   string
@@ -34,16 +34,16 @@ func (refused SharedFieldUnsupported) Error() string {
 // carrying the code and message ErGo reads, the sealed type holding them, and the function that
 // answers each with its status, tag and code.
 func RenderRuntime(failures []description.SharedFailure) outcome.Result[[]byte] {
+	names := newImports(serverplan.NoContractPath, routeFileImports(serverplan.ServesNoRoutes{}), []string{})
 	declared := outcome.Ok([]sharedFailureDeclaration{})
 	for _, failure := range failures {
 		declared = outcome.Fold(declared, func(declarations []sharedFailureDeclaration) outcome.Result[[]sharedFailureDeclaration] {
-			return outcome.Fold(declareSharedFailure(failure), func(declaration sharedFailureDeclaration) outcome.Result[[]sharedFailureDeclaration] {
+			return outcome.Fold(declareSharedFailure(failure, names), func(declaration sharedFailureDeclaration) outcome.Result[[]sharedFailureDeclaration] {
 				return outcome.Ok(append(declarations, declaration))
 			}, outcome.Err[[]sharedFailureDeclaration])
 		}, outcome.Err[[]sharedFailureDeclaration])
 	}
 	return outcome.Fold(declared, func(declarations []sharedFailureDeclaration) outcome.Result[[]byte] {
-		names := newImports(serverplan.NoContractPath, routeFileImports(serverplan.ServesNoRoutes{}), []string{})
 		texts := []string{}
 		members := []serverplan.Member{}
 		for _, declaration := range declarations {
@@ -80,7 +80,7 @@ type sharedFailureDeclaration struct {
 
 // declareSharedFailure declares the native fields and answer marshalers together, so a whole
 // number's Go type and its decimal-text wire representation come from the same field schema.
-func declareSharedFailure(failure description.SharedFailure) outcome.Result[sharedFailureDeclaration] {
+func declareSharedFailure(failure description.SharedFailure, names *imports) outcome.Result[sharedFailureDeclaration] {
 	fields, literals := []string{}, &strings.Builder{}
 	written := []serverplan.WrittenType{}
 	for _, field := range failure.Fields {
@@ -117,8 +117,32 @@ func declareSharedFailure(failure description.SharedFailure) outcome.Result[shar
 				description.FixedList, description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
 				return outcome.Err[sharedFailureDeclaration](SharedFieldUnsupported{Failure: failure.Name, Field: name})
 			}
+		case description.Nullable:
+			record, isRecord := schema.Inner.(description.InlineStruct)
+			if !isRecord {
+				return outcome.Err[sharedFailureDeclaration](SharedFieldUnsupported{Failure: failure.Name, Field: name})
+			}
+			recordType := failure.Name + goField
+			pkg := types.NewPackage(serverplan.NoContractPath, serverplan.NoContractPackage)
+			members, tags := []*types.Var{}, []string{}
+			fmt.Fprintf(literals, "\n// %s is the %s record carried by %s.\ntype %s struct {\n", recordType, name, failure.Name, recordType)
+			for _, member := range record.Fields {
+				label := member.Name.Text()
+				if _, isText := member.Schema.(description.Text); !isText {
+					return outcome.Err[sharedFailureDeclaration](SharedFieldUnsupported{Failure: failure.Name, Field: name + "." + label})
+				}
+				goLabel, tag := goFieldName(label), fmt.Sprintf("json:%q", label)
+				members = append(members, types.NewField(0, pkg, goLabel, types.Typ[types.String], false))
+				tags = append(tags, tag)
+				fmt.Fprintf(literals, "\t%s string %c%s%c\n", goLabel, '\x60', tag, '\x60')
+			}
+			literals.WriteString("}\n")
+			optional := names.qualified(serverplan.GoName{Package: serverplan.OptionPath, Name: "Option"})
+			fields = append(fields, fmt.Sprintf("\t%s %s[%s] %cjson:%q%c\n", goField, optional, recordType, '\x60', name, '\x60'))
+			named := types.NewNamed(types.NewTypeName(0, pkg, recordType, nil), types.NewStruct(members, tags), []*types.Func{})
+			written = append(written, serverplan.NullableType{Inner: named})
 		case description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary,
-			description.Nullable, description.StructRef, description.InlineStruct, nil:
+			description.StructRef, description.InlineStruct, nil:
 			return outcome.Err[sharedFailureDeclaration](SharedFieldUnsupported{Failure: failure.Name, Field: name})
 		}
 	}

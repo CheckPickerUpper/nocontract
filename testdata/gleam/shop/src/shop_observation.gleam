@@ -8,9 +8,25 @@ import wisp
 pub fn layer(name: String) -> request_layers.Layer {
   fn(visit) {
     emit(name, "before", visit, [])
-    fn(answered) { emit(name, "after", visit, answer_fields(answered)) }
+    case name, visit.method, visit.path {
+      "outer", "POST", "/shoppers/7/top-ups" -> hold_request()
+      "outer", "GET", "/crashes/layer-before"
+      | "outer", "GET", "/unmatched-crash"
+      -> panic as "deliberate layer panic before dispatch"
+      _, _, _ -> Nil
+    }
+    fn(answered) {
+      case name, visit.path {
+        "outer", "/crashes/layer-after" ->
+          panic as "deliberate layer panic after dispatch"
+        _, _ -> emit(name, "after", visit, answer_fields(answered))
+      }
+    }
   }
 }
+
+@external(erlang, "nocontract_shop_request_hold_ffi", "hold")
+fn hold_request() -> Nil
 
 fn answer_fields(
   answered: request_layers.Answered,

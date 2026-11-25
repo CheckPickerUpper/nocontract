@@ -87,6 +87,7 @@ func assertShopOperationIDs(t *testing.T, contract shopContract) {
 		{path: "/shoppers/{shopper_id}/top-ups", method: "post", name: "balance.topUp"},
 		{path: "/shoppers/{shopper_id}/orders", method: "post", name: "orders.place"},
 		{path: "/headers/order-count", method: "get", name: "orders.readOrderCount"},
+		{path: "/crashes/{cause}", method: "get", name: "orders.crash"},
 	} {
 		methods, foundPath := contract.document.Paths[operation.path]
 		if !foundPath {
@@ -156,14 +157,19 @@ func assertShopResponseSchema(t *testing.T, contract shopContract, request shopR
 		if _, foundStatus := matched.operation.Responses[status]; !foundStatus {
 			t.Fatalf("the contract declares no %s %s response with status %s", matched.method, matched.path, status)
 		}
-		compileShopSchema(t, contract, func(schema *jsonschema.Schema) {
-			outcome.Fold(outcome.TupleToResult(jsonschema.UnmarshalJSON(strings.NewReader(answer.body))), func(value any) struct{} {
-				scratchproject.StopOn(t, "validating the response body "+answer.body, schema.Validate(value))
-				return struct{}{}
-			}, func(cause error) struct{} {
-				t.Fatalf("parsing response body %s for validation: %v", answer.body, cause)
-				return struct{}{}
-			})
-		}, "paths", matched.path, matched.method, "responses", status, "content", "application/json", "schema")
+		assertShopResponseValueSchema(t, contract, answer, "paths", matched.path, matched.method, "responses", status, "content", "application/json", "schema")
 	})
+}
+
+func assertShopResponseValueSchema(t *testing.T, contract shopContract, answer shopAnswer, pointer ...string) {
+	t.Helper()
+	compileShopSchema(t, contract, func(schema *jsonschema.Schema) {
+		outcome.Fold(outcome.TupleToResult(jsonschema.UnmarshalJSON(strings.NewReader(answer.body))), func(value any) struct{} {
+			scratchproject.StopOn(t, "validating the response body "+answer.body, schema.Validate(value))
+			return struct{}{}
+		}, func(cause error) struct{} {
+			t.Fatalf("parsing response body %s for validation: %v", answer.body, cause)
+			return struct{}{}
+		})
+	}, pointer...)
 }

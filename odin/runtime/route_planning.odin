@@ -25,6 +25,18 @@ Route_Selection :: union #no_nil {
 Route_Plan :: struct #all_or_none {
 	method:    string,
 	selection: Route_Selection,
+	crash_response: string,
+}
+
+@(private, require_results)
+describe_visited_route :: proc(plan: Route_Plan) -> Visited_Route {
+	switch selection in plan.selection {
+	case Selected_Route:
+		return Route_Matched{method = plan.method, path = selection.template}
+	case Immediate_Answer:
+		return No_Route_Matched{}
+	}
+	unreachable()
 }
 
 @(private, require_results)

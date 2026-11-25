@@ -115,10 +115,42 @@ type MessageField struct{ Field string }
 func (MessageText) isMessagePart()  {}
 func (MessageField) isMessagePart() {}
 
+// RequestCrash is the shared failure a crashed request answers, with each field its route holds,
+// so a runtime writing the crash answer before any handler runs names each field by identity.
+type RequestCrash struct {
+	Failure     SharedFailure
+	Route       FieldName
+	RouteMethod FieldName
+	RoutePath   FieldName
+}
+
+// RequestCrashed is the failure a request answers when its handler or a layer crashes.
+func RequestCrashed() RequestCrash {
+	route, method, path := FieldName{text: "route"}, FieldName{text: "method"}, FieldName{text: "path"}
+	return RequestCrash{
+		Failure: SharedFailure{
+			Name: "RequestCrashed", Status: FailureStatus{code: http.StatusInternalServerError}, Code: "NC-1172",
+			Runtime: EveryRuntime{},
+			Fields: []Field{
+				{Name: route, Schema: Nullable{Inner: InlineStruct{Fields: []Field{
+					{Name: method, Schema: Text{}},
+					{Name: path, Schema: Text{}},
+				}}}},
+			},
+			Answers: AnsweredByEveryRoute{},
+			Doc: "RequestCrashed is a request whose handler or layer crashed. Its route holds the declared method " +
+				"and path template, or null when no route matched.",
+			Message: []MessagePart{MessageText{Text: "The request crashed before its answer was written."}},
+		},
+		Route: route, RouteMethod: method, RoutePath: path,
+	}
+}
+
 // SharedFailures is every failure nocontract answers on a route's behalf, in the order each route
 // lists them.
 func SharedFailures() []SharedFailure {
 	return []SharedFailure{
+		RequestCrashed().Failure,
 		{
 			Name: "RequestCompletionUnavailable", Status: FailureStatus{code: http.StatusServiceUnavailable}, Code: "NC-1174",
 			Runtime: OdinRuntime{},

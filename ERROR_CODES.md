@@ -637,11 +637,11 @@ Message: `The API's declarations were refused.`
 ## NC-1063 SharedFieldUnsupported
 
 SharedFieldUnsupported is a field of one of nocontract's own failures whose schema the Go runtime
-declares no type for: only text, whole numbers, a set of string constants and a list of text have one.
+declares no type for.
 
 Declared in `go/writing/writing_runtime.go`.
 
-Message: `The field {Field} of {Failure} has no Go runtime type: only text, whole numbers, a set of string constants and a list of text have one.`
+Message: `The field {Field} of {Failure} has no Go runtime type.`
 
 | Field | Type |
 | --- | --- |
@@ -1817,6 +1817,18 @@ Message: `The request deadline {TimeoutMilliseconds} milliseconds is outside {Le
 | `TimeoutMilliseconds` | `uint32` |
 | `Least` | `uint32` |
 | `Most` | `uint32` |
+
+## NC-1172 RequestCrashed
+
+RequestCrashed is a request whose handler or layer crashed. Its route holds the declared method and path template, or null when no route matched.
+
+Declared in `go/nocontract_routes.go`.
+
+Message: `The request crashed before its answer was written.`
+
+| Field | Type |
+| --- | --- |
+| `Route` | `outcome.Option[nocontract.RequestCrashedRoute]` |
 
 ## NC-1174 RequestCompletionUnavailable
 

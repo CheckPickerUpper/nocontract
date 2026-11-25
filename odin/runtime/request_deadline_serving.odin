@@ -88,6 +88,7 @@ Worker_Answer :: union #no_nil { Uncomputed_Answer, Computed_Answer }
 Deadline_Request :: struct #all_or_none {
 	binding: Binding,
 	selected: Selected_Route,
+	crash_response: string,
 	request: Request,
 	visit: requestlayers.Visit,
 	layers: []requestlayers.Layer,
@@ -106,7 +107,7 @@ Deadline_Request :: struct #all_or_none {
 }
 
 @(private)
-start_deadline_request :: proc(api: ^Serving_API, response: ^http.Response, request: Request, selected: Selected_Route, visit: requestlayers.Visit, deadline: Configured_Deadline, started: time.Tick) {
+start_deadline_request :: proc(api: ^Serving_API, response: ^http.Response, request: Request, selected: Selected_Route, crash_response: string, visit: requestlayers.Visit, deadline: Configured_Deadline, started: time.Tick) {
 	descriptor, cause := linux.eventfd(0, {.CLOEXEC, .NONBLOCK})
 	if i32(cause) != 0 {
 		context.allocator = context.temp_allocator
@@ -117,6 +118,7 @@ start_deadline_request :: proc(api: ^Serving_API, response: ^http.Response, requ
 	work := new_clone(Deadline_Request{
 		binding = api.binding,
 		selected = selected,
+		crash_response = crash_response,
 		request = request,
 		visit = visit,
 		layers = api.layers,
@@ -184,6 +186,7 @@ copy_deadline_request :: proc(request: Request, received: Received_Request, life
 		headers = headers,
 		content = received,
 		lifetime = requestlifetime.Deadline_Lifetime{value = lifetime},
+		crash_connection = request.crash_connection,
 	}
 }
 
@@ -195,8 +198,8 @@ invoke_request_handler :: proc(work: ^Deadline_Request) {
 	context.allocator = mem.dynamic_arena_allocator(&work.arena)
 	context.temp_allocator = context.allocator
 	selected := work.selected
-	plan := Route_Plan{method = work.visit.method, selection = selected}
-	work.answer = Computed_Answer{value = answer_through_layers(work.layers, work.visit, plan, work.request)}
+	plan := Route_Plan{method = work.visit.method, selection = selected, crash_response = work.crash_response}
+	work.answer = Computed_Answer{value = answer_through_layers(work.binding, work.layers, work.visit, plan, work.request)}
 	snapshot := requestlifetime.read_request_lifetime(&work.lifetime)
 	if time.tick_diff(time.tick_now(), snapshot.deadline) <= 0 {
 		_ = requestlifetime.claim_deadline(&work.lifetime)

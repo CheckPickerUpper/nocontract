@@ -25,57 +25,62 @@ nc_strings_2 := []string{"GET"}
 nc_strings_3 := []string{"POST"}
 
 @(private)
-nc_wire_32 :: struct #all_or_none {
- field_0: nc_wire_60 `json:"balance"`,
- field_1: Maybe(nc_wire_60) `json:"overdraft"`,
+nc_wire_35 :: struct #all_or_none {
+ field_0: nc_wire_63 `json:"balance"`,
+ field_1: Maybe(nc_wire_63) `json:"overdraft"`,
  field_2: string `json:"changed"`,
  field_3: Maybe(string) `json:"note"`,
 }
 
 @(private)
-nc_wire_60 :: struct #all_or_none {
+nc_wire_63 :: struct #all_or_none {
  field_0: string `json:"cents"`,
  field_1: string `json:"currency"`,
 }
 
 @(private)
-nc_wire_33 :: struct #all_or_none {
+nc_wire_36 :: struct #all_or_none {
  field_0: string `json:"shopper_id"`,
 }
 
 @(private)
-nc_wire_34 :: struct #all_or_none {
+nc_wire_37 :: struct #all_or_none {
  field_0: string `json:"currency"`,
 }
 
 @(private)
-nc_wire_45 :: struct #all_or_none {
+nc_wire_48 :: struct #all_or_none {
  field_0: string `json:"scope"`,
 }
 
 @(private)
-nc_wire_46 :: struct #all_or_none {
+nc_wire_49 :: struct #all_or_none {
  field_0: string `json:"scope"`,
 }
 
 @(private)
-nc_wire_36 :: struct #all_or_none {
+nc_wire_39 :: struct #all_or_none {
  field_0: string `json:"reference"`,
 }
 
 @(private)
-nc_wire_37 :: struct #all_or_none {
+nc_wire_40 :: struct #all_or_none {
  field_0: []string `json:"reasons"`,
 }
 
 @(private)
-nc_wire_42 :: struct #all_or_none {
- field_0: nc_wire_41 `json:"order"`,
+nc_wire_44 :: struct #all_or_none {
+ field_0: string `json:"order_count"`,
 }
 
 @(private)
-nc_wire_41 :: struct #all_or_none {
- field_0: []nc_wire_74 `json:"items"`,
+nc_wire_46 :: struct #all_or_none {
+ field_0: nc_wire_45 `json:"order"`,
+}
+
+@(private)
+nc_wire_45 :: struct #all_or_none {
+ field_0: []nc_wire_77 `json:"items"`,
  field_1: Maybe(string) `json:"gift_note"`,
  field_2: [2]string `json:"deliver_between"`,
  field_3: bool `json:"wrapped"`,
@@ -84,19 +89,14 @@ nc_wire_41 :: struct #all_or_none {
 }
 
 @(private)
-nc_wire_74 :: struct #all_or_none {
+nc_wire_77 :: struct #all_or_none {
  field_0: string `json:"sku"`,
  field_1: u8 `json:"quantity"`,
- field_2: []nc_wire_74 `json:"included"`,
-}
-
-@(private)
-nc_wire_43 :: struct #all_or_none {
- field_0: string `json:"order_count"`,
+ field_2: []nc_wire_77 `json:"included"`,
 }
 
 @(private, require_results)
-nc_read_35 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_0.TopUpBody) {
+nc_read_38 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_0.TopUpBody) {
  field_0: nocontract.Body_Field(nc_package_0.Money) = nocontract.Field_Not_Read{}
  switch opened in nocontract.begin_body_container(parser, path, .Object) {
  case nocontract.Read_Value(nocontract.Container_Progress):
@@ -111,7 +111,7 @@ nc_read_35 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value(nc_package_0.Money): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_60(parser, child_path) {
+ switch read in nc_read_63(parser, child_path) {
  case nocontract.Read_Value(nc_package_0.Money): field_0 = read
  case nocontract.Request_Refusal: return read
  }
@@ -135,7 +135,7 @@ nc_read_35 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
 }
 
 @(private, require_results)
-nc_read_60 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_0.Money) {
+nc_read_63 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_0.Money) {
  field_0: nocontract.Body_Field(i64) = nocontract.Field_Not_Read{}
  field_1: nocontract.Body_Field(nc_package_0.Currency) = nocontract.Field_Not_Read{}
  switch opened in nocontract.begin_body_container(parser, path, .Object) {
@@ -151,7 +151,7 @@ nc_read_60 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value(i64): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_30(parser, child_path) {
+ switch read in nc_read_33(parser, child_path) {
  case nocontract.Read_Value(i64): field_0 = read
  case nocontract.Request_Refusal: return read
  }
@@ -160,7 +160,7 @@ nc_read_60 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value(nc_package_0.Currency): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_31(parser, child_path) {
+ switch read in nc_read_34(parser, child_path) {
  case nocontract.Read_Value(nc_package_0.Currency): field_1 = read
  case nocontract.Request_Refusal: return read
  }
@@ -188,7 +188,7 @@ nc_read_60 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
 }
 
 @(private, require_results)
-nc_read_30 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(i64) {
+nc_read_33 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(i64) {
  switch read in nocontract.read_body_signed(parser, path, .Decimal_String, nocontract.Signed_Integer_Range{least = -9223372036854775808, most = 9223372036854775807}) {
  case nocontract.Read_Value(i64): return nocontract.Read_Value(i64){value = i64(read.value)}
  case nocontract.Request_Refusal: return read
@@ -197,7 +197,7 @@ nc_read_30 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(i64
 }
 
 @(private, require_results)
-nc_read_31 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_0.Currency) {
+nc_read_34 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_0.Currency) {
  switch read in nocontract.read_body_text(parser, path) {
  case nocontract.Read_Value(string):
  switch read.value {
@@ -211,7 +211,7 @@ nc_read_31 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
 }
 
 @(private, require_results)
-nc_read_41 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_2.Order) {
+nc_read_45 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_2.Order) {
  field_0: nocontract.Body_Field([]nc_package_2.Item) = nocontract.Field_Not_Read{}
  field_1: nocontract.Body_Field(Maybe(string)) = nocontract.Field_Not_Read{}
  field_2: nocontract.Body_Field([2]nc_package_2.Instant) = nocontract.Field_Not_Read{}
@@ -231,7 +231,7 @@ nc_read_41 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value([]nc_package_2.Item): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_66(parser, child_path) {
+ switch read in nc_read_69(parser, child_path) {
  case nocontract.Read_Value([]nc_package_2.Item): field_0 = read
  case nocontract.Request_Refusal: return read
  }
@@ -240,7 +240,7 @@ nc_read_41 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value(Maybe(string)): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_63(parser, child_path) {
+ switch read in nc_read_66(parser, child_path) {
  case nocontract.Read_Value(Maybe(string)): field_1 = read
  case nocontract.Request_Refusal: return read
  }
@@ -249,7 +249,7 @@ nc_read_41 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value([2]nc_package_2.Instant): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_67(parser, child_path) {
+ switch read in nc_read_70(parser, child_path) {
  case nocontract.Read_Value([2]nc_package_2.Instant): field_2 = read
  case nocontract.Request_Refusal: return read
  }
@@ -258,7 +258,7 @@ nc_read_41 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value(bool): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_68(parser, child_path) {
+ switch read in nc_read_71(parser, child_path) {
  case nocontract.Read_Value(bool): field_3 = read
  case nocontract.Request_Refusal: return read
  }
@@ -267,7 +267,7 @@ nc_read_41 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value(map[string]f64): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_69(parser, child_path) {
+ switch read in nc_read_72(parser, child_path) {
  case nocontract.Read_Value(map[string]f64): field_4 = read
  case nocontract.Request_Refusal: return read
  }
@@ -276,7 +276,7 @@ nc_read_41 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value(map[nc_package_2.Courier]string): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_70(parser, child_path) {
+ switch read in nc_read_73(parser, child_path) {
  case nocontract.Read_Value(map[nc_package_2.Courier]string): field_5 = read
  case nocontract.Request_Refusal: return read
  }
@@ -320,13 +320,13 @@ nc_read_41 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
 }
 
 @(private, require_results)
-nc_read_66 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading([]nc_package_2.Item) {
+nc_read_69 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading([]nc_package_2.Item) {
  values := make([dynamic]nc_package_2.Item, context.temp_allocator)
  switch opened in nocontract.begin_body_container(parser, path, .List) {
  case nocontract.Read_Value(nocontract.Container_Progress):
  progress := opened.value
  for progress == .More {
- switch read in nc_read_74(parser, nocontract.body_child_path(path, nocontract.List_Item_Step{index = len(values)})) {
+ switch read in nc_read_77(parser, nocontract.body_child_path(path, nocontract.List_Item_Step{index = len(values)})) {
  case nocontract.Read_Value(nc_package_2.Item): append(&values, read.value)
  case nocontract.Request_Refusal: return read
  }
@@ -342,7 +342,7 @@ nc_read_66 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading([]n
 }
 
 @(private, require_results)
-nc_read_74 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_2.Item) {
+nc_read_77 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_2.Item) {
  field_0: nocontract.Body_Field(string) = nocontract.Field_Not_Read{}
  field_1: nocontract.Body_Field(u8) = nocontract.Field_Not_Read{}
  field_2: nocontract.Body_Field([]nc_package_2.Item) = nocontract.Field_Not_Read{}
@@ -359,7 +359,7 @@ nc_read_74 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value(string): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_16(parser, child_path) {
+ switch read in nc_read_18(parser, child_path) {
  case nocontract.Read_Value(string): field_0 = read
  case nocontract.Request_Refusal: return read
  }
@@ -368,7 +368,7 @@ nc_read_74 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value(u8): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_80(parser, child_path) {
+ switch read in nc_read_83(parser, child_path) {
  case nocontract.Read_Value(u8): field_1 = read
  case nocontract.Request_Refusal: return read
  }
@@ -377,7 +377,7 @@ nc_read_74 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
  case nocontract.Field_Not_Read:
  case nocontract.Read_Value([]nc_package_2.Item): return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}})
  }
- switch read in nc_read_66(parser, child_path) {
+ switch read in nc_read_69(parser, child_path) {
  case nocontract.Read_Value([]nc_package_2.Item): field_2 = read
  case nocontract.Request_Refusal: return read
  }
@@ -409,7 +409,7 @@ nc_read_74 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
 }
 
 @(private, require_results)
-nc_read_16 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(string) {
+nc_read_18 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(string) {
  switch read in nocontract.read_body_text(parser, path) {
  case nocontract.Read_Value(string): return nocontract.Read_Value(string){value = string(read.value)}
  case nocontract.Request_Refusal: return read
@@ -418,7 +418,7 @@ nc_read_16 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(str
 }
 
 @(private, require_results)
-nc_read_80 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(u8) {
+nc_read_83 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(u8) {
  switch read in nocontract.read_body_unsigned(parser, path, .JSON_Number, nocontract.Unsigned_Integer_Range{least = 0, most = 255}) {
  case nocontract.Read_Value(u64): return nocontract.Read_Value(u8){value = u8(read.value)}
  case nocontract.Request_Refusal: return read
@@ -427,7 +427,7 @@ nc_read_80 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(u8)
 }
 
 @(private, require_results)
-nc_read_63 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(Maybe(string)) {
+nc_read_66 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(Maybe(string)) {
  switch parser.curr_token.kind {
  case .Null:
  switch read in nocontract.consume_body_token(parser, path) {
@@ -435,7 +435,7 @@ nc_read_63 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(May
  case nocontract.Request_Refusal: return read
  }
  case .Invalid, .EOF, .False, .True, .Infinity, .NaN, .Ident, .Integer, .Float, .String, .Colon, .Comma, .Open_Brace, .Close_Brace, .Open_Bracket, .Close_Bracket:
- switch read in nc_read_16(parser, path) {
+ switch read in nc_read_18(parser, path) {
  case nocontract.Read_Value(string): return nocontract.Read_Value(Maybe(string)){value = read.value}
  case nocontract.Request_Refusal: return read
  }
@@ -444,13 +444,13 @@ nc_read_63 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(May
 }
 
 @(private, require_results)
-nc_read_67 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading([2]nc_package_2.Instant) {
+nc_read_70 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading([2]nc_package_2.Instant) {
  values := make([dynamic]nc_package_2.Instant, context.temp_allocator)
  switch opened in nocontract.begin_body_container(parser, path, .List) {
  case nocontract.Read_Value(nocontract.Container_Progress):
  progress := opened.value
  for progress == .More {
- switch read in nc_read_75(parser, nocontract.body_child_path(path, nocontract.List_Item_Step{index = len(values)})) {
+ switch read in nc_read_78(parser, nocontract.body_child_path(path, nocontract.List_Item_Step{index = len(values)})) {
  case nocontract.Read_Value(nc_package_2.Instant): append(&values, read.value)
  case nocontract.Request_Refusal: return read
  }
@@ -467,7 +467,7 @@ nc_read_67 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading([2]
 }
 
 @(private, require_results)
-nc_read_75 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_2.Instant) {
+nc_read_78 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_package_2.Instant) {
  switch read in nocontract.read_body_instant(parser, path) {
  case nocontract.Read_Value(string): return nocontract.Read_Value(nc_package_2.Instant){value = nc_package_2.Instant(read.value)}
  case nocontract.Request_Refusal: return read
@@ -476,7 +476,7 @@ nc_read_75 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(nc_
 }
 
 @(private, require_results)
-nc_read_68 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(bool) {
+nc_read_71 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(bool) {
  switch read in nocontract.read_body_truth(parser, path) {
  case nocontract.Read_Value(bool): return nocontract.Read_Value(bool){value = bool(read.value)}
  case nocontract.Request_Refusal: return read
@@ -485,7 +485,7 @@ nc_read_68 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(boo
 }
 
 @(private, require_results)
-nc_read_69 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(map[string]f64) {
+nc_read_72 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(map[string]f64) {
  values := make(map[string]f64, context.temp_allocator)
  switch opened in nocontract.begin_body_container(parser, path, .Object) {
  case nocontract.Read_Value(nocontract.Container_Progress):
@@ -496,7 +496,7 @@ nc_read_69 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(map
  child_path := nocontract.body_child_path(path, nocontract.Dictionary_Key_Step{key = key.value})
  native_key := string(key.value)
  if native_key in values { return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}}) }
- switch read in nc_read_76(parser, child_path) {
+ switch read in nc_read_79(parser, child_path) {
  case nocontract.Read_Value(f64): values[native_key] = read.value
  case nocontract.Request_Refusal: return read
  }
@@ -514,7 +514,7 @@ nc_read_69 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(map
 }
 
 @(private, require_results)
-nc_read_76 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(f64) {
+nc_read_79 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(f64) {
  original := parser.curr_token
  switch read in nocontract.read_body_number(parser, path) {
  case nocontract.Read_Value(f64):
@@ -527,7 +527,7 @@ nc_read_76 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(f64
 }
 
 @(private, require_results)
-nc_read_70 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(map[nc_package_2.Courier]string) {
+nc_read_73 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(map[nc_package_2.Courier]string) {
  values := make(map[nc_package_2.Courier]string, context.temp_allocator)
  switch opened in nocontract.begin_body_container(parser, path, .Object) {
  case nocontract.Read_Value(nocontract.Container_Progress):
@@ -540,14 +540,14 @@ nc_read_70 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(map
  case "drone":
  native_key := (nc_package_2.Courier).drone
  if native_key in values { return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}}) }
- switch read in nc_read_16(parser, child_path) {
+ switch read in nc_read_18(parser, child_path) {
  case nocontract.Read_Value(string): values[native_key] = read.value
  case nocontract.Request_Refusal: return read
  }
  case "post":
  native_key := (nc_package_2.Courier).post
  if native_key in values { return nocontract.Request_Refusal(nocontract.Body_Problem{path = child_path, kind = nocontract.Body_Member_Repeated{}}) }
- switch read in nc_read_16(parser, child_path) {
+ switch read in nc_read_18(parser, child_path) {
  case nocontract.Read_Value(string): values[native_key] = read.value
  case nocontract.Request_Refusal: return read
  }
@@ -567,7 +567,7 @@ nc_read_70 :: proc(parser: ^json.Parser, path: string) -> nocontract.Reading(map
 }
 
 @(private, require_results)
-nc_parameter_30 :: proc(source: nocontract.Parameter_Text) -> nocontract.Reading(i64) {
+nc_parameter_33 :: proc(source: nocontract.Parameter_Text) -> nocontract.Reading(i64) {
  switch read in nocontract.read_parameter_signed(source, nocontract.Signed_Integer_Range{least = -9223372036854775808, most = 9223372036854775807}) {
  case nocontract.Read_Value(i64): return nocontract.Read_Value(i64){value = i64(read.value)}
  case nocontract.Request_Refusal: return read
@@ -576,7 +576,7 @@ nc_parameter_30 :: proc(source: nocontract.Parameter_Text) -> nocontract.Reading
 }
 
 @(private, require_results)
-nc_parameter_31 :: proc(source: nocontract.Parameter_Text) -> nocontract.Reading(nc_package_0.Currency) {
+nc_parameter_34 :: proc(source: nocontract.Parameter_Text) -> nocontract.Reading(nc_package_0.Currency) {
  switch source.text {
  case "CAD": return nocontract.Read_Value(nc_package_0.Currency){value = (nc_package_0.Currency).CAD}
  case "USD": return nocontract.Read_Value(nc_package_0.Currency){value = (nc_package_0.Currency).USD}
@@ -585,7 +585,7 @@ nc_parameter_31 :: proc(source: nocontract.Parameter_Text) -> nocontract.Reading
 }
 
 @(private, require_results)
-nc_parameter_38 :: proc(source: nocontract.Parameter_Text) -> nocontract.Reading(u16) {
+nc_parameter_41 :: proc(source: nocontract.Parameter_Text) -> nocontract.Reading(u16) {
  switch read in nocontract.read_parameter_unsigned(source, nocontract.Unsigned_Integer_Range{least = 0, most = 65535}) {
  case nocontract.Read_Value(u64): return nocontract.Read_Value(u16){value = u16(read.value)}
  case nocontract.Request_Refusal: return read
@@ -594,16 +594,21 @@ nc_parameter_38 :: proc(source: nocontract.Parameter_Text) -> nocontract.Reading
 }
 
 @(private, require_results)
-nc_to_32 :: proc(input: nc_package_0.BalanceRead, path: string) -> nocontract.Value_Preparation(nc_wire_32) {
- switch field_0 in nc_to_60(input.balance, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "balance"})) {
- case nocontract.Prepared_Value(nc_wire_60):
- switch field_1 in nc_to_61(input.overdraft, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "overdraft"})) {
- case nocontract.Prepared_Value(Maybe(nc_wire_60)):
- switch field_2 in nc_to_62(input.changed, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "changed"})) {
+nc_parameter_18 :: proc(source: nocontract.Parameter_Text) -> nocontract.Reading(string) {
+ return nocontract.Read_Value(string){value = string(source.text)}
+}
+
+@(private, require_results)
+nc_to_35 :: proc(input: nc_package_0.BalanceRead, path: string) -> nocontract.Value_Preparation(nc_wire_35) {
+ switch field_0 in nc_to_63(input.balance, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "balance"})) {
+ case nocontract.Prepared_Value(nc_wire_63):
+ switch field_1 in nc_to_64(input.overdraft, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "overdraft"})) {
+ case nocontract.Prepared_Value(Maybe(nc_wire_63)):
+ switch field_2 in nc_to_65(input.changed, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "changed"})) {
  case nocontract.Prepared_Value(string):
- switch field_3 in nc_to_63(input.note, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "note"})) {
+ switch field_3 in nc_to_66(input.note, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "note"})) {
  case nocontract.Prepared_Value(Maybe(string)):
- return nocontract.Prepared_Value(nc_wire_32){value = nc_wire_32{field_0 = field_0.value, field_1 = field_1.value, field_2 = field_2.value, field_3 = field_3.value}}
+ return nocontract.Prepared_Value(nc_wire_35){value = nc_wire_35{field_0 = field_0.value, field_1 = field_1.value, field_2 = field_2.value, field_3 = field_3.value}}
  case nocontract.Value_Not_Prepared: return field_3
  }
  case nocontract.Value_Not_Prepared: return field_2
@@ -616,10 +621,10 @@ nc_to_32 :: proc(input: nc_package_0.BalanceRead, path: string) -> nocontract.Va
 }
 
 @(private, require_results)
-nc_answer_32 :: proc(answer: nc_package_0.BalanceRead) -> nocontract.Answer {
- switch prepared in nc_to_32(answer, "$") {
- case nocontract.Prepared_Value(nc_wire_32):
- value := struct #all_or_none {_tag: string,  field_0: nc_wire_60 `json:"balance"`, field_1: Maybe(nc_wire_60) `json:"overdraft"`, field_2: string `json:"changed"`, field_3: Maybe(string) `json:"note"`,}{_tag = "BalanceRead",  field_0 = prepared.value.field_0, field_1 = prepared.value.field_1, field_2 = prepared.value.field_2, field_3 = prepared.value.field_3,}
+nc_answer_35 :: proc(answer: nc_package_0.BalanceRead) -> nocontract.Answer {
+ switch prepared in nc_to_35(answer, "$") {
+ case nocontract.Prepared_Value(nc_wire_35):
+ value := struct #all_or_none {_tag: string,  field_0: nc_wire_63 `json:"balance"`, field_1: Maybe(nc_wire_63) `json:"overdraft"`, field_2: string `json:"changed"`, field_3: Maybe(string) `json:"note"`,}{_tag = "BalanceRead",  field_0 = prepared.value.field_0, field_1 = prepared.value.field_1, field_2 = prepared.value.field_2, field_3 = prepared.value.field_3,}
  return nc_encode_answer(value, nc_Answer_Metadata{tag = "BalanceRead", status = 200, code = {}})
  case nocontract.Value_Not_Prepared:
  return nc_shared_AnswerNotWritten(nc_fields_AnswerNotWritten{answer = "BalanceRead", reason = fmt.tprintf("%v", prepared)}, {})
@@ -628,12 +633,12 @@ nc_answer_32 :: proc(answer: nc_package_0.BalanceRead) -> nocontract.Answer {
 }
 
 @(private, require_results)
-nc_to_60 :: proc(input: nc_package_0.Money, path: string) -> nocontract.Value_Preparation(nc_wire_60) {
- switch field_0 in nc_to_30(input.cents, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "cents"})) {
+nc_to_63 :: proc(input: nc_package_0.Money, path: string) -> nocontract.Value_Preparation(nc_wire_63) {
+ switch field_0 in nc_to_33(input.cents, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "cents"})) {
  case nocontract.Prepared_Value(string):
- switch field_1 in nc_to_31(input.currency, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "currency"})) {
+ switch field_1 in nc_to_34(input.currency, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "currency"})) {
  case nocontract.Prepared_Value(string):
- return nocontract.Prepared_Value(nc_wire_60){value = nc_wire_60{field_0 = field_0.value, field_1 = field_1.value}}
+ return nocontract.Prepared_Value(nc_wire_63){value = nc_wire_63{field_0 = field_0.value, field_1 = field_1.value}}
  case nocontract.Value_Not_Prepared: return field_1
  }
  case nocontract.Value_Not_Prepared: return field_0
@@ -642,13 +647,13 @@ nc_to_60 :: proc(input: nc_package_0.Money, path: string) -> nocontract.Value_Pr
 }
 
 @(private, require_results)
-nc_to_30 :: proc(input: i64, path: string) -> nocontract.Value_Preparation(string) {
+nc_to_33 :: proc(input: i64, path: string) -> nocontract.Value_Preparation(string) {
  _ = path
  return nocontract.Prepared_Value(string){value = fmt.tprintf("%d", input)}
 }
 
 @(private, require_results)
-nc_to_31 :: proc(input: nc_package_0.Currency, path: string) -> nocontract.Value_Preparation(string) {
+nc_to_34 :: proc(input: nc_package_0.Currency, path: string) -> nocontract.Value_Preparation(string) {
  switch input {
  case .CAD: return nocontract.Prepared_Value(string){value = "CAD"}
  case .USD: return nocontract.Prepared_Value(string){value = "USD"}
@@ -657,12 +662,12 @@ nc_to_31 :: proc(input: nc_package_0.Currency, path: string) -> nocontract.Value
 }
 
 @(private, require_results)
-nc_to_61 :: proc(input: Maybe(nc_package_0.Money), path: string) -> nocontract.Value_Preparation(Maybe(nc_wire_60)) {
+nc_to_64 :: proc(input: Maybe(nc_package_0.Money), path: string) -> nocontract.Value_Preparation(Maybe(nc_wire_63)) {
  switch held in input {
- case nil: return nocontract.Prepared_Value(Maybe(nc_wire_60)){value = {}}
+ case nil: return nocontract.Prepared_Value(Maybe(nc_wire_63)){value = {}}
  case nc_package_0.Money:
- switch prepared in nc_to_60(held, path) {
- case nocontract.Prepared_Value(nc_wire_60): return nocontract.Prepared_Value(Maybe(nc_wire_60)){value = prepared.value}
+ switch prepared in nc_to_63(held, path) {
+ case nocontract.Prepared_Value(nc_wire_63): return nocontract.Prepared_Value(Maybe(nc_wire_63)){value = prepared.value}
  case nocontract.Value_Not_Prepared: return prepared
  }
  }
@@ -670,7 +675,7 @@ nc_to_61 :: proc(input: Maybe(nc_package_0.Money), path: string) -> nocontract.V
 }
 
 @(private, require_results)
-nc_to_62 :: proc(input: nc_package_0.Instant, path: string) -> nocontract.Value_Preparation(string) {
+nc_to_65 :: proc(input: nc_package_0.Instant, path: string) -> nocontract.Value_Preparation(string) {
  switch instant in nocontract.read_instant(string(input)) {
  case nocontract.UTC_Instant: return nocontract.Prepared_Value(string){value = instant.text}
  case nocontract.Instant_Not_Read: return nocontract.Value_Not_Prepared{path = path, cause = instant}
@@ -679,11 +684,11 @@ nc_to_62 :: proc(input: nc_package_0.Instant, path: string) -> nocontract.Value_
 }
 
 @(private, require_results)
-nc_to_63 :: proc(input: Maybe(string), path: string) -> nocontract.Value_Preparation(Maybe(string)) {
+nc_to_66 :: proc(input: Maybe(string), path: string) -> nocontract.Value_Preparation(Maybe(string)) {
  switch held in input {
  case nil: return nocontract.Prepared_Value(Maybe(string)){value = {}}
  case string:
- switch prepared in nc_to_16(held, path) {
+ switch prepared in nc_to_18(held, path) {
  case nocontract.Prepared_Value(string): return nocontract.Prepared_Value(Maybe(string)){value = prepared.value}
  case nocontract.Value_Not_Prepared: return prepared
  }
@@ -692,25 +697,25 @@ nc_to_63 :: proc(input: Maybe(string), path: string) -> nocontract.Value_Prepara
 }
 
 @(private, require_results)
-nc_to_16 :: proc(input: string, path: string) -> nocontract.Value_Preparation(string) {
+nc_to_18 :: proc(input: string, path: string) -> nocontract.Value_Preparation(string) {
  _ = path
  return nocontract.Prepared_Value(string){value = string(input)}
 }
 
 @(private, require_results)
-nc_to_33 :: proc(input: nc_package_0.ShopperNotFound, path: string) -> nocontract.Value_Preparation(nc_wire_33) {
- switch field_0 in nc_to_30(input.shopper_id, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "shopper_id"})) {
+nc_to_36 :: proc(input: nc_package_0.ShopperNotFound, path: string) -> nocontract.Value_Preparation(nc_wire_36) {
+ switch field_0 in nc_to_33(input.shopper_id, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "shopper_id"})) {
  case nocontract.Prepared_Value(string):
- return nocontract.Prepared_Value(nc_wire_33){value = nc_wire_33{field_0 = field_0.value}}
+ return nocontract.Prepared_Value(nc_wire_36){value = nc_wire_36{field_0 = field_0.value}}
  case nocontract.Value_Not_Prepared: return field_0
  }
  unreachable()
 }
 
 @(private, require_results)
-nc_answer_33 :: proc(answer: nc_package_0.ShopperNotFound) -> nocontract.Answer {
- switch prepared in nc_to_33(answer, "$") {
- case nocontract.Prepared_Value(nc_wire_33):
+nc_answer_36 :: proc(answer: nc_package_0.ShopperNotFound) -> nocontract.Answer {
+ switch prepared in nc_to_36(answer, "$") {
+ case nocontract.Prepared_Value(nc_wire_36):
  value := struct #all_or_none {_tag: string, code: string, field_0: string `json:"shopper_id"`,}{_tag = "ShopperNotFound", code = "SH-1001", field_0 = prepared.value.field_0,}
  return nc_encode_answer(value, nc_Answer_Metadata{tag = "ShopperNotFound", status = 404, code = "SH-1001"})
  case nocontract.Value_Not_Prepared:
@@ -720,19 +725,19 @@ nc_answer_33 :: proc(answer: nc_package_0.ShopperNotFound) -> nocontract.Answer 
 }
 
 @(private, require_results)
-nc_to_34 :: proc(input: nc_package_0.BalanceNotOpened, path: string) -> nocontract.Value_Preparation(nc_wire_34) {
- switch field_0 in nc_to_31(input.currency, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "currency"})) {
+nc_to_37 :: proc(input: nc_package_0.BalanceNotOpened, path: string) -> nocontract.Value_Preparation(nc_wire_37) {
+ switch field_0 in nc_to_34(input.currency, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "currency"})) {
  case nocontract.Prepared_Value(string):
- return nocontract.Prepared_Value(nc_wire_34){value = nc_wire_34{field_0 = field_0.value}}
+ return nocontract.Prepared_Value(nc_wire_37){value = nc_wire_37{field_0 = field_0.value}}
  case nocontract.Value_Not_Prepared: return field_0
  }
  unreachable()
 }
 
 @(private, require_results)
-nc_answer_34 :: proc(answer: nc_package_0.BalanceNotOpened) -> nocontract.Answer {
- switch prepared in nc_to_34(answer, "$") {
- case nocontract.Prepared_Value(nc_wire_34):
+nc_answer_37 :: proc(answer: nc_package_0.BalanceNotOpened) -> nocontract.Answer {
+ switch prepared in nc_to_37(answer, "$") {
+ case nocontract.Prepared_Value(nc_wire_37):
  value := struct #all_or_none {_tag: string, code: string, field_0: string `json:"currency"`,}{_tag = "BalanceNotOpened", code = "SH-1003", field_0 = prepared.value.field_0,}
  return nc_encode_answer(value, nc_Answer_Metadata{tag = "BalanceNotOpened", status = 404, code = "SH-1003"})
  case nocontract.Value_Not_Prepared:
@@ -742,19 +747,19 @@ nc_answer_34 :: proc(answer: nc_package_0.BalanceNotOpened) -> nocontract.Answer
 }
 
 @(private, require_results)
-nc_to_45 :: proc(input: nc_package_1.NotSignedIn, path: string) -> nocontract.Value_Preparation(nc_wire_45) {
- switch field_0 in nc_to_16(input.scope, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "scope"})) {
+nc_to_48 :: proc(input: nc_package_1.NotSignedIn, path: string) -> nocontract.Value_Preparation(nc_wire_48) {
+ switch field_0 in nc_to_18(input.scope, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "scope"})) {
  case nocontract.Prepared_Value(string):
- return nocontract.Prepared_Value(nc_wire_45){value = nc_wire_45{field_0 = field_0.value}}
+ return nocontract.Prepared_Value(nc_wire_48){value = nc_wire_48{field_0 = field_0.value}}
  case nocontract.Value_Not_Prepared: return field_0
  }
  unreachable()
 }
 
 @(private, require_results)
-nc_answer_45 :: proc(answer: nc_package_1.NotSignedIn) -> nocontract.Answer {
- switch prepared in nc_to_45(answer, "$") {
- case nocontract.Prepared_Value(nc_wire_45):
+nc_answer_48 :: proc(answer: nc_package_1.NotSignedIn) -> nocontract.Answer {
+ switch prepared in nc_to_48(answer, "$") {
+ case nocontract.Prepared_Value(nc_wire_48):
  value := struct #all_or_none {_tag: string, code: string, field_0: string `json:"scope"`,}{_tag = "NotSignedIn", code = "SH-1101", field_0 = prepared.value.field_0,}
  return nc_encode_answer(value, nc_Answer_Metadata{tag = "NotSignedIn", status = 401, code = "SH-1101"})
  case nocontract.Value_Not_Prepared:
@@ -764,19 +769,19 @@ nc_answer_45 :: proc(answer: nc_package_1.NotSignedIn) -> nocontract.Answer {
 }
 
 @(private, require_results)
-nc_to_46 :: proc(input: nc_package_1.ShopperCredentialRejected, path: string) -> nocontract.Value_Preparation(nc_wire_46) {
- switch field_0 in nc_to_16(input.scope, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "scope"})) {
+nc_to_49 :: proc(input: nc_package_1.ShopperCredentialRejected, path: string) -> nocontract.Value_Preparation(nc_wire_49) {
+ switch field_0 in nc_to_18(input.scope, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "scope"})) {
  case nocontract.Prepared_Value(string):
- return nocontract.Prepared_Value(nc_wire_46){value = nc_wire_46{field_0 = field_0.value}}
+ return nocontract.Prepared_Value(nc_wire_49){value = nc_wire_49{field_0 = field_0.value}}
  case nocontract.Value_Not_Prepared: return field_0
  }
  unreachable()
 }
 
 @(private, require_results)
-nc_answer_46 :: proc(answer: nc_package_1.ShopperCredentialRejected) -> nocontract.Answer {
- switch prepared in nc_to_46(answer, "$") {
- case nocontract.Prepared_Value(nc_wire_46):
+nc_answer_49 :: proc(answer: nc_package_1.ShopperCredentialRejected) -> nocontract.Answer {
+ switch prepared in nc_to_49(answer, "$") {
+ case nocontract.Prepared_Value(nc_wire_49):
  value := struct #all_or_none {_tag: string, code: string, field_0: string `json:"scope"`,}{_tag = "ShopperCredentialRejected", code = "SH-1102", field_0 = prepared.value.field_0,}
  return nc_encode_answer(value, nc_Answer_Metadata{tag = "ShopperCredentialRejected", status = 401, code = "SH-1102"})
  case nocontract.Value_Not_Prepared:
@@ -786,19 +791,19 @@ nc_answer_46 :: proc(answer: nc_package_1.ShopperCredentialRejected) -> nocontra
 }
 
 @(private, require_results)
-nc_to_36 :: proc(input: nc_package_0.TopUpQueued, path: string) -> nocontract.Value_Preparation(nc_wire_36) {
- switch field_0 in nc_to_16(input.reference, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "reference"})) {
+nc_to_39 :: proc(input: nc_package_0.TopUpQueued, path: string) -> nocontract.Value_Preparation(nc_wire_39) {
+ switch field_0 in nc_to_18(input.reference, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "reference"})) {
  case nocontract.Prepared_Value(string):
- return nocontract.Prepared_Value(nc_wire_36){value = nc_wire_36{field_0 = field_0.value}}
+ return nocontract.Prepared_Value(nc_wire_39){value = nc_wire_39{field_0 = field_0.value}}
  case nocontract.Value_Not_Prepared: return field_0
  }
  unreachable()
 }
 
 @(private, require_results)
-nc_answer_36 :: proc(answer: nc_package_0.TopUpQueued) -> nocontract.Answer {
- switch prepared in nc_to_36(answer, "$") {
- case nocontract.Prepared_Value(nc_wire_36):
+nc_answer_39 :: proc(answer: nc_package_0.TopUpQueued) -> nocontract.Answer {
+ switch prepared in nc_to_39(answer, "$") {
+ case nocontract.Prepared_Value(nc_wire_39):
  value := struct #all_or_none {_tag: string,  field_0: string `json:"reference"`,}{_tag = "TopUpQueued",  field_0 = prepared.value.field_0,}
  return nc_encode_answer(value, nc_Answer_Metadata{tag = "TopUpQueued", status = 202, code = {}})
  case nocontract.Value_Not_Prepared:
@@ -808,19 +813,19 @@ nc_answer_36 :: proc(answer: nc_package_0.TopUpQueued) -> nocontract.Answer {
 }
 
 @(private, require_results)
-nc_to_37 :: proc(input: nc_package_0.TopUpRefused, path: string) -> nocontract.Value_Preparation(nc_wire_37) {
- switch field_0 in nc_to_64(input.reasons, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "reasons"})) {
+nc_to_40 :: proc(input: nc_package_0.TopUpRefused, path: string) -> nocontract.Value_Preparation(nc_wire_40) {
+ switch field_0 in nc_to_67(input.reasons, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "reasons"})) {
  case nocontract.Prepared_Value([]string):
- return nocontract.Prepared_Value(nc_wire_37){value = nc_wire_37{field_0 = field_0.value}}
+ return nocontract.Prepared_Value(nc_wire_40){value = nc_wire_40{field_0 = field_0.value}}
  case nocontract.Value_Not_Prepared: return field_0
  }
  unreachable()
 }
 
 @(private, require_results)
-nc_answer_37 :: proc(answer: nc_package_0.TopUpRefused) -> nocontract.Answer {
- switch prepared in nc_to_37(answer, "$") {
- case nocontract.Prepared_Value(nc_wire_37):
+nc_answer_40 :: proc(answer: nc_package_0.TopUpRefused) -> nocontract.Answer {
+ switch prepared in nc_to_40(answer, "$") {
+ case nocontract.Prepared_Value(nc_wire_40):
  value := struct #all_or_none {_tag: string, code: string, field_0: []string `json:"reasons"`,}{_tag = "TopUpRefused", code = "SH-1002", field_0 = prepared.value.field_0,}
  return nc_encode_answer(value, nc_Answer_Metadata{tag = "TopUpRefused", status = 409, code = "SH-1002"})
  case nocontract.Value_Not_Prepared:
@@ -830,10 +835,10 @@ nc_answer_37 :: proc(answer: nc_package_0.TopUpRefused) -> nocontract.Answer {
 }
 
 @(private, require_results)
-nc_to_64 :: proc(input: []string, path: string) -> nocontract.Value_Preparation([]string) {
+nc_to_67 :: proc(input: []string, path: string) -> nocontract.Value_Preparation([]string) {
  output := make([]string, len(input), context.temp_allocator)
  for value, index in input {
- switch prepared in nc_to_16(value, nocontract.body_child_path(path, nocontract.List_Item_Step{index = index})) {
+ switch prepared in nc_to_18(value, nocontract.body_child_path(path, nocontract.List_Item_Step{index = index})) {
  case nocontract.Prepared_Value(string): output[index] = prepared.value
  case nocontract.Value_Not_Prepared: return prepared
  }
@@ -842,20 +847,42 @@ nc_to_64 :: proc(input: []string, path: string) -> nocontract.Value_Preparation(
 }
 
 @(private, require_results)
-nc_to_42 :: proc(input: nc_package_2.OrderPlaced, path: string) -> nocontract.Value_Preparation(nc_wire_42) {
- switch field_0 in nc_to_41(input.order, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "order"})) {
- case nocontract.Prepared_Value(nc_wire_41):
- return nocontract.Prepared_Value(nc_wire_42){value = nc_wire_42{field_0 = field_0.value}}
+nc_to_44 :: proc(input: nc_package_2.OrderCountRead, path: string) -> nocontract.Value_Preparation(nc_wire_44) {
+ switch field_0 in nc_to_33(input.order_count, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "order_count"})) {
+ case nocontract.Prepared_Value(string):
+ return nocontract.Prepared_Value(nc_wire_44){value = nc_wire_44{field_0 = field_0.value}}
  case nocontract.Value_Not_Prepared: return field_0
  }
  unreachable()
 }
 
 @(private, require_results)
-nc_answer_42 :: proc(answer: nc_package_2.OrderPlaced) -> nocontract.Answer {
- switch prepared in nc_to_42(answer, "$") {
- case nocontract.Prepared_Value(nc_wire_42):
- value := struct #all_or_none {_tag: string,  field_0: nc_wire_41 `json:"order"`,}{_tag = "OrderPlaced",  field_0 = prepared.value.field_0,}
+nc_answer_44 :: proc(answer: nc_package_2.OrderCountRead) -> nocontract.Answer {
+ switch prepared in nc_to_44(answer, "$") {
+ case nocontract.Prepared_Value(nc_wire_44):
+ value := struct #all_or_none {_tag: string,  field_0: string `json:"order_count"`,}{_tag = "OrderCountRead",  field_0 = prepared.value.field_0,}
+ return nc_encode_answer(value, nc_Answer_Metadata{tag = "OrderCountRead", status = 200, code = {}})
+ case nocontract.Value_Not_Prepared:
+ return nc_shared_AnswerNotWritten(nc_fields_AnswerNotWritten{answer = "OrderCountRead", reason = fmt.tprintf("%v", prepared)}, {})
+ }
+ unreachable()
+}
+
+@(private, require_results)
+nc_to_46 :: proc(input: nc_package_2.OrderPlaced, path: string) -> nocontract.Value_Preparation(nc_wire_46) {
+ switch field_0 in nc_to_45(input.order, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "order"})) {
+ case nocontract.Prepared_Value(nc_wire_45):
+ return nocontract.Prepared_Value(nc_wire_46){value = nc_wire_46{field_0 = field_0.value}}
+ case nocontract.Value_Not_Prepared: return field_0
+ }
+ unreachable()
+}
+
+@(private, require_results)
+nc_answer_46 :: proc(answer: nc_package_2.OrderPlaced) -> nocontract.Answer {
+ switch prepared in nc_to_46(answer, "$") {
+ case nocontract.Prepared_Value(nc_wire_46):
+ value := struct #all_or_none {_tag: string,  field_0: nc_wire_45 `json:"order"`,}{_tag = "OrderPlaced",  field_0 = prepared.value.field_0,}
  return nc_encode_answer(value, nc_Answer_Metadata{tag = "OrderPlaced", status = 201, code = {}})
  case nocontract.Value_Not_Prepared:
  return nc_shared_AnswerNotWritten(nc_fields_AnswerNotWritten{answer = "OrderPlaced", reason = fmt.tprintf("%v", prepared)}, {})
@@ -864,20 +891,20 @@ nc_answer_42 :: proc(answer: nc_package_2.OrderPlaced) -> nocontract.Answer {
 }
 
 @(private, require_results)
-nc_to_41 :: proc(input: nc_package_2.Order, path: string) -> nocontract.Value_Preparation(nc_wire_41) {
- switch field_0 in nc_to_66(input.items, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "items"})) {
- case nocontract.Prepared_Value([]nc_wire_74):
- switch field_1 in nc_to_63(input.gift_note, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "gift_note"})) {
+nc_to_45 :: proc(input: nc_package_2.Order, path: string) -> nocontract.Value_Preparation(nc_wire_45) {
+ switch field_0 in nc_to_69(input.items, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "items"})) {
+ case nocontract.Prepared_Value([]nc_wire_77):
+ switch field_1 in nc_to_66(input.gift_note, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "gift_note"})) {
  case nocontract.Prepared_Value(Maybe(string)):
- switch field_2 in nc_to_67(input.deliver_between, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "deliver_between"})) {
+ switch field_2 in nc_to_70(input.deliver_between, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "deliver_between"})) {
  case nocontract.Prepared_Value([2]string):
- switch field_3 in nc_to_68(input.wrapped, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "wrapped"})) {
+ switch field_3 in nc_to_71(input.wrapped, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "wrapped"})) {
  case nocontract.Prepared_Value(bool):
- switch field_4 in nc_to_69(input.tips, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "tips"})) {
+ switch field_4 in nc_to_72(input.tips, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "tips"})) {
  case nocontract.Prepared_Value(map[string]f64):
- switch field_5 in nc_to_70(input.courier_notes, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "courier_notes"})) {
+ switch field_5 in nc_to_73(input.courier_notes, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "courier_notes"})) {
  case nocontract.Prepared_Value(map[string]string):
- return nocontract.Prepared_Value(nc_wire_41){value = nc_wire_41{field_0 = field_0.value, field_1 = field_1.value, field_2 = field_2.value, field_3 = field_3.value, field_4 = field_4.value, field_5 = field_5.value}}
+ return nocontract.Prepared_Value(nc_wire_45){value = nc_wire_45{field_0 = field_0.value, field_1 = field_1.value, field_2 = field_2.value, field_3 = field_3.value, field_4 = field_4.value, field_5 = field_5.value}}
  case nocontract.Value_Not_Prepared: return field_5
  }
  case nocontract.Value_Not_Prepared: return field_4
@@ -894,26 +921,26 @@ nc_to_41 :: proc(input: nc_package_2.Order, path: string) -> nocontract.Value_Pr
 }
 
 @(private, require_results)
-nc_to_66 :: proc(input: []nc_package_2.Item, path: string) -> nocontract.Value_Preparation([]nc_wire_74) {
- output := make([]nc_wire_74, len(input), context.temp_allocator)
+nc_to_69 :: proc(input: []nc_package_2.Item, path: string) -> nocontract.Value_Preparation([]nc_wire_77) {
+ output := make([]nc_wire_77, len(input), context.temp_allocator)
  for value, index in input {
- switch prepared in nc_to_74(value, nocontract.body_child_path(path, nocontract.List_Item_Step{index = index})) {
- case nocontract.Prepared_Value(nc_wire_74): output[index] = prepared.value
+ switch prepared in nc_to_77(value, nocontract.body_child_path(path, nocontract.List_Item_Step{index = index})) {
+ case nocontract.Prepared_Value(nc_wire_77): output[index] = prepared.value
  case nocontract.Value_Not_Prepared: return prepared
  }
  }
- return nocontract.Prepared_Value([]nc_wire_74){value = output}
+ return nocontract.Prepared_Value([]nc_wire_77){value = output}
 }
 
 @(private, require_results)
-nc_to_74 :: proc(input: nc_package_2.Item, path: string) -> nocontract.Value_Preparation(nc_wire_74) {
- switch field_0 in nc_to_16(input.sku, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "sku"})) {
+nc_to_77 :: proc(input: nc_package_2.Item, path: string) -> nocontract.Value_Preparation(nc_wire_77) {
+ switch field_0 in nc_to_18(input.sku, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "sku"})) {
  case nocontract.Prepared_Value(string):
- switch field_1 in nc_to_80(input.quantity, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "quantity"})) {
+ switch field_1 in nc_to_83(input.quantity, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "quantity"})) {
  case nocontract.Prepared_Value(u8):
- switch field_2 in nc_to_66(input.included, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "included"})) {
- case nocontract.Prepared_Value([]nc_wire_74):
- return nocontract.Prepared_Value(nc_wire_74){value = nc_wire_74{field_0 = field_0.value, field_1 = field_1.value, field_2 = field_2.value}}
+ switch field_2 in nc_to_69(input.included, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "included"})) {
+ case nocontract.Prepared_Value([]nc_wire_77):
+ return nocontract.Prepared_Value(nc_wire_77){value = nc_wire_77{field_0 = field_0.value, field_1 = field_1.value, field_2 = field_2.value}}
  case nocontract.Value_Not_Prepared: return field_2
  }
  case nocontract.Value_Not_Prepared: return field_1
@@ -924,16 +951,16 @@ nc_to_74 :: proc(input: nc_package_2.Item, path: string) -> nocontract.Value_Pre
 }
 
 @(private, require_results)
-nc_to_80 :: proc(input: u8, path: string) -> nocontract.Value_Preparation(u8) {
+nc_to_83 :: proc(input: u8, path: string) -> nocontract.Value_Preparation(u8) {
  _ = path
  return nocontract.Prepared_Value(u8){value = u8(input)}
 }
 
 @(private, require_results)
-nc_to_67 :: proc(input: [2]nc_package_2.Instant, path: string) -> nocontract.Value_Preparation([2]string) {
+nc_to_70 :: proc(input: [2]nc_package_2.Instant, path: string) -> nocontract.Value_Preparation([2]string) {
  output := [2]string{}
  for value, index in input {
- switch prepared in nc_to_75(value, nocontract.body_child_path(path, nocontract.List_Item_Step{index = index})) {
+ switch prepared in nc_to_78(value, nocontract.body_child_path(path, nocontract.List_Item_Step{index = index})) {
  case nocontract.Prepared_Value(string): output[index] = prepared.value
  case nocontract.Value_Not_Prepared: return prepared
  }
@@ -942,7 +969,7 @@ nc_to_67 :: proc(input: [2]nc_package_2.Instant, path: string) -> nocontract.Val
 }
 
 @(private, require_results)
-nc_to_75 :: proc(input: nc_package_2.Instant, path: string) -> nocontract.Value_Preparation(string) {
+nc_to_78 :: proc(input: nc_package_2.Instant, path: string) -> nocontract.Value_Preparation(string) {
  switch instant in nocontract.read_instant(string(input)) {
  case nocontract.UTC_Instant: return nocontract.Prepared_Value(string){value = instant.text}
  case nocontract.Instant_Not_Read: return nocontract.Value_Not_Prepared{path = path, cause = instant}
@@ -951,18 +978,18 @@ nc_to_75 :: proc(input: nc_package_2.Instant, path: string) -> nocontract.Value_
 }
 
 @(private, require_results)
-nc_to_68 :: proc(input: bool, path: string) -> nocontract.Value_Preparation(bool) {
+nc_to_71 :: proc(input: bool, path: string) -> nocontract.Value_Preparation(bool) {
  _ = path
  return nocontract.Prepared_Value(bool){value = bool(input)}
 }
 
 @(private, require_results)
-nc_to_69 :: proc(input: map[string]f64, path: string) -> nocontract.Value_Preparation(map[string]f64) {
+nc_to_72 :: proc(input: map[string]f64, path: string) -> nocontract.Value_Preparation(map[string]f64) {
  output := make(map[string]f64, context.temp_allocator)
  for key, value in input {
- switch prepared_key in nc_to_16(key, path) {
+ switch prepared_key in nc_to_18(key, path) {
  case nocontract.Prepared_Value(string):
- switch prepared_value in nc_to_76(value, nocontract.body_child_path(path, nocontract.Dictionary_Key_Step{key = prepared_key.value})) {
+ switch prepared_value in nc_to_79(value, nocontract.body_child_path(path, nocontract.Dictionary_Key_Step{key = prepared_key.value})) {
  case nocontract.Prepared_Value(f64): output[prepared_key.value] = prepared_value.value
  case nocontract.Value_Not_Prepared: return prepared_value
  }
@@ -973,18 +1000,18 @@ nc_to_69 :: proc(input: map[string]f64, path: string) -> nocontract.Value_Prepar
 }
 
 @(private, require_results)
-nc_to_76 :: proc(input: f64, path: string) -> nocontract.Value_Preparation(f64) {
+nc_to_79 :: proc(input: f64, path: string) -> nocontract.Value_Preparation(f64) {
  _ = path
  return nocontract.Prepared_Value(f64){value = f64(input)}
 }
 
 @(private, require_results)
-nc_to_70 :: proc(input: map[nc_package_2.Courier]string, path: string) -> nocontract.Value_Preparation(map[string]string) {
+nc_to_73 :: proc(input: map[nc_package_2.Courier]string, path: string) -> nocontract.Value_Preparation(map[string]string) {
  output := make(map[string]string, context.temp_allocator)
  for key, value in input {
- switch prepared_key in nc_to_77(key, path) {
+ switch prepared_key in nc_to_80(key, path) {
  case nocontract.Prepared_Value(string):
- switch prepared_value in nc_to_16(value, nocontract.body_child_path(path, nocontract.Dictionary_Key_Step{key = prepared_key.value})) {
+ switch prepared_value in nc_to_18(value, nocontract.body_child_path(path, nocontract.Dictionary_Key_Step{key = prepared_key.value})) {
  case nocontract.Prepared_Value(string): output[prepared_key.value] = prepared_value.value
  case nocontract.Value_Not_Prepared: return prepared_value
  }
@@ -995,34 +1022,12 @@ nc_to_70 :: proc(input: map[nc_package_2.Courier]string, path: string) -> nocont
 }
 
 @(private, require_results)
-nc_to_77 :: proc(input: nc_package_2.Courier, path: string) -> nocontract.Value_Preparation(string) {
+nc_to_80 :: proc(input: nc_package_2.Courier, path: string) -> nocontract.Value_Preparation(string) {
  switch input {
  case .drone: return nocontract.Prepared_Value(string){value = "drone"}
  case .post: return nocontract.Prepared_Value(string){value = "post"}
  }
  return nocontract.Value_Not_Prepared{path = path, cause = nocontract.Native_Literal_Outside{native_type = nc_package_2.Courier, read = fmt.tprintf("%v", input), declared = nc_strings_1}}
-}
-
-@(private, require_results)
-nc_to_43 :: proc(input: nc_package_2.OrderCountRead, path: string) -> nocontract.Value_Preparation(nc_wire_43) {
- switch field_0 in nc_to_30(input.order_count, nocontract.body_child_path(path, nocontract.Object_Field_Step{name = "order_count"})) {
- case nocontract.Prepared_Value(string):
- return nocontract.Prepared_Value(nc_wire_43){value = nc_wire_43{field_0 = field_0.value}}
- case nocontract.Value_Not_Prepared: return field_0
- }
- unreachable()
-}
-
-@(private, require_results)
-nc_answer_43 :: proc(answer: nc_package_2.OrderCountRead) -> nocontract.Answer {
- switch prepared in nc_to_43(answer, "$") {
- case nocontract.Prepared_Value(nc_wire_43):
- value := struct #all_or_none {_tag: string,  field_0: string `json:"order_count"`,}{_tag = "OrderCountRead",  field_0 = prepared.value.field_0,}
- return nc_encode_answer(value, nc_Answer_Metadata{tag = "OrderCountRead", status = 200, code = {}})
- case nocontract.Value_Not_Prepared:
- return nc_shared_AnswerNotWritten(nc_fields_AnswerNotWritten{answer = "OrderCountRead", reason = fmt.tprintf("%v", prepared)}, {})
- }
- unreachable()
 }
 
 @(private)
@@ -1124,6 +1129,32 @@ nc_shared_MethodNotDeclared :: proc(fields: nc_fields_MethodNotDeclared, allowed
 }
 
 @(private)
+nc_crash_unmatched :: "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 55\r\nConnection: close\r\n\r\n{\"_tag\":\"RequestCrashed\",\"code\":\"NC-1172\",\"route\":null}"
+
+@(private)
+nc_crash_0 :: "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 107\r\nConnection: close\r\n\r\n{\"_tag\":\"RequestCrashed\",\"code\":\"NC-1172\",\"route\":{\"method\":\"GET\",\"path\":\"/shoppers/{shopper_id}/balance\"}}"
+
+@(private)
+nc_crash_1 :: "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 115\r\nConnection: close\r\n\r\n{\"_tag\":\"RequestCrashed\",\"code\":\"NC-1172\",\"route\":{\"method\":\"GET\",\"path\":\"/shoppers/{shopper_id}/delayed-balance\"}}"
+
+@(private)
+nc_crash_2 :: "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 108\r\nConnection: close\r\n\r\n{\"_tag\":\"RequestCrashed\",\"code\":\"NC-1172\",\"route\":{\"method\":\"POST\",\"path\":\"/shoppers/{shopper_id}/top-ups\"}}"
+
+@(private)
+nc_crash_3 :: "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 93\r\nConnection: close\r\n\r\n{\"_tag\":\"RequestCrashed\",\"code\":\"NC-1172\",\"route\":{\"method\":\"GET\",\"path\":\"/crashes/{cause}\"}}"
+
+@(private)
+nc_crash_4 :: "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 107\r\nConnection: close\r\n\r\n{\"_tag\":\"RequestCrashed\",\"code\":\"NC-1172\",\"route\":{\"method\":\"POST\",\"path\":\"/shoppers/{shopper_id}/orders\"}}"
+
+@(private)
+nc_crash_5 :: "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 97\r\nConnection: close\r\n\r\n{\"_tag\":\"RequestCrashed\",\"code\":\"NC-1172\",\"route\":{\"method\":\"GET\",\"path\":\"/headers/order-count\"}}"
+
+@(private, require_results)
+nc_protection_unavailable :: proc(refusal: nocontract.Request_Protection_Unavailable) -> nocontract.Answer {
+ return nc_shared_AnswerNotWritten(nc_fields_AnswerNotWritten{answer = "request protection", reason = fmt.tprintf("the %d-byte request signal stack was not installed: %v", refusal.bytes, refusal.cause)}, {})
+}
+
+@(private)
 nc_Answer_Metadata :: struct #all_or_none {
 	tag: string,
 	status: int,
@@ -1170,11 +1201,11 @@ nc_method_refused :: proc(method: string, allowed: []string) -> nocontract.Answe
 @(private, require_results)
 nc_input_0 :: proc(request: nocontract.Request, _: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Reading(nc_package_0.ReadInput) {
  query := nocontract.read_query_parameters(request.query)
- switch value_0 in nc_parameter_30(nocontract.Parameter_Text{part = .Path, name = "shopper_id", text = parameters["shopper_id"]}) {
+ switch value_0 in nc_parameter_33(nocontract.Parameter_Text{part = .Path, name = "shopper_id", text = parameters["shopper_id"]}) {
  case nocontract.Read_Value(i64):
  switch parameter_1 in nocontract.query_parameter(query, "currency") {
  case nocontract.Read_Value(nocontract.Parameter_Text):
- switch value_1 in nc_parameter_31(parameter_1.value) {
+ switch value_1 in nc_parameter_34(parameter_1.value) {
  case nocontract.Read_Value(nc_package_0.Currency):
  return nocontract.Read_Value(nc_package_0.ReadInput){value = nc_package_0.ReadInput{shopper_id = value_0.value, currency = value_1.value}}
  case nocontract.Request_Refusal: return value_1
@@ -1191,16 +1222,16 @@ nc_route_0 :: proc(request: nocontract.Request, received: nocontract.Received_Re
  switch guarded in nc_package_1.Check("read-balance", request.headers) {
  case nc_package_1.Admitted:
  case nc_package_1.NotSignedIn:
- return nc_answer_45(guarded)
+ return nc_answer_48(guarded)
  case nc_package_1.ShopperCredentialRejected:
- return nc_answer_46(guarded)
+ return nc_answer_49(guarded)
  }
  switch input in nc_input_0(request, received, parameters) {
  case nocontract.Read_Value(nc_package_0.ReadInput):
  switch answer in nc_package_0.ReadBalance(input.value) {
- case nc_package_0.BalanceRead: return nc_answer_32(answer)
- case nc_package_0.ShopperNotFound: return nc_answer_33(answer)
- case nc_package_0.BalanceNotOpened: return nc_answer_34(answer)
+ case nc_package_0.BalanceRead: return nc_answer_35(answer)
+ case nc_package_0.ShopperNotFound: return nc_answer_36(answer)
+ case nc_package_0.BalanceNotOpened: return nc_answer_37(answer)
  }
  case nocontract.Request_Refusal: return nc_request_refused(input)
  }
@@ -1210,15 +1241,15 @@ nc_route_0 :: proc(request: nocontract.Request, received: nocontract.Received_Re
 @(private, require_results)
 nc_input_1 :: proc(request: nocontract.Request, _: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Reading(nc_package_0.DelayedReadInput) {
  query := nocontract.read_query_parameters(request.query)
- switch value_0 in nc_parameter_30(nocontract.Parameter_Text{part = .Path, name = "shopper_id", text = parameters["shopper_id"]}) {
+ switch value_0 in nc_parameter_33(nocontract.Parameter_Text{part = .Path, name = "shopper_id", text = parameters["shopper_id"]}) {
  case nocontract.Read_Value(i64):
  switch parameter_1 in nocontract.query_parameter(query, "currency") {
  case nocontract.Read_Value(nocontract.Parameter_Text):
- switch value_1 in nc_parameter_31(parameter_1.value) {
+ switch value_1 in nc_parameter_34(parameter_1.value) {
  case nocontract.Read_Value(nc_package_0.Currency):
  switch parameter_2 in nocontract.query_parameter(query, "delay_milliseconds") {
  case nocontract.Read_Value(nocontract.Parameter_Text):
- switch value_2 in nc_parameter_38(parameter_2.value) {
+ switch value_2 in nc_parameter_41(parameter_2.value) {
  case nocontract.Read_Value(u16):
  return nocontract.Read_Value(nc_package_0.DelayedReadInput){value = nc_package_0.DelayedReadInput{shopper_id = value_0.value, currency = value_1.value, delay_milliseconds = value_2.value}}
  case nocontract.Request_Refusal: return value_2
@@ -1239,9 +1270,9 @@ nc_route_1 :: proc(request: nocontract.Request, received: nocontract.Received_Re
  switch input in nc_input_1(request, received, parameters) {
  case nocontract.Read_Value(nc_package_0.DelayedReadInput):
  switch answer in nc_package_0.ReadDelayedBalance(input.value, request.lifetime) {
- case nc_package_0.BalanceRead: return nc_answer_32(answer)
- case nc_package_0.ShopperNotFound: return nc_answer_33(answer)
- case nc_package_0.BalanceNotOpened: return nc_answer_34(answer)
+ case nc_package_0.BalanceRead: return nc_answer_35(answer)
+ case nc_package_0.ShopperNotFound: return nc_answer_36(answer)
+ case nc_package_0.BalanceNotOpened: return nc_answer_37(answer)
  }
  case nocontract.Request_Refusal: return nc_request_refused(input)
  }
@@ -1250,12 +1281,12 @@ nc_route_1 :: proc(request: nocontract.Request, received: nocontract.Received_Re
 
 @(private, require_results)
 nc_input_2 :: proc(_: nocontract.Request, received: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Reading(nc_package_0.TopUpInput) {
- switch value_0 in nc_parameter_30(nocontract.Parameter_Text{part = .Path, name = "shopper_id", text = parameters["shopper_id"]}) {
+ switch value_0 in nc_parameter_33(nocontract.Parameter_Text{part = .Path, name = "shopper_id", text = parameters["shopper_id"]}) {
  case nocontract.Read_Value(i64):
  switch body in nocontract.start_request_body(received.body) {
  case nocontract.Body_Started:
  parser := body.parser
- switch value_1 in nc_read_35(&parser, "body") {
+ switch value_1 in nc_read_38(&parser, "body") {
  case nocontract.Read_Value(nc_package_0.TopUpBody):
  switch finished in nocontract.finish_body(&parser) {
  case nocontract.Read_Value(nocontract.Body_Finished):
@@ -1276,9 +1307,9 @@ nc_route_2 :: proc(request: nocontract.Request, received: nocontract.Received_Re
  switch input in nc_input_2(request, received, parameters) {
  case nocontract.Read_Value(nc_package_0.TopUpInput):
  switch answer in nc_package_0.TopUp(input.value) {
- case nc_package_0.TopUpQueued: return nc_answer_36(answer)
- case nc_package_0.TopUpRefused: return nc_answer_37(answer)
- case nc_package_0.ShopperNotFound: return nc_answer_33(answer)
+ case nc_package_0.TopUpQueued: return nc_answer_39(answer)
+ case nc_package_0.TopUpRefused: return nc_answer_40(answer)
+ case nc_package_0.ShopperNotFound: return nc_answer_36(answer)
  }
  case nocontract.Request_Refusal: return nc_request_refused(input)
  }
@@ -1286,18 +1317,41 @@ nc_route_2 :: proc(request: nocontract.Request, received: nocontract.Received_Re
 }
 
 @(private, require_results)
-nc_input_3 :: proc(request: nocontract.Request, received: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Reading(nc_package_2.PlaceInput) {
+nc_input_3 :: proc(_: nocontract.Request, _: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Reading(nc_package_2.CrashInput) {
+ switch value_0 in nc_parameter_18(nocontract.Parameter_Text{part = .Path, name = "cause", text = parameters["cause"]}) {
+ case nocontract.Read_Value(string):
+ return nocontract.Read_Value(nc_package_2.CrashInput){value = nc_package_2.CrashInput{cause = value_0.value}}
+ case nocontract.Request_Refusal: return value_0
+ }
+ unreachable()
+}
+
+@(private, require_results)
+nc_route_3 :: proc(request: nocontract.Request, received: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Answer {
+ switch input in nc_input_3(request, received, parameters) {
+ case nocontract.Read_Value(nc_package_2.CrashInput):
+ switch answer in nc_package_2.Crash(input.value) {
+ case nc_package_2.OrderCountRead: return nc_answer_44(answer)
+ case nil: return nc_shared_AnswerNotWritten(nc_fields_AnswerNotWritten{answer = "", reason = "the route answered no outcome"}, {})
+ }
+ case nocontract.Request_Refusal: return nc_request_refused(input)
+ }
+ unreachable()
+}
+
+@(private, require_results)
+nc_input_4 :: proc(request: nocontract.Request, received: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Reading(nc_package_2.PlaceInput) {
  query := nocontract.read_query_parameters(request.query)
- switch value_0 in nc_parameter_30(nocontract.Parameter_Text{part = .Path, name = "shopper_id", text = parameters["shopper_id"]}) {
+ switch value_0 in nc_parameter_33(nocontract.Parameter_Text{part = .Path, name = "shopper_id", text = parameters["shopper_id"]}) {
  case nocontract.Read_Value(i64):
  switch parameter_1 in nocontract.query_parameter(query, "store") {
  case nocontract.Read_Value(nocontract.Parameter_Text):
- switch value_1 in nc_parameter_38(parameter_1.value) {
+ switch value_1 in nc_parameter_41(parameter_1.value) {
  case nocontract.Read_Value(u16):
  switch body in nocontract.start_request_body(received.body) {
  case nocontract.Body_Started:
  parser := body.parser
- switch value_2 in nc_read_41(&parser, "body") {
+ switch value_2 in nc_read_45(&parser, "body") {
  case nocontract.Read_Value(nc_package_2.Order):
  switch finished in nocontract.finish_body(&parser) {
  case nocontract.Read_Value(nocontract.Body_Finished):
@@ -1318,11 +1372,11 @@ nc_input_3 :: proc(request: nocontract.Request, received: nocontract.Received_Re
 }
 
 @(private, require_results)
-nc_route_3 :: proc(request: nocontract.Request, received: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Answer {
- switch input in nc_input_3(request, received, parameters) {
+nc_route_4 :: proc(request: nocontract.Request, received: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Answer {
+ switch input in nc_input_4(request, received, parameters) {
  case nocontract.Read_Value(nc_package_2.PlaceInput):
  switch answer in nc_package_2.Place(input.value) {
- case nc_package_2.OrderPlaced: return nc_answer_42(answer)
+ case nc_package_2.OrderPlaced: return nc_answer_46(answer)
  case nil: return nc_shared_AnswerNotWritten(nc_fields_AnswerNotWritten{answer = "", reason = "the route answered no outcome"}, {})
  }
  case nocontract.Request_Refusal: return nc_request_refused(input)
@@ -1331,10 +1385,10 @@ nc_route_3 :: proc(request: nocontract.Request, received: nocontract.Received_Re
 }
 
 @(private, require_results)
-nc_input_4 :: proc(request: nocontract.Request, _: nocontract.Received_Request, _: map[string]string) -> nocontract.Reading(nc_package_2.OrderCountInput) {
+nc_input_5 :: proc(request: nocontract.Request, _: nocontract.Received_Request, _: map[string]string) -> nocontract.Reading(nc_package_2.OrderCountInput) {
  switch parameter_0 in nocontract.header_parameter(request.headers, "x-order-count") {
  case nocontract.Read_Value(nocontract.Parameter_Text):
- switch value_0 in nc_parameter_30(parameter_0.value) {
+ switch value_0 in nc_parameter_33(parameter_0.value) {
  case nocontract.Read_Value(i64):
  return nocontract.Read_Value(nc_package_2.OrderCountInput){value = nc_package_2.OrderCountInput{order_count = value_0.value}}
  case nocontract.Request_Refusal: return value_0
@@ -1345,11 +1399,11 @@ nc_input_4 :: proc(request: nocontract.Request, _: nocontract.Received_Request, 
 }
 
 @(private, require_results)
-nc_route_4 :: proc(request: nocontract.Request, received: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Answer {
- switch input in nc_input_4(request, received, parameters) {
+nc_route_5 :: proc(request: nocontract.Request, received: nocontract.Received_Request, parameters: map[string]string) -> nocontract.Answer {
+ switch input in nc_input_5(request, received, parameters) {
  case nocontract.Read_Value(nc_package_2.OrderCountInput):
  switch answer in nc_package_2.ReadOrderCount(input.value) {
- case nc_package_2.OrderCountRead: return nc_answer_43(answer)
+ case nc_package_2.OrderCountRead: return nc_answer_44(answer)
  case nil: return nc_shared_AnswerNotWritten(nc_fields_AnswerNotWritten{answer = "", reason = "the route answered no outcome"}, {})
  }
  case nocontract.Request_Refusal: return nc_request_refused(input)
@@ -1364,57 +1418,66 @@ nc_select :: proc(request: nocontract.Request) -> nocontract.Route_Plan {
  switch read in nocontract.read_request_path(request.path) {
  case nocontract.Read_Value(nocontract.Request_Path):
  segments := read.value.segments
+ if len(segments) == 2 && segments[0] == "crashes" {
+ switch received.method {
+ case "GET":
+ parameters := make(map[string]string, context.temp_allocator)
+ parameters["cause"] = segments[1]
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/crashes/{cause}", parameters = parameters, received = received, answer = nc_route_3}, crash_response = nc_crash_3}
+ }
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_2)}, crash_response = nc_crash_unmatched}
+ }
  if len(segments) == 2 && segments[0] == "headers" && segments[1] == "order-count" {
  switch received.method {
  case "GET":
  parameters := make(map[string]string, context.temp_allocator)
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/headers/order-count", parameters = parameters, received = received, answer = nc_route_4}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/headers/order-count", parameters = parameters, received = received, answer = nc_route_5}, crash_response = nc_crash_5}
  }
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_2)}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_2)}, crash_response = nc_crash_unmatched}
  }
  if len(segments) == 3 && segments[0] == "shoppers" && segments[2] == "balance" {
  switch received.method {
  case "GET":
  parameters := make(map[string]string, context.temp_allocator)
  parameters["shopper_id"] = segments[1]
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/shoppers/{shopper_id}/balance", parameters = parameters, received = received, answer = nc_route_0}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/shoppers/{shopper_id}/balance", parameters = parameters, received = received, answer = nc_route_0}, crash_response = nc_crash_0}
  }
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_2)}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_2)}, crash_response = nc_crash_unmatched}
  }
  if len(segments) == 3 && segments[0] == "shoppers" && segments[2] == "delayed-balance" {
  switch received.method {
  case "GET":
  parameters := make(map[string]string, context.temp_allocator)
  parameters["shopper_id"] = segments[1]
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/shoppers/{shopper_id}/delayed-balance", parameters = parameters, received = received, answer = nc_route_1}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/shoppers/{shopper_id}/delayed-balance", parameters = parameters, received = received, answer = nc_route_1}, crash_response = nc_crash_1}
  }
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_2)}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_2)}, crash_response = nc_crash_unmatched}
  }
  if len(segments) == 3 && segments[0] == "shoppers" && segments[2] == "orders" {
  switch received.method {
  case "POST":
  parameters := make(map[string]string, context.temp_allocator)
  parameters["shopper_id"] = segments[1]
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/shoppers/{shopper_id}/orders", parameters = parameters, received = received, answer = nc_route_3}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/shoppers/{shopper_id}/orders", parameters = parameters, received = received, answer = nc_route_4}, crash_response = nc_crash_4}
  }
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_3)}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_3)}, crash_response = nc_crash_unmatched}
  }
  if len(segments) == 3 && segments[0] == "shoppers" && segments[2] == "top-ups" {
  switch received.method {
  case "POST":
  parameters := make(map[string]string, context.temp_allocator)
  parameters["shopper_id"] = segments[1]
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/shoppers/{shopper_id}/top-ups", parameters = parameters, received = received, answer = nc_route_2}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Selected_Route{template = "/shoppers/{shopper_id}/top-ups", parameters = parameters, received = received, answer = nc_route_2}, crash_response = nc_crash_2}
  }
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_3)}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_method_refused(received.method, nc_strings_3)}, crash_response = nc_crash_unmatched}
  }
  decoded_path := strings.join(segments, "/", context.temp_allocator)
  if strings.has_prefix(request.path, "/") { decoded_path = fmt.tprintf("/%s", decoded_path) }
- return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_shared_RouteNotFound(nc_fields_RouteNotFound{method = received.method, path = decoded_path}, {})}}
- case nocontract.Request_Refusal: return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_request_refused(read)}}
+ return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_shared_RouteNotFound(nc_fields_RouteNotFound{method = received.method, path = decoded_path}, {})}, crash_response = nc_crash_unmatched}
+ case nocontract.Request_Refusal: return nocontract.Route_Plan{method = received.method, selection = nocontract.Immediate_Answer{answer = nc_request_refused(read)}, crash_response = nc_crash_unmatched}
  }
  case nocontract.Request_Line_Not_Received:
- return nocontract.Route_Plan{method = "", selection = nocontract.Immediate_Answer{answer = nc_shared_AnswerNotWritten(nc_fields_AnswerNotWritten{answer = "HTTP request", reason = "the HTTP library supplied no request line"}, {})}}
+ return nocontract.Route_Plan{method = "", selection = nocontract.Immediate_Answer{answer = nc_shared_AnswerNotWritten(nc_fields_AnswerNotWritten{answer = "HTTP request", reason = "the HTTP library supplied no request line"}, {})}, crash_response = nc_crash_unmatched}
  }
  unreachable()
 }
@@ -1429,8 +1492,8 @@ nc_completion_unavailable :: proc(route: string, operation: string, errno: i32) 
  return nc_shared_RequestCompletionUnavailable(nc_fields_RequestCompletionUnavailable{route = route, operation = operation, errno = errno}, {})
 }
 
-// serve blocks on this thread until odin-http finishes its interrupt shutdown.
+// serve blocks on this thread until the supervisor finishes its worker shutdown.
 @(require_results)
 serve :: proc(options: nocontract.Listen_Options) -> nocontract.Server_Terminal {
- return nocontract.serve(options, nocontract.Binding{select = nc_select, deadline_exceeded = nc_deadline_exceeded, completion_unavailable = nc_completion_unavailable})
+ return nocontract.serve(options, nocontract.Binding{select = nc_select, deadline_exceeded = nc_deadline_exceeded, completion_unavailable = nc_completion_unavailable, protection_unavailable = nc_protection_unavailable})
 }

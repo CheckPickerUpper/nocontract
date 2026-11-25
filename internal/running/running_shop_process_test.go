@@ -52,6 +52,7 @@ func openShopProcess(t *testing.T, command *exec.Cmd, shutdown shopProcessShutdo
 		finish := func() []string { output := collected(); verified(); return output.lines }
 		t.Cleanup(func() { finish() })
 		lines := bufio.NewReader(stdout)
+		ready := make(chan string, 1)
 		for {
 			line := scratchproject.PathOrStop(t, "reading the shop's listening address", outcome.TupleToResult(lines.ReadString('\n')))
 			address, listening := strings.CutPrefix(strings.TrimSpace(line), "Listening on ")
@@ -59,15 +60,30 @@ func openShopProcess(t *testing.T, command *exec.Cmd, shutdown shopProcessShutdo
 				continue
 			}
 			readers.Go(func() error {
-				_, cause := io.Copy(emitted, lines)
-				return cause
+				defer close(ready)
+				scanner := bufio.NewScanner(lines)
+				scanner.Buffer(make([]byte, 4096), 1<<20)
+				for scanner.Scan() {
+					line := scanner.Text()
+					emitted.WriteString(line)
+					emitted.WriteByte('\n')
+					if address, listening := strings.CutPrefix(strings.TrimSpace(line), "Listening on "); listening {
+						select {
+						case ready <- address:
+						default:
+						}
+					}
+				}
+				return scanner.Err()
 			})
 			client := *http.DefaultClient
 			client.Timeout = 10 * time.Second
-			return shopServerAddress{url: address, client: &client, finish: finish}
+			return shopServerAddress{url: address, client: &client, finish: finish, ready: ready, pid: command.Process.Pid}
 		}
 	}, func(cause error) shopServerAddress {
 		t.Fatalf("opening shop stdout: %v", cause)
-		return shopServerAddress{url: "", client: http.DefaultClient, finish: func() []string { return []string{} }}
+		ready := make(chan string)
+		close(ready)
+		return shopServerAddress{url: "", client: http.DefaultClient, finish: func() []string { return []string{} }, ready: ready, pid: 0}
 	})
 }

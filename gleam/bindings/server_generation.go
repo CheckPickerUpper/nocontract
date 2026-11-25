@@ -138,7 +138,7 @@ func generateServer(project Project, api description.API, failures []description
 	}
 	generated.module("gleam/option")
 	main := "type Operation {\n" + strings.Join(operations, "\n") + "\n}\n\n" +
-		loggedRequest + "fn select_request(request: wisp.Request) -> #(String, RequestSelection) {\ncase target.match_target([" + strings.Join(routes, ",\n") + "], method: http.method_to_string(request.method), path: request.path) {\n" +
+		loggedRequest + crashAnswerFunction() + "fn select_request(request: wisp.Request) -> #(String, RequestSelection) {\ncase target.match_target([" + strings.Join(routes, ",\n") + "], method: http.method_to_string(request.method), path: request.path) {\n" +
 		strings.Join(dispatch, "\n") + "\n" +
 		"target.UnknownPath(path:) -> #(request.path, ImmediateAnswer(run: fn() { shared_route_not_found(method: http.method_to_string(request.method), path:) }))\n" +
 		"target.UndeclaredMethod(allowed:) -> #(request.path, ImmediateAnswer(run: fn() { refuse_method(method: request.method, allowed:) }))\n" +
@@ -157,7 +157,7 @@ func generateServer(project Project, api description.API, failures []description
 		}
 		return outcome.Err[[]native.File](GenerationRefused{Problems: problems})
 	}
-	imports := []string{"import gleam/dict", "import gleam/http", "import gleam/http/response", "import gleam/json", "import gleam/otp/actor", "import gleam/otp/static_supervisor", "import gleam/string", "import mist", "import nocontract_runtime/bind_address", "import nocontract_runtime/request_deadline", "import nocontract_runtime/request_layers", "import nocontract_runtime/request_logging", "import nocontract_runtime/request_reading as request_input", "import nocontract_runtime/server_options", "import nocontract_runtime/target_matching as target", "import nocontract_runtime/value_reading as wire", "import wisp", "import wisp/wisp_mist"}
+	imports := []string{"import gleam/dict", "import gleam/http", "import gleam/http/response", "import gleam/json", "import gleam/otp/actor", "import gleam/otp/static_supervisor", "import gleam/string", "import mist", "import nocontract_runtime/bind_address", "import nocontract_runtime/request_deadline", "import nocontract_runtime/request_layers", "import nocontract_runtime/request_logging", "import nocontract_runtime/request_reading as request_input", "import nocontract_runtime/request_recovery as recovery", "import nocontract_runtime/server_options", "import nocontract_runtime/target_matching as target", "import nocontract_runtime/value_reading as wire", "import wisp", "import wisp/wisp_mist"}
 	if len(generated.decoders) > 0 {
 		imports = append(imports, "import gleam/dynamic/decode")
 	}
@@ -180,19 +180,26 @@ type RequestSelection {
 }
 
 fn handle_request(request request: wisp.Request, layers layers: List(request_layers.Layer), deadline deadline: option.Option(request_deadline.RequestDeadline)) -> wisp.Response {
+  let method = http.method_to_string(request.method)
   let #(duration_us, #(route, answer)) = request_logging.measure_request(fn() {
     let #(route, selected) = select_request(request)
-    let visit = request_layers.Visit(method: http.method_to_string(request.method), path: request.path, route:)
+    let visit = request_layers.Visit(method:, path: request.path, route:)
     case selected {
-      SelectedRoute(run:) -> #(route, answer_route(route:, deadline:, run: fn(lifetime) {
-        answer_through_layers(layers, visit, fn() { run(lifetime) })
-      }))
-      ImmediateAnswer(run:) -> #(route, answer_through_layers(layers, visit, run))
+      SelectedRoute(run:) -> {
+        let evidence = recovery.RequestEvidence(method:, path: request.path, route: recovery.RouteMatched(method:, path: route))
+        #(route, answer_route(evidence:, deadline:, run: fn(lifetime) {
+          answer_through_layers(layers:, visit:, run: fn() { run(lifetime) })
+        }))
+      }
+      ImmediateAnswer(run:) -> {
+        let evidence = recovery.RequestEvidence(method:, path: request.path, route: recovery.NoRouteMatched)
+        #(route, protect_request(evidence:, run: fn() { answer_through_layers(layers:, visit:, run:) }))
+      }
     }
   })
   request_logging.log_request(request_logging.RequestLog(
     route:,
-    method: http.method_to_string(request.method),
+    method:,
     status: answer.response.status,
     code: answer.code,
     duration_us:,
@@ -200,21 +207,27 @@ fn handle_request(request request: wisp.Request, layers layers: List(request_lay
   answer.response
 }
 
-fn answer_through_layers(layers: List(request_layers.Layer), visit: request_layers.Visit, run: fn() -> Answer) -> Answer {
+fn answer_through_layers(layers layers: List(request_layers.Layer), visit visit: request_layers.Visit, run run: fn() -> Answer) -> Answer {
   let finish = request_layers.enter(layers, visit)
   let answer = run()
   finish(request_layers.Answered(status: answer.response.status, code: answer.code))
   answer
 }
 
-fn answer_route(route route: String, deadline deadline: option.Option(request_deadline.RequestDeadline), run run: fn(request_deadline.RequestLifetime) -> Answer) -> Answer {
+fn protect_request(evidence evidence: recovery.RequestEvidence, run run: fn() -> Answer) -> Answer {
+  recovery.answer_request(evidence, record: recovery.log_crash, dispatch: run, prepare: fn() { crash_answer(evidence) })
+}
+
+fn answer_route(evidence evidence: recovery.RequestEvidence, deadline deadline: option.Option(request_deadline.RequestDeadline), run run: fn(request_deadline.RequestLifetime) -> Answer) -> Answer {
   case deadline {
-    option.None -> request_deadline.without_deadline(run:)
+    option.None -> protect_request(evidence:, run: fn() { request_deadline.without_deadline(run:) })
     option.Some(within) -> {
-      case request_deadline.answer_before_deadline(within:, run:) {
+      case request_deadline.answer_before_deadline(within:, run: fn(lifetime) {
+        protect_request(evidence:, run: fn() { run(lifetime) })
+      }) {
         request_deadline.RequestCompleted(answer:) -> answer
-        request_deadline.RequestExpired(timeout_milliseconds:, ..) -> shared_request_deadline_exceeded(route:, timeout_milliseconds:)
-        request_deadline.RequestWorkerExited(stopped:) -> request_deadline.worker_exited(stopped)
+        request_deadline.RequestExpired(timeout_milliseconds:, ..) -> shared_request_deadline_exceeded(route: recovery.route_path(evidence), timeout_milliseconds:)
+        request_deadline.RequestWorkerExited(stopped:) -> recovery.answer_worker_exit(evidence, stopped:, record: recovery.log_crash, prepare: fn() { crash_answer(evidence) })
       }
     }
   }

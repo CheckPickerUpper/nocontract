@@ -16,6 +16,12 @@ observe_request_entry :: proc(user_data: rawptr, visit: requestlayers.Visit) {
 		route: string,
 	}{layer = name^, phase = "before", method = visit.method, path = visit.path, route = visit.route}
 	emit_request_observation(value)
+	if name^ == "outer" {
+		switch visit.path {
+		case "/crashes/layer-before", "/unmatched-crash":
+			panic("deliberate shop before-layer panic")
+		}
+	}
 	if name^ == "outer" && visit.method == "POST" && visit.path == "/shoppers/7/top-ups" {
 		switch held in hold_shop_request() {
 		case No_Request_Hold, Request_Released:
@@ -38,6 +44,12 @@ observe_request_answer :: proc(user_data: rawptr, visit: requestlayers.Visit, an
 		code: Maybe(string) `json:"code,omitempty"`,
 	}{layer = name^, phase = "after", method = visit.method, path = visit.path, route = visit.route, status = answered.status, code = answered.code}
 	emit_request_observation(value)
+	if name^ == "outer" {
+		switch visit.path {
+		case "/crashes/layer-after":
+			panic("deliberate shop after-layer panic")
+		}
+	}
 }
 
 @(private)

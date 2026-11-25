@@ -1,5 +1,6 @@
 //// Takes shoppers' orders.
 
+import crash_probe
 import gleam/dict.{type Dict}
 import gleam/option.{type Option}
 import shop/scalars.{type Instant, type UInt16, type UInt8}
@@ -66,4 +67,19 @@ pub type OrderCountOutcome {
 /// nocontract:header order_count X-Order-Count
 pub fn read_order_count(input: OrderCountInput) -> OrderCountOutcome {
   OrderCountRead(order_count: input.order_count)
+}
+
+/// Selects a deliberate crash in the shop fixture.
+pub type CrashInput {
+  CrashInput(cause: String)
+}
+
+/// Demonstrates request recovery using the shop's own deliberate errors.
+/// nocontract:route GET /crashes/{cause}
+pub fn crash(input: CrashInput) -> OrderCountOutcome {
+  case input.cause {
+    "panic" -> panic as "deliberate shop panic"
+    "bounds" -> OrderCountRead(order_count: crash_probe.bounds())
+    _ -> OrderCountRead(order_count: 7)
+  }
 }

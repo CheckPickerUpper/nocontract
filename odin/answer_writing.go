@@ -172,7 +172,12 @@ func (writer *bindingWriter) memberResponse(id int, member description.Member) {
 }
 
 func (writer *bindingWriter) sharedResponses() {
+	// The crash answer is written whole before dispatch by crashResponse.
+	crashed := description.RequestCrashed().Failure.Code
 	for _, failure := range description.SharedFailures() {
+		if failure.Code == crashed {
+			continue
+		}
 		fields, wireFields, values := []string{}, []string{}, []string{}
 		for _, field := range failure.Fields {
 			fieldType := ""

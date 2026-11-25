@@ -59,17 +59,6 @@ pub fn without_deadline(run compute: fn(RequestLifetime) -> answer) -> answer {
   compute(Unbounded)
 }
 
-@external(erlang, "nocontract_request_deadline_ffi", "raise_exit")
-fn raise_exit(reason: process.ExitReason) -> answer
-
-/// Preserves an exited worker's cause instead of treating a crash as expiration.
-pub fn worker_exited(stopped: process.Down) -> answer {
-  case stopped {
-    process.ProcessDown(reason:, ..) | process.PortDown(reason:, ..) ->
-      raise_exit(reason)
-  }
-}
-
 /// A request's computed answer, expiration, or worker exit.
 pub type RequestCompletion(answer) {
   RequestCompleted(answer: answer)

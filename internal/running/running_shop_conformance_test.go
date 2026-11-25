@@ -22,6 +22,9 @@ type shopServerAddress struct {
 	url    string
 	client *http.Client
 	finish func() []string
+	ready  <-chan string
+	// pid is the started shop process: the Odin supervisor, or the whole Go or Gleam server.
+	pid int
 }
 
 type shopBackend struct {

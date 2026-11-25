@@ -11,28 +11,92 @@ func sharedResponses(generated generator, failures []description.SharedFailure) 
 	written := ""
 	for _, failure := range failures {
 		arguments, fields := []string{}, []string{"#(\"_tag\", json.string(" + quoted(failure.Name) + "))", "#(\"code\", json.string(" + quoted(failure.Code.String()) + "))"}
+		records := []string{}
 		for _, field := range failure.Fields {
 			name := field.Name.Text()
-			typeName, encoder := sharedField(generated, field.Schema, name)
-			arguments = append(arguments, name+" "+name+": "+typeName)
-			fields = append(fields, "#("+quoted(name)+", "+encoder+")")
+			shared := sharedField(generated, field.Schema, name, failure.Name+pascalName(name))
+			arguments = append(arguments, name+" "+name+": "+shared.typeName)
+			fields = append(fields, "#("+quoted(name)+", "+shared.encoder+")")
+			records = append(records, shared.records...)
+		}
+		for _, record := range records {
+			written += record + "\n"
 		}
 		written += fmt.Sprintf("fn shared_%s(%s) -> Answer { let response = json.object([%s]) |> json.to_string |> wisp.json_response(%d) Answer(response:, code: option.Some(%s)) }\n", snakeName(failure.Name), strings.Join(arguments, ", "), strings.Join(fields, ", "), failure.Status.Code(), quoted(failure.Code.String()))
 	}
 	return written + responseFunctions
 }
 
-func sharedField(generated generator, schema description.Schema, name string) (string, string) {
+// sharedGleamField is a shared failure field's Gleam type, the expression encoding the value
+// bound to its name, and the record types an inline object of it declares.
+type sharedGleamField struct {
+	typeName string
+	encoder  string
+	records  []string
+}
+
+// sharedField writes one shared failure field. An inline object becomes a labelled record named
+// record, so a runtime builds it by its field names.
+func sharedField(generated generator, schema description.Schema, name string, record string) sharedGleamField {
 	switch typed := schema.(type) {
 	case description.Text, description.Literals:
-		return "String", "json.string(" + name + ")"
+		return sharedGleamField{typeName: "String", encoder: "json.string(" + name + ")", records: []string{}}
 	case description.Integer:
-		return "Int", generated.encoder(Whole{Width: typed.Width}) + "(" + name + ")"
+		return sharedGleamField{typeName: "Int", encoder: generated.encoder(Whole{Width: typed.Width}) + "(" + name + ")", records: []string{}}
 	case description.List:
-		return "List(String)", "json.array(" + name + ", of: json.string)"
-	case description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary, description.Nullable, description.StructRef, description.InlineStruct, nil:
+		return sharedGleamField{typeName: "List(String)", encoder: "json.array(" + name + ", of: json.string)", records: []string{}}
+	case description.Nullable:
+		inner := name + "_value"
+		held := sharedField(generated, typed.Inner, inner, record)
+		return sharedGleamField{typeName: "option.Option(" + held.typeName + ")", encoder: "case " + name + " { option.Some(" + inner + ") -> " + held.encoder + " option.None -> json.null() }", records: held.records}
+	case description.InlineStruct:
+		labels, bindings, fields, records := []string{}, []string{}, []string{}, []string{}
+		for _, field := range typed.Fields {
+			label := field.Name.Text()
+			binding := name + "_" + label
+			member := sharedField(generated, field.Schema, binding, record+pascalName(label))
+			labels = append(labels, label+": "+member.typeName)
+			bindings = append(bindings, label+": "+binding)
+			fields = append(fields, "#("+quoted(label)+", "+member.encoder+")")
+			records = append(records, member.records...)
+		}
+		declared := "type " + record + " { " + record + "(" + strings.Join(labels, ", ") + ") }"
+		return sharedGleamField{
+			typeName: record,
+			encoder:  "case " + name + " { " + record + "(" + strings.Join(bindings, ", ") + ") -> json.object([" + strings.Join(fields, ", ") + "]) }",
+			records:  append(records, declared),
+		}
+	case description.Finite, description.Truth, description.Instant, description.FixedList, description.Dictionary, description.StructRef, nil:
 	}
-	return "", ""
+	return sharedGleamField{typeName: "", encoder: "", records: []string{}}
+}
+
+// crashAnswerFunction builds RequestCrashed from the protected request's route, naming each
+// field of the shared failure's route record by identity.
+func crashAnswerFunction() string {
+	crash := description.RequestCrashed()
+	route := crash.Route.Text()
+	return fmt.Sprintf(`
+fn crash_answer(evidence: recovery.RequestEvidence) -> Answer {
+  let %[1]s = case evidence.route {
+    recovery.RouteMatched(method:, path:) -> option.Some(%[2]s(%[3]s: method, %[4]s: path))
+    recovery.NoRouteMatched -> option.None
+  }
+  shared_%[5]s(%[1]s:)
+}
+
+`, route, crash.Failure.Name+pascalName(route), crash.RouteMethod.Text(), crash.RoutePath.Text(), snakeName(crash.Failure.Name))
+}
+
+// pascalName is a snake_case wire name as a Gleam type name.
+func pascalName(name string) string {
+	words := strings.Split(name, "_")
+	for index, word := range words {
+		if word != "" {
+			words[index] = strings.ToUpper(word[:1]) + word[1:]
+		}
+	}
+	return strings.Join(words, "")
 }
 
 func snakeName(name string) string {

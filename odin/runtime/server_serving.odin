@@ -14,6 +14,8 @@ import "httpbinding"
 import requestlayers "layers"
 import "requestlog"
 import "requestlifetime"
+import "requestcrash"
+import "supervisor"
 
 // Received_Request is a method and body odin-http read for a request.
 Received_Request :: struct #all_or_none {
@@ -37,6 +39,7 @@ Request :: struct #all_or_none {
 	headers: map[string]string,
 	content: Request_Content,
 	lifetime: requestlifetime.Handler_Lifetime,
+	crash_connection: Crash_Connection,
 }
 
 // Binding is the generated dispatcher that returns only typed route answers and refusals.
@@ -44,7 +47,11 @@ Binding :: struct #all_or_none {
 	select: proc(request: Request) -> Route_Plan,
 	deadline_exceeded: proc(route: string, timeout_milliseconds: u32) -> Answer,
 	completion_unavailable: proc(route: string, operation: string, errno: i32) -> Answer,
+	protection_unavailable: proc(refusal: Request_Protection_Unavailable) -> Answer,
 }
+
+// Request_Protection_Unavailable is a request thread whose crash signal stack was not installed.
+Request_Protection_Unavailable :: requestcrash.Alternate_Stack_Not_Installed
 
 @(private, not_an_error)
 No_Ready_Notice :: struct #all_or_none {}
@@ -54,6 +61,7 @@ Ready_Notice :: struct #all_or_none {
 	notify: proc(endpoint: net.Endpoint),
 }
 
+// Listener_Notice is the application's observer of the address its first ready worker serves.
 @(private)
 Listener_Notice :: union #no_nil {
 	No_Ready_Notice,
@@ -67,6 +75,7 @@ TCP_Listen_Options :: struct #all_or_none {
 	layers:   []requestlayers.Layer,
 	deadline: Request_Deadline,
 	body_limit: Request_Body_Limit,
+	shutdown_period: time.Duration,
 }
 
 @(private)
@@ -125,25 +134,31 @@ Listen_Options :: struct #all_or_none {
 // listen_on selects the TCP endpoint a generated server listens on.
 @(require_results)
 listen_on :: proc(endpoint: net.Endpoint) -> Listen_Options {
-	return Listen_Options{tcp = TCP_Listen_Options{endpoint = endpoint, ready = No_Ready_Notice{}, layers = {}, deadline = No_Deadline{}, body_limit = Request_Body_Limit(Checked_Body_Limit{max_length = 8_000_000})}}
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = endpoint, ready = No_Ready_Notice{}, layers = {}, deadline = No_Deadline{}, body_limit = Request_Body_Limit(Checked_Body_Limit{max_length = 8_000_000}), shutdown_period = 5 * time.Second}}
 }
 
 // notify_when_ready observes the actual bound endpoint without exposing the socket or handler.
 @(require_results)
 notify_when_ready :: proc(options: Listen_Options, notify: proc(endpoint: net.Endpoint)) -> Listen_Options {
-	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = Ready_Notice{notify = notify}, layers = options.tcp.layers, deadline = options.tcp.deadline, body_limit = options.tcp.body_limit}}
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = Ready_Notice{notify = notify}, layers = options.tcp.layers, deadline = options.tcp.deadline, body_limit = options.tcp.body_limit, shutdown_period = options.tcp.shutdown_period}}
 }
 
 // with_layers selects ordered request and answer observers for the listener.
 @(require_results)
 with_layers :: proc(options: Listen_Options, layers: []requestlayers.Layer) -> Listen_Options {
-	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = slice.clone(layers), deadline = options.tcp.deadline, body_limit = options.tcp.body_limit}}
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = slice.clone(layers), deadline = options.tcp.deadline, body_limit = options.tcp.body_limit, shutdown_period = options.tcp.shutdown_period}}
 }
 
 // with_body_limit chooses the checked cap passed to odin-http before body decoding.
 @(require_results)
 with_body_limit :: proc(options: Listen_Options, limit: Request_Body_Limit) -> Listen_Options {
-	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = options.tcp.layers, deadline = options.tcp.deadline, body_limit = limit}}
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = options.tcp.layers, deadline = options.tcp.deadline, body_limit = limit, shutdown_period = options.tcp.shutdown_period}}
+}
+
+// with_shutdown_period selects the period the supervisor validates before starting a worker.
+@(require_results)
+with_shutdown_period :: proc(options: Listen_Options, period: time.Duration) -> Listen_Options {
+	return Listen_Options{tcp = TCP_Listen_Options{endpoint = options.tcp.endpoint, ready = options.tcp.ready, layers = options.tcp.layers, deadline = options.tcp.deadline, body_limit = options.tcp.body_limit, shutdown_period = period}}
 }
 
 // Bound_Endpoint is the address assigned to a listener the runtime successfully opened.
@@ -161,73 +176,103 @@ Requested_Endpoint :: struct #all_or_none {
 	value: net.Endpoint,
 }
 
+// Listener_Endpoint is the address a listener had reached when it stopped or failed: the
+// requested one until a worker reports the address the kernel bound.
+Listener_Endpoint :: union #no_nil {
+	Requested_Endpoint,
+	Bound_Endpoint,
+}
+
 // Server_Stopped is a generated server whose listener has finished on its serving thread.
 @(not_an_error)
 Server_Stopped :: struct #all_or_none {
-	bound: Bound_Endpoint,
+	endpoint: Listener_Endpoint,
 }
 
-// Listener_Event_Loop_Not_Available preserves the first event-loop acquisition failure.
-@(error_code = "NC-1163")
-Listener_Event_Loop_Not_Available :: struct #all_or_none {
-	requested: Requested_Endpoint,
+// Event_Loop_Not_Acquired preserves a worker's failed acquisition of its first event loop.
+Event_Loop_Not_Acquired :: struct #all_or_none {
 	cause: nbio.General_Error,
 }
 
-// Listener_Not_Opened preserves the chosen endpoint and odin-http's original listen failure.
+// Listener_Opening_Failure is the step that kept a listener from reporting its bound address.
+Listener_Opening_Failure :: union #no_nil {
+	httpbinding.Listener_Binding_Refusal,
+	httpbinding.Listener_Adoption_Refusal,
+	httpbinding.Shutdown_Handler_Not_Installed,
+	requestcrash.Handler_Not_Installed,
+	supervisor.Entry_Refusal,
+	supervisor.Readiness_Report_Refusal,
+	supervisor.Shutdown_Period_Not_Positive,
+	Crash_Diagnostic_Not_Encoded,
+	Event_Loop_Not_Acquired,
+	Listener_Readiness_Not_Announced,
+	Supervision_Refused,
+	Worker_Exited,
+}
+
+// Listener_Not_Opened preserves the chosen endpoint and the step that kept it from opening.
 @(error_code = "NC-1140")
 Listener_Not_Opened :: struct #all_or_none {
 	requested: Requested_Endpoint,
-	failure:   Network_Failure,
+	failure:   Listener_Opening_Failure,
 }
 
-// Listener_Endpoint_Not_Read keeps a failed bound-address read and its shutdown result.
-@(error_code = "NC-1160")
-Listener_Endpoint_Not_Read :: struct #all_or_none {
-	requested:      Requested_Endpoint,
-	cause:          net.Socket_Info_Error,
-	shutdown_cause: net.Shutdown_Error,
-	cleanup_cause:  nbio.General_Error,
+// Listener_Serving_Failure is what stopped a listener after it reported its bound address.
+Listener_Serving_Failure :: union #no_nil {
+	Network_Failure,
+	Supervision_Refused,
+	Worker_Exited,
 }
 
-// Listener_Not_Served preserves the bound endpoint and odin-http's original serving failure.
+// Listener_Not_Served preserves the bound endpoint and the failure that stopped serving.
 @(error_code = "NC-1141")
 Listener_Not_Served :: struct #all_or_none {
 	bound:   Bound_Endpoint,
-	failure: Network_Failure,
+	failure: Listener_Serving_Failure,
+}
+
+// Listener_Stopping_Failure is why a stopping listener could not finish.
+Listener_Stopping_Failure :: union #no_nil {
+	Shutdown_Period_Exceeded,
+	Supervision_Not_Released,
+}
+
+// Listener_Not_Stopped preserves the listener's endpoint and why its shutdown did not finish.
+@(error_code = "NC-1142")
+Listener_Not_Stopped :: struct #all_or_none {
+	endpoint: Listener_Endpoint,
+	failure:  Listener_Stopping_Failure,
 }
 
 // Server_Terminal is the end of a generated server's blocking serve operation.
 Server_Terminal :: union #no_nil {
 	Server_Stopped,
-	Listener_Event_Loop_Not_Available,
 	Listener_Not_Opened,
-	Listener_Endpoint_Not_Read,
 	Listener_Not_Served,
+	Listener_Not_Stopped,
 }
 
-// serve owns listen, the ready notice, and odin-http's event loop on the calling thread.
-// The library's documented interrupt handler stops the listener and joins its workers.
+// serve supervises the listener and waits for its worker's shutdown.
 @(require_results)
 serve :: proc(options: Listen_Options, binding: Binding) -> Server_Terminal {
-	return serve_tcp(options.tcp, binding)
+	return serve_supervised(options, binding)
 }
 
 @(private, require_results)
-serve_tcp :: proc(options: TCP_Listen_Options, binding: Binding) -> Server_Terminal {
+serve_tcp :: proc(worker: supervisor.Worker_Entry, options: TCP_Listen_Options, fallback: Crash_Diagnostic_Fallback, binding: Binding) -> Server_Terminal {
 	cause := nbio.acquire_thread_event_loop()
 	switch cause {
 	case .None:
 		defer nbio.release_thread_event_loop()
-		return serve_on_event_loop(options, binding)
+		return serve_on_event_loop(worker, options, fallback, binding)
 	case .Allocation_Failed, .Unsupported:
 	}
 	// General_Error also carries the platform errno returned by the event-loop setup.
-	return Listener_Event_Loop_Not_Available{requested = Requested_Endpoint{value = options.endpoint}, cause = cause}
+	return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = Event_Loop_Not_Acquired{cause = cause}}
 }
 
 @(private, require_results)
-serve_on_event_loop :: proc(options: TCP_Listen_Options, binding: Binding) -> Server_Terminal {
+serve_on_event_loop :: proc(worker: supervisor.Worker_Entry, options: TCP_Listen_Options, fallback: Crash_Diagnostic_Fallback, binding: Binding) -> Server_Terminal {
 	// odin-http's interrupt registration borrows this server for the process lifetime.
 	server := new(http.Server)
 	server_options := http.Server_Opts{
@@ -237,33 +282,24 @@ serve_on_event_loop :: proc(options: TCP_Listen_Options, binding: Binding) -> Se
 		limit_headers = http.Default_Server_Opts.limit_headers,
 		thread_count = http.Default_Server_Opts.thread_count,
 	}
-	switch cause in http.listen(server, options.endpoint, server_options) {
-	case nil:
-	case net.Create_Socket_Error, net.Dial_Error, net.Listen_Error, net.Accept_Error, net.Bind_Error,
-		net.TCP_Send_Error, net.UDP_Send_Error, net.TCP_Recv_Error, net.UDP_Recv_Error, net.Shutdown_Error,
-		net.Interfaces_Error, net.Socket_Info_Error, net.Socket_Option_Error, net.Set_Blocking_Error,
-		net.Parse_Endpoint_Error, net.Resolve_Error, net.DNS_Error:
+	endpoint := options.endpoint
+	switch opened in httpbinding.adopt_listener(server, net.TCP_Socket(worker.listener), server_options) {
+	case httpbinding.Opened_Listener:
+		endpoint = opened.endpoint
+	case httpbinding.Listener_Adoption_Refusal:
 		free(server)
-		return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = Network_Failure{cause = cause}}
+		return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = opened}
 	}
-	endpoint, endpoint_error := net.bound_endpoint(server.tcp_sock)
-	switch endpoint_error {
-	case .None:
-	case .Network_Unreachable, .Insufficient_Resources, .Invalid_Argument, .Unsupported_Socket, .Connection_Closed, .Unknown:
-		shutdown_error := net.shutdown(server.tcp_sock, .Both)
-		net.close(server.tcp_sock)
-		cleanup_error := nbio.run()
-		nbio.release_thread_event_loop()
-		free(server)
-		return Listener_Endpoint_Not_Read{requested = Requested_Endpoint{value = options.endpoint}, cause = endpoint_error, shutdown_cause = shutdown_error, cleanup_cause = cleanup_error}
+	switch installed in httpbinding.install_shutdown_handlers(server) {
+	case httpbinding.Shutdown_Handlers_Installed:
+	case httpbinding.Shutdown_Handler_Not_Installed:
+		http.server_shutdown(server)
+		_ = http.serve(server, {})
+		return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = installed}
 	}
-	http.server_shutdown_on_interrupt(server)
-	switch notice in options.ready {
-	case No_Ready_Notice:
-	case Ready_Notice:
-		notice.notify(endpoint)
-	}
-	bound := Serving_API{binding = binding, layers = options.layers, deadline = options.deadline, allocator = context.allocator, body_limit = options.body_limit}
+	announcement := Listener_Announcement{worker = worker, endpoint = endpoint, server = server, state = Announcement_Pending{}}
+	_ = nbio.timeout_poly(0, &announcement, announce_listener)
+	bound := Serving_API{binding = binding, layers = options.layers, deadline = options.deadline, allocator = context.allocator, body_limit = options.body_limit, crash_fallback = fallback}
 	handler := http.Handler{
 		user_data = &bound,
 		next = {},
@@ -278,13 +314,20 @@ serve_on_event_loop :: proc(options: TCP_Listen_Options, binding: Binding) -> Se
 				)
 				httpbinding.receive_body(request, body_max_length(binding.body_limit), pending, answer_received_request)
 			case nil:
-				respond(response, binding, Request{path = request.url.path, query = request.url.query, headers = request.headers._kv, content = Request_Line_Not_Received{}, lifetime = requestlifetime.No_Request_Deadline{}}, started)
+				respond(response, binding, Request{path = request.url.path, query = request.url.query, headers = request.headers._kv, content = Request_Line_Not_Received{}, lifetime = requestlifetime.No_Request_Deadline{}, crash_connection = Crash_Connection{socket = httpbinding.connection_socket(response), fallback = binding.crash_fallback}}, started)
 			}
 		},
 	}
 	switch cause in http.serve(server, handler) {
 	case nil:
-		return Server_Stopped{bound = Bound_Endpoint{value = endpoint}}
+		switch state in announcement.state {
+		case Announcement_Completed:
+		case Announcement_Pending:
+			return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = Listener_Readiness_Not_Announced{endpoint = endpoint}}
+		case supervisor.Readiness_Report_Refusal:
+			return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = state}
+		}
+		return Server_Stopped{endpoint = Bound_Endpoint{value = endpoint}}
 	case net.Create_Socket_Error, net.Dial_Error, net.Listen_Error, net.Accept_Error, net.Bind_Error,
 		net.TCP_Send_Error, net.UDP_Send_Error, net.TCP_Recv_Error, net.UDP_Recv_Error, net.Shutdown_Error,
 		net.Interfaces_Error, net.Socket_Info_Error, net.Socket_Option_Error, net.Set_Blocking_Error,
@@ -301,6 +344,7 @@ Serving_API :: struct #all_or_none {
 	deadline: Request_Deadline,
 	allocator: mem.Allocator,
 	body_limit: Request_Body_Limit,
+	crash_fallback: Crash_Diagnostic_Fallback,
 }
 
 @(private)
@@ -321,6 +365,7 @@ answer_received_request :: proc(pending: ^Pending_Request, receipt: httpbinding.
 		headers = pending.request.headers._kv,
 		content = Received_Request{method = pending.method, body = receipt},
 		lifetime = requestlifetime.No_Request_Deadline{},
+		crash_connection = Crash_Connection{socket = httpbinding.connection_socket(pending.response), fallback = pending.binding.crash_fallback},
 	}
 	respond(pending.response, pending.binding, request, pending.started)
 }
@@ -333,22 +378,43 @@ respond :: proc(response: ^http.Response, api: ^Serving_API, request: Request, s
 	case Selected_Route:
 		switch deadline in api.deadline {
 		case Configured_Deadline:
-			start_deadline_request(api, response, request, selected, visit, deadline, started)
+			start_deadline_request(api, response, request, selected, plan.crash_response, visit, deadline, started)
 			return
 		case No_Deadline:
 		}
 	case Immediate_Answer:
 	}
-	answer := answer_through_layers(api.layers, visit, plan, request)
+	answer := answer_through_layers(api.binding, api.layers, visit, plan, request)
 	publish_answer(response, visit, answer, started)
 }
 
 @(private, require_results)
-answer_through_layers :: proc(layers: []requestlayers.Layer, visit: requestlayers.Visit, plan: Route_Plan, request: Request) -> Answer {
-	requestlayers.enter(layers, visit)
-	answer := answer_planned_route(plan, request)
+answer_through_layers :: proc(binding: Binding, layers: []requestlayers.Layer, visit: requestlayers.Visit, plan: Route_Plan, request: Request) -> Answer {
+	dispatch := Layer_Dispatch{layers = layers, visit = visit, plan = plan, request = request}
+	switch protected in protect_request(request, plan.crash_response, describe_visited_route(plan), dispatch, answer_layer_dispatch) {
+	case requestcrash.Request_Answered(Answer):
+		return protected.answer
+	case requestcrash.Alternate_Stack_Not_Installed:
+		log.errorf("Request signal stack installation failed: %v", protected)
+		return binding.protection_unavailable(protected)
+	}
+	unreachable()
+}
+
+@(private)
+Layer_Dispatch :: struct #all_or_none {
+	layers: []requestlayers.Layer,
+	visit: requestlayers.Visit,
+	plan: Route_Plan,
+	request: Request,
+}
+
+@(private, require_results)
+answer_layer_dispatch :: proc(dispatch: Layer_Dispatch) -> Answer {
+	requestlayers.enter(dispatch.layers, dispatch.visit)
+	answer := answer_planned_route(dispatch.plan, dispatch.request)
 	answered := describe_answer(answer)
-	requestlayers.leave(layers, visit, answered)
+	requestlayers.leave(dispatch.layers, dispatch.visit, answered)
 	return answer
 }
 

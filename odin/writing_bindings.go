@@ -67,13 +67,14 @@ func generateBindings(request native.Request, graph compiler.Graph, routes []rou
 		writer.answerDeclaration(id)
 	}
 	writer.sharedResponses()
+	writer.crashDeclarations(bound)
 	writer.source.WriteString(bindingRuntime)
 	for position, binding := range bound {
 		writer.inputReader(position, binding)
 		writer.routeDeclaration(position, binding)
 	}
 	writer.dispatcher(bound)
-	writer.source.WriteString("\n@(private, require_results)\nnc_deadline_exceeded :: proc(route: string, timeout_milliseconds: u32) -> nocontract.Answer {\n return nc_shared_RequestDeadlineExceeded(nc_fields_RequestDeadlineExceeded{route = route, timeout_milliseconds = timeout_milliseconds}, {})\n}\n\n@(private, require_results)\nnc_completion_unavailable :: proc(route: string, operation: string, errno: i32) -> nocontract.Answer {\n return nc_shared_RequestCompletionUnavailable(nc_fields_RequestCompletionUnavailable{route = route, operation = operation, errno = errno}, {})\n}\n\n// serve blocks on this thread until odin-http finishes its interrupt shutdown.\n@(require_results)\nserve :: proc(options: nocontract.Listen_Options) -> nocontract.Server_Terminal {\n return nocontract.serve(options, nocontract.Binding{select = nc_select, deadline_exceeded = nc_deadline_exceeded, completion_unavailable = nc_completion_unavailable})\n}\n")
+	writer.source.WriteString("\n@(private, require_results)\nnc_deadline_exceeded :: proc(route: string, timeout_milliseconds: u32) -> nocontract.Answer {\n return nc_shared_RequestDeadlineExceeded(nc_fields_RequestDeadlineExceeded{route = route, timeout_milliseconds = timeout_milliseconds}, {})\n}\n\n@(private, require_results)\nnc_completion_unavailable :: proc(route: string, operation: string, errno: i32) -> nocontract.Answer {\n return nc_shared_RequestCompletionUnavailable(nc_fields_RequestCompletionUnavailable{route = route, operation = operation, errno = errno}, {})\n}\n\n// serve blocks on this thread until the supervisor finishes its worker shutdown.\n@(require_results)\nserve :: proc(options: nocontract.Listen_Options) -> nocontract.Server_Terminal {\n return nocontract.serve(options, nocontract.Binding{select = nc_select, deadline_exceeded = nc_deadline_exceeded, completion_unavailable = nc_completion_unavailable, protection_unavailable = nc_protection_unavailable})\n}\n")
 	return outcome.FoldOption(outcome.EmptyableToOption(errors.Join(writer.problems...)), outcome.Err[[]native.File], func() outcome.Result[[]native.File] {
 		writer.coreImport("fmt")
 		writer.coreImport("log")

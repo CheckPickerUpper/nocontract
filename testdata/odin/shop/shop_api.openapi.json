@@ -14,6 +14,94 @@
     }
   ],
   "paths": {
+    "/crashes/{cause}": {
+      "get": {
+        "tags": [
+          "orders"
+        ],
+        "operationId": "orders.crash",
+        "parameters": [
+          {
+            "name": "cause",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCountRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestRefused"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AnswerNotWritten"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RequestCrashed"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "_tag",
+                    "mapping": {
+                      "AnswerNotWritten": "#/components/schemas/AnswerNotWritten",
+                      "RequestCrashed": "#/components/schemas/RequestCrashed"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/RequestCompletionUnavailable"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RequestDeadlineExceeded"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "_tag",
+                    "mapping": {
+                      "RequestCompletionUnavailable": "#/components/schemas/RequestCompletionUnavailable",
+                      "RequestDeadlineExceeded": "#/components/schemas/RequestDeadlineExceeded"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/headers/order-count": {
       "get": {
         "tags": [
@@ -58,7 +146,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AnswerNotWritten"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AnswerNotWritten"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RequestCrashed"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "_tag",
+                    "mapping": {
+                      "AnswerNotWritten": "#/components/schemas/AnswerNotWritten",
+                      "RequestCrashed": "#/components/schemas/RequestCrashed"
+                    }
+                  }
                 }
               }
             }
@@ -194,7 +296,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AnswerNotWritten"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AnswerNotWritten"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RequestCrashed"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "_tag",
+                    "mapping": {
+                      "AnswerNotWritten": "#/components/schemas/AnswerNotWritten",
+                      "RequestCrashed": "#/components/schemas/RequestCrashed"
+                    }
+                  }
                 }
               }
             }
@@ -316,7 +432,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AnswerNotWritten"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AnswerNotWritten"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RequestCrashed"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "_tag",
+                    "mapping": {
+                      "AnswerNotWritten": "#/components/schemas/AnswerNotWritten",
+                      "RequestCrashed": "#/components/schemas/RequestCrashed"
+                    }
+                  }
                 }
               }
             }
@@ -422,7 +552,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AnswerNotWritten"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AnswerNotWritten"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RequestCrashed"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "_tag",
+                    "mapping": {
+                      "AnswerNotWritten": "#/components/schemas/AnswerNotWritten",
+                      "RequestCrashed": "#/components/schemas/RequestCrashed"
+                    }
+                  }
                 }
               }
             }
@@ -538,7 +682,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AnswerNotWritten"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AnswerNotWritten"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RequestCrashed"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "_tag",
+                    "mapping": {
+                      "AnswerNotWritten": "#/components/schemas/AnswerNotWritten",
+                      "RequestCrashed": "#/components/schemas/RequestCrashed"
+                    }
+                  }
                 }
               }
             }
@@ -961,6 +1119,52 @@
           "route",
           "operation",
           "errno"
+        ],
+        "additionalProperties": false
+      },
+      "RequestCrashed": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RequestCrashed"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "NC-1172"
+            ]
+          },
+          "route": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "method",
+                  "path"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "code",
+          "route"
         ],
         "additionalProperties": false
       },

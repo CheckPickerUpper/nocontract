@@ -2,6 +2,10 @@
 
 package nocontract
 
+import (
+	outcome "github.com/CheckPickerUpper/outcome"
+)
+
 // taggedSuccess is a success member's JSON object: its tag, then the member's own fields.
 type taggedSuccess[M any] struct {
 	Tag    string `json:"_tag"`
@@ -19,6 +23,22 @@ type taggedFailure[M any] struct {
 //
 //sumtype:decl
 type SharedFailure interface{ isSharedFailure() }
+
+// RequestCrashed is a request whose handler or layer crashed. Its route holds the declared method and path template, or null when no route matched.
+//
+//ergo:code NC-1172
+//ergo:message The request crashed before its answer was written.
+type RequestCrashed struct {
+	Route outcome.Option[RequestCrashedRoute] `json:"route"`
+}
+
+// RequestCrashedRoute is the route record carried by RequestCrashed.
+type RequestCrashedRoute struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
+}
+
+func (RequestCrashed) isSharedFailure() {}
 
 // RequestCompletionUnavailable is a request whose native completion resource could not be used, with its route, operation and original operating system error number.
 //
@@ -124,6 +144,8 @@ func (MethodNotDeclared) isSharedFailure() {}
 // with its status, tag and code.
 func NocontractAnswerSharedFailure(returned SharedFailure) Answer {
 	switch member := returned.(type) {
+	case RequestCrashed:
+		return Failed(Failure{Status: 500, Tag: "RequestCrashed", Code: "NC-1172"}, member, AnswerMarshalers{NullableValue[RequestCrashedRoute]()})
 	case RequestCompletionUnavailable:
 		return Failed(Failure{Status: 503, Tag: "RequestCompletionUnavailable", Code: "NC-1174"}, member, AnswerMarshalers{})
 	case RequestDeadlineExceeded:

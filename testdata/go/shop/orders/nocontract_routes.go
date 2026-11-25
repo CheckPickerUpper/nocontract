@@ -9,6 +9,22 @@ import (
 	time "time"
 )
 
+// NocontractRouteCrash answers one request to GET /crashes/{cause}. Only the generated server calls it.
+func NocontractRouteCrash(request *http.Request, limit nocontract.RequestBodyLimit) nocontract.Answer {
+	return nocontract.Then(nocontract.Textual[string](nocontract.Path(request, "cause")), func(readCause string) nocontract.Answer {
+		return nocontractAnswerOrderCountOutcome(Crash(request.Context(), CrashInput{Cause: readCause}))
+	})
+}
+
+func nocontractAnswerOrderCountOutcome(returned OrderCountOutcome) nocontract.Answer {
+	switch member := returned.(type) {
+	case OrderCountRead:
+		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "OrderCountRead"}, member, nocontract.AnswerMarshalers{nocontract.SignedText[int64]()})
+	case nil:
+	}
+	return nocontract.NoOutcome()
+}
+
 // NocontractRoutePlace answers one request to POST /shoppers/{shopper_id}/orders. Only the generated server calls it.
 func NocontractRoutePlace(request *http.Request, limit nocontract.RequestBodyLimit) nocontract.Answer {
 	return nocontract.Then(nocontract.Signed[int](nocontract.Path(request, "shopper_id")), func(readShopperID int) nocontract.Answer {
@@ -34,15 +50,6 @@ func NocontractRouteReadOrderCount(request *http.Request, limit nocontract.Reque
 	return nocontract.Then(nocontract.Signed[int64](nocontract.Header(request, "x-order-count")), func(readOrderCount int64) nocontract.Answer {
 		return nocontractAnswerOrderCountOutcome(ReadOrderCount(request.Context(), OrderCountInput{OrderCount: readOrderCount}))
 	})
-}
-
-func nocontractAnswerOrderCountOutcome(returned OrderCountOutcome) nocontract.Answer {
-	switch member := returned.(type) {
-	case OrderCountRead:
-		return nocontract.Succeeded(nocontract.Success{Status: 200, Tag: "OrderCountRead"}, member, nocontract.AnswerMarshalers{nocontract.SignedText[int64]()})
-	case nil:
-	}
-	return nocontract.NoOutcome()
 }
 
 // nocontractBodyItemMembers holds each member nocontractBodyItem has read.
