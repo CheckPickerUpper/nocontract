@@ -14,7 +14,7 @@ import (
 )
 
 func TestShopBackendsReturnDeclaredDeadlines(t *testing.T) {
-	t.Setenv("SHOP_TEST_REQUEST_DEADLINE", "1")
+	t.Setenv("SHOP_TEST_REQUEST_DEADLINE", "50")
 	checkout := scratchproject.PathOrStop(t, "locating the checkout", outcome.TupleToResult(filepath.Abs(filepath.Join("..", ".."))))
 	expectedFiles := readShopGeneratedFiles(t, filepath.Join(checkout, "testdata", "go", "shop", "nocontract.json"))
 	contract := readShopContract(t, expectedFiles.document)
@@ -76,6 +76,8 @@ func shopDeadlineRequests() []shopRequestCase {
 	return []shopRequestCase{
 		{name: "fast work finishes", method: http.MethodGet, path: "/shoppers/7/delayed-balance?currency=CAD&delay_milliseconds=0", shopper: "", headers: []shopRequestHeader{}, body: "", want: shopAnswer{status: 200, allow: "", body: `{"_tag":"BalanceRead","balance":{"cents":"1250","currency":"CAD"},"overdraft":null,"changed":"2026-11-14T12:00:00Z","note":"first top-up"}`}, bodySchema: outcome.None[shopBodySchema]()},
 		{name: "slow work exceeds its deadline", method: http.MethodGet, path: "/shoppers/7/delayed-balance?currency=CAD&delay_milliseconds=2000", shopper: "", headers: []shopRequestHeader{}, body: "", want: shopAnswer{status: 503, allow: "", body: `{"_tag":"RequestDeadlineExceeded","code":"NC-1170","route":"/shoppers/{shopper_id}/delayed-balance","timeout_milliseconds":50}`}, bodySchema: outcome.None[shopBodySchema]()},
+		// The route reads and decodes its JSON body inside the deadline's worker.
+		{name: "a JSON body is decoded within its deadline", method: http.MethodPost, path: "/shoppers/7/top-ups", shopper: "", headers: []shopRequestHeader{}, body: shopTopUpBody, want: shopAnswer{status: 202, allow: "", body: `{"_tag":"TopUpQueued","reference":"CAD"}`}, bodySchema: outcome.Some(shopBodySchema{path: "/shoppers/{shopper_id}/top-ups", accepts: true})},
 	}
 }
 

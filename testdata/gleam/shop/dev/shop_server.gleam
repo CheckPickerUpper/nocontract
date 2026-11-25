@@ -2,6 +2,7 @@ import gleam/erlang/process
 import nocontract/server
 import nocontract_runtime/server_options
 import shop_observation
+import shop_request_deadline
 import wisp
 
 /// Starts the generated shop server on a port assigned by the kernel.
@@ -13,8 +14,7 @@ pub fn main() -> Nil {
       shop_observation.layer("outer"),
       shop_observation.layer("inner"),
     ])
-  let assert Ok(options) =
-    server_options.with_request_deadline(options:, milliseconds: 50)
+  let options = shop_request_deadline.with_test_request_deadline(options)
   let assert Ok(_) = server.start(options)
   process.sleep_forever()
 }

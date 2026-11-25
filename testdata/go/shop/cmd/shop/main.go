@@ -36,11 +36,7 @@ func serve(serverContext context.Context, api server.API, logger *slog.Logger) i
 	shutdownRequested, requestShutdown := signal.NotifyContext(serverContext, os.Interrupt, syscall.SIGTERM)
 	defer requestShutdown()
 	configured := outcome.Fold(nocontract.ParseRequestBodyLimit(1024), func(limit nocontract.RequestBodyLimit) outcome.Result[nocontract.ListenOptions] {
-		options := nocontract.WithRequestLogger(nocontract.WithRequestBodyLimit(nocontract.ListenOn(os.Getenv("SHOP_ADDRESS")), limit), logger)
-		if os.Getenv("SHOP_TEST_REQUEST_DEADLINE") == "1" {
-			return nocontract.WithRequestDeadline(options, 50)
-		}
-		return outcome.Ok(options)
+		return withTestRequestDeadline(nocontract.WithRequestLogger(nocontract.WithRequestBodyLimit(nocontract.ListenOn(os.Getenv("SHOP_ADDRESS")), limit), logger))
 	}, outcome.Err[nocontract.ListenOptions])
 	started := outcome.Fold(configured, func(options nocontract.ListenOptions) outcome.Result[nocontract.ListeningServer] {
 		return server.Listen(serverContext, options, api)
