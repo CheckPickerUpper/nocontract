@@ -189,9 +189,16 @@ Server_Stopped :: struct #all_or_none {
 	endpoint: Listener_Endpoint,
 }
 
-// Event_Loop_Not_Acquired preserves a worker's failed acquisition of its first event loop.
+// Event_Loop_Not_Acquired preserves a failed event loop acquisition by a worker's main thread or
+// by one of the serving threads odin-http starts.
 Event_Loop_Not_Acquired :: struct #all_or_none {
 	cause: nbio.General_Error,
+}
+
+// Server_Thread_Not_Spawned preserves odin-http's failure to create one of a worker's serving
+// threads.
+Server_Thread_Not_Spawned :: struct #all_or_none {
+	cause: http.Server_Thread_Error,
 }
 
 // Listener_Opening_Failure is the step that kept a listener from reporting its bound address.
@@ -206,6 +213,7 @@ Listener_Opening_Failure :: union #no_nil {
 	Crash_Diagnostic_Not_Encoded,
 	Event_Loop_Not_Acquired,
 	Listener_Readiness_Not_Announced,
+	Server_Thread_Not_Spawned,
 	Supervision_Refused,
 	Worker_Exited,
 }
@@ -219,7 +227,9 @@ Listener_Not_Opened :: struct #all_or_none {
 
 // Listener_Serving_Failure is what stopped a listener after it reported its bound address.
 Listener_Serving_Failure :: union #no_nil {
+	Event_Loop_Not_Acquired,
 	Network_Failure,
+	Server_Thread_Not_Spawned,
 	Supervision_Refused,
 	Worker_Exited,
 }
@@ -328,11 +338,26 @@ serve_on_event_loop :: proc(worker: supervisor.Worker_Entry, options: TCP_Listen
 			return Listener_Not_Opened{requested = Requested_Endpoint{value = options.endpoint}, failure = state}
 		}
 		return Server_Stopped{endpoint = Bound_Endpoint{value = endpoint}}
-	case net.Create_Socket_Error, net.Dial_Error, net.Listen_Error, net.Accept_Error, net.Bind_Error,
-		net.TCP_Send_Error, net.UDP_Send_Error, net.TCP_Recv_Error, net.UDP_Recv_Error, net.Shutdown_Error,
-		net.Interfaces_Error, net.Socket_Info_Error, net.Socket_Option_Error, net.Set_Blocking_Error,
-		net.Parse_Endpoint_Error, net.Resolve_Error, net.DNS_Error:
+	case net.Network_Error:
 		return Listener_Not_Served{bound = Bound_Endpoint{value = endpoint}, failure = Network_Failure{cause = cause}}
+	case http.Server_Thread_Error:
+		return fail_supervision(announced_endpoint(announcement, options.endpoint), Server_Thread_Not_Spawned{cause = cause})
+	case nbio.General_Error:
+		return fail_supervision(announced_endpoint(announcement, options.endpoint), Event_Loop_Not_Acquired{cause = cause})
+	}
+	unreachable()
+}
+
+// announced_endpoint is the bound address once the worker reported it ready, and the requested
+// address before. A serve that abandons startup runs this thread's loop to close the socket, and
+// that run can fire the queued announcement.
+@(private, require_results)
+announced_endpoint :: proc(announcement: Listener_Announcement, requested: net.Endpoint) -> Listener_Endpoint {
+	switch _ in announcement.state {
+	case Announcement_Completed:
+		return Bound_Endpoint{value = announcement.endpoint}
+	case Announcement_Pending, supervisor.Readiness_Report_Refusal:
+		return Requested_Endpoint{value = requested}
 	}
 	unreachable()
 }
